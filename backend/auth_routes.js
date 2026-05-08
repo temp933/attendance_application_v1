@@ -1,0 +1,921 @@
+require("dotenv").config();
+
+const express = require("express");
+const router = express.Router();
+const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+const nodemailer = require("nodemailer");
+const db = require("./config/db");
+
+// ── Nodemailer ────────────────────────────────────────────────────────────────
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || "smtp.gmail.com",
+  port: 587,
+  secure: false,
+  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  tls: { rejectUnauthorized: false },
+});
+
+function generateToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function generateOtp() {
+  return crypto.randomInt(100000, 999999).toString();
+}
+
+function nullIfEmpty(v) {
+  return v === undefined || v === null || v === "" ? null : v;
+}
+
+const loginOtpStore = new Map();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /auth/login
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/login", async (req, res) => {
+  const { username, password, device_id, device_info } = req.body;
+
+  if (!username || !password) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Username and password are required." });
+  }
+
+  try {
+    const [rows] = await db.query(
+      `SELECT lm.*, t.admin_email, t.hr_email
+         FROM login_master lm
+         LEFT JOIN tenants t ON t.tenant_id = lm.tenant_id
+        WHERE lm.status = 'Active'
+          AND (lm.username = ? OR lm.username = ?)
+        LIMIT 1`,
+      [username.trim(), username.trim().toLowerCase()],
+    );
+
+    if (rows.length === 0) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid credentials." });
+    }
+
+    const user = rows[0];
+
+    if (user.locked_until && new Date(user.locked_until) > new Date()) {
+      const remaining = Math.ceil(
+        (new Date(user.locked_until) - Date.now()) / 60000,
+      );
+      return res.status(423).json({
+        success: false,
+        message: `Account locked. Try again in ${remaining} minute${remaining !== 1 ? "s" : ""}.`,
+      });
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.password);
+
+    if (!passwordMatch) {
+      const attempts = (user.failed_attempts || 0) + 1;
+      const MAX_ATTEMPTS = 5;
+
+      if (attempts >= MAX_ATTEMPTS) {
+        const lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+        await db.query(
+          `UPDATE login_master SET failed_attempts = ?, locked_until = ? WHERE login_id = ?`,
+          [attempts, lockUntil, user.login_id],
+        );
+        return res.status(423).json({
+          success: false,
+          message: "Too many failed attempts. Account locked for 15 minutes.",
+        });
+      } else {
+        await db.query(
+          `UPDATE login_master SET failed_attempts = ? WHERE login_id = ?`,
+          [attempts, user.login_id],
+        );
+        return res.status(401).json({
+          success: false,
+          message: `Invalid credentials. ${MAX_ATTEMPTS - attempts} attempt${MAX_ATTEMPTS - attempts !== 1 ? "s" : ""} remaining.`,
+        });
+      }
+    }
+
+    await db.query(
+      `UPDATE login_master SET failed_attempts = 0, locked_until = NULL WHERE login_id = ?`,
+      [user.login_id],
+    );
+
+    if (user.is_first_login === 1) {
+      return res.json({
+        success: true,
+        firstLogin: true,
+        loginId: user.login_id,
+        empId: user.emp_id ?? 0,
+        roleId: user.role_id,
+        username: user.username,
+      });
+    }
+
+    let userType = "employee";
+    if (user.emp_id === null || user.emp_id === undefined) {
+      const adminEmail = (user.admin_email || "").toLowerCase();
+      const hrEmail = (user.hr_email || "").toLowerCase();
+      const uname = user.username.toLowerCase();
+
+      if (uname === adminEmail || uname === adminEmail.split("@")[0]) {
+        userType = "org_admin";
+      } else if (uname === hrEmail || uname === hrEmail.split("@")[0]) {
+        userType = "org_hr";
+      } else {
+        userType = "org_admin";
+      }
+    }
+
+    if (user.device_logged_in === 1 && user.session_device) {
+      const existingDevice = JSON.parse(user.session_device || "{}");
+      if (existingDevice.deviceId && existingDevice.deviceId !== device_id) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Account is active on another device. Please log out from that device first.",
+        });
+      }
+    }
+
+    const sessionToken = generateToken();
+    const deviceInfoStr = JSON.stringify(device_info || {});
+
+    await db.query(
+      `UPDATE login_master SET session_token = ?, device_logged_in = 1, session_device = ?, last_login_at = NOW() WHERE login_id = ?`,
+      [sessionToken, deviceInfoStr, user.login_id],
+    );
+
+    return res.json({
+      success: true,
+      firstLogin: false,
+      loginId: user.login_id,
+      empId: user.emp_id ?? 0,
+      roleId: user.role_id,
+      userType,
+      username: user.username,
+      sessionToken,
+    });
+  } catch (err) {
+    console.error("[/auth/login]", err);
+    return res.status(500).json({ success: false, message: "Server error." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /auth/validate-session
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/validate-session", async (req, res) => {
+  const { login_id, session_token, device_id } = req.body;
+  if (!login_id || !session_token) return res.json({ valid: false });
+
+  try {
+    const [rows] = await db.query(
+      `SELECT session_token, session_device, status, device_logged_in FROM login_master WHERE login_id = ? AND status = 'Active' LIMIT 1`,
+      [login_id],
+    );
+
+    if (rows.length === 0) return res.json({ valid: false });
+    const user = rows[0];
+
+    if (user.session_token !== session_token)
+      return res.json({ valid: false, force_logout: true });
+
+    if (user.session_device) {
+      const storedDevice = JSON.parse(user.session_device || "{}");
+      if (
+        storedDevice.deviceId &&
+        device_id &&
+        storedDevice.deviceId !== device_id
+      ) {
+        return res.json({ valid: false, force_logout: true });
+      }
+    }
+
+    return res.json({ valid: true });
+  } catch (err) {
+    console.error("[/auth/validate-session]", err);
+    return res.json({ valid: true });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /auth/logout
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/logout", async (req, res) => {
+  const { login_id } = req.body;
+  if (!login_id) return res.json({ success: true });
+
+  try {
+    await db.query(
+      `UPDATE login_master SET session_token = NULL, device_logged_in = 0, session_device = NULL WHERE login_id = ?`,
+      [login_id],
+    );
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[/auth/logout]", err);
+    return res.status(500).json({ success: false, message: "Logout failed." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /auth/change-password
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/change-password", async (req, res) => {
+  const { login_id, new_password, confirm_password } = req.body;
+
+  if (!login_id || !new_password || !confirm_password) {
+    return res
+      .status(400)
+      .json({ success: false, message: "All fields are required." });
+  }
+  if (new_password !== confirm_password) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Passwords do not match." });
+  }
+  if (new_password.length < 8) {
+    return res.status(400).json({
+      success: false,
+      message: "Password must be at least 8 characters.",
+    });
+  }
+  if (!/[a-zA-Z]/.test(new_password)) {
+    return res.status(400).json({
+      success: false,
+      message: "Password must contain at least one letter.",
+    });
+  }
+  if (!/[0-9]/.test(new_password)) {
+    return res.status(400).json({
+      success: false,
+      message: "Password must contain at least one number.",
+    });
+  }
+
+  try {
+    const [rows] = await db.query(
+      `SELECT login_id, password FROM login_master WHERE login_id = ? LIMIT 1`,
+      [login_id],
+    );
+    if (rows.length === 0)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
+
+    const sameAsOld = await bcrypt.compare(new_password, rows[0].password);
+    if (sameAsOld) {
+      return res.status(400).json({
+        success: false,
+        message: "New password cannot be the same as current password.",
+      });
+    }
+
+    const hashed = await bcrypt.hash(new_password, 12);
+    await db.query(
+      `UPDATE login_master SET password = ?, is_first_login = 0, password_updated_at = NOW(), session_token = NULL, device_logged_in = 0, session_device = NULL WHERE login_id = ?`,
+      [hashed, login_id],
+    );
+
+    return res.json({
+      success: true,
+      message: "Password updated. Please log in again.",
+    });
+  } catch (err) {
+    console.error("[/auth/change-password]", err);
+    return res.status(500).json({ success: false, message: "Server error." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /auth/reset-password
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/reset-password", async (req, res) => {
+  const { emp_id, new_password, confirm_password } = req.body;
+
+  if (!emp_id || !new_password || !confirm_password) {
+    return res
+      .status(400)
+      .json({ success: false, message: "All fields are required." });
+  }
+  if (new_password !== confirm_password) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Passwords do not match." });
+  }
+  if (new_password.length < 8) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Password too short." });
+  }
+
+  try {
+    const hashed = await bcrypt.hash(new_password, 12);
+    const [result] = await db.query(
+      `UPDATE login_master SET password = ?, is_first_login = 1, password_updated_at = NOW(), session_token = NULL, device_logged_in = 0, session_device = NULL, failed_attempts = 0, locked_until = NULL WHERE emp_id = ?`,
+      [hashed, emp_id],
+    );
+
+    if (result.affectedRows === 0)
+      return res
+        .status(404)
+        .json({ success: false, message: "Employee not found." });
+    return res.json({
+      success: true,
+      message: "Password reset. Employee must change on next login.",
+    });
+  } catch (err) {
+    console.error("[/auth/reset-password]", err);
+    return res.status(500).json({ success: false, message: "Server error." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /auth/send-login-otp
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/send-login-otp", async (req, res) => {
+  const { username } = req.body;
+  if (!username)
+    return res
+      .status(400)
+      .json({ success: false, message: "Username is required." });
+
+  try {
+    const [rows] = await db.query(
+      `SELECT lm.login_id, lm.username, lm.status,
+              COALESCE(e.email_id, t.admin_email) AS contact_email
+         FROM login_master lm
+         LEFT JOIN employee_master e ON e.emp_id = lm.emp_id
+         LEFT JOIN tenants t ON t.tenant_id = lm.tenant_id
+        WHERE lm.status = 'Active'
+          AND (lm.username = ? OR lm.username = ?)
+        LIMIT 1`,
+      [username.trim(), username.trim().toLowerCase()],
+    );
+
+    if (rows.length === 0) {
+      return res.json({
+        success: true,
+        message: "If the account exists, an OTP has been sent.",
+      });
+    }
+
+    const user = rows[0];
+    if (!user.contact_email) {
+      return res.status(400).json({
+        success: false,
+        message: "No email registered for this account.",
+      });
+    }
+
+    const otp = generateOtp();
+    const expiresAt = Date.now() + 5 * 60 * 1000;
+    loginOtpStore.set(`login:${user.login_id}`, { otp, expiresAt });
+
+    await transporter.sendMail({
+      from: `"${process.env.APP_NAME || "EMS"}" <${process.env.SMTP_USER}>`,
+      to: user.contact_email,
+      subject: "Your Login OTP",
+      html: `
+        <div style="font-family:sans-serif;max-width:400px;margin:auto;padding:32px;border-radius:12px;border:1px solid #e5e7eb">
+          <h2 style="color:#4F46E5;margin-bottom:8px">Login OTP</h2>
+          <p style="color:#6B7280;margin-bottom:24px">Use this code to sign in. It expires in 5 minutes.</p>
+          <div style="font-size:36px;font-weight:800;letter-spacing:12px;color:#1E1B4B;text-align:center;padding:16px;background:#EEF2FF;border-radius:8px">${otp}</div>
+          <p style="color:#9CA3AF;font-size:12px;margin-top:24px">If you didn't request this, ignore this email.</p>
+        </div>`,
+    });
+
+    return res.json({
+      success: true,
+      message: "OTP sent to registered email.",
+    });
+  } catch (err) {
+    console.error("[/auth/send-login-otp]", err);
+    return res.status(500).json({ success: false, message: "Server error." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /auth/verify-login-otp
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/verify-login-otp", async (req, res) => {
+  const { username, otp, device_id, device_info } = req.body;
+
+  if (!username || !otp) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Username and OTP are required." });
+  }
+
+  try {
+    const [rows] = await db.query(
+      `SELECT lm.*, t.admin_email, t.hr_email
+         FROM login_master lm
+         LEFT JOIN tenants t ON t.tenant_id = lm.tenant_id
+        WHERE lm.status = 'Active'
+          AND (lm.username = ? OR lm.username = ?)
+        LIMIT 1`,
+      [username.trim(), username.trim().toLowerCase()],
+    );
+
+    if (rows.length === 0)
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid credentials." });
+
+    const user = rows[0];
+    const entry = loginOtpStore.get(`login:${user.login_id}`);
+
+    if (!entry)
+      return res.status(400).json({
+        success: false,
+        message: "No OTP found. Please request a new one.",
+      });
+    if (Date.now() > entry.expiresAt) {
+      loginOtpStore.delete(`login:${user.login_id}`);
+      return res.status(400).json({
+        success: false,
+        message: "OTP expired. Please request a new one.",
+      });
+    }
+    if (entry.otp !== otp.trim())
+      return res.status(400).json({ success: false, message: "Invalid OTP." });
+
+    loginOtpStore.delete(`login:${user.login_id}`);
+
+    let userType = "employee";
+    if (user.emp_id === null || user.emp_id === undefined) {
+      const adminEmail = (user.admin_email || "").toLowerCase();
+      const hrEmail = (user.hr_email || "").toLowerCase();
+      const uname = user.username.toLowerCase();
+      userType =
+        uname === hrEmail || uname === hrEmail.split("@")[0]
+          ? "org_hr"
+          : "org_admin";
+    }
+
+    const sessionToken = generateToken();
+    const deviceInfoStr = JSON.stringify(device_info || {});
+
+    await db.query(
+      `UPDATE login_master SET session_token = ?, device_logged_in = 1, session_device = ?, last_login_at = NOW(), failed_attempts = 0, locked_until = NULL WHERE login_id = ?`,
+      [sessionToken, deviceInfoStr, user.login_id],
+    );
+
+    return res.json({
+      success: true,
+      firstLogin: user.is_first_login === 1,
+      loginId: user.login_id,
+      empId: user.emp_id ?? 0,
+      roleId: user.role_id,
+      userType,
+      username: user.username,
+      sessionToken,
+    });
+  } catch (err) {
+    console.error("[/auth/verify-login-otp]", err);
+    return res.status(500).json({ success: false, message: "Server error." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /auth/complete  — Organisation registration (Step 3)
+//
+// FIXES applied vs previous version:
+//   1. tenants table: correct column names (company_name, max_users, company_code, plan_id)
+//   2. employee_master: added department_id = 1 (default), fixed work_type enum
+//   3. Flutter sends admin_login{} and hr_login{} objects — destructured correctly
+//   4. Removed stale company_master insert (use tenants.tenant_id directly)
+//   5. login_master.company_id is varchar(50) — cast tenantId to string
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/complete", async (req, res) => {
+  const {
+    session_id,
+    org_name,
+    contact_person,
+    contact_number,
+    admin_email,
+    hr_email,
+    expected_employees,
+    company_address,
+    domain_name,
+    gst_number,
+    admin_login, // { username, password }
+    hr_login, // { username, password }
+    admin_profile,
+    hr_profile,
+  } = req.body;
+
+  // ── Basic presence checks ─────────────────────────────────────────────────
+  if (!session_id || !admin_email || !hr_email) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Missing required fields." });
+  }
+  if (!admin_login?.username || !admin_login?.password) {
+    return res.status(400).json({
+      success: false,
+      message: "admin_login.username and password are required.",
+    });
+  }
+  if (!hr_login?.username || !hr_login?.password) {
+    return res.status(400).json({
+      success: false,
+      message: "hr_login.username and password are required.",
+    });
+  }
+  if (!admin_profile || !hr_profile) {
+    return res.status(400).json({
+      success: false,
+      message: "admin_profile and hr_profile are required.",
+    });
+  }
+
+  // Validate required profile fields
+  const profileRequired = [
+    "first_name",
+    "last_name",
+    "phone_number",
+    "date_of_birth",
+    "gender",
+    "date_of_joining",
+    "employment_type",
+    "work_type",
+    "permanent_address",
+  ];
+  for (const field of profileRequired) {
+    if (!admin_profile[field]) {
+      return res.status(400).json({
+        success: false,
+        message: `admin_profile.${field} is required.`,
+      });
+    }
+    if (!hr_profile[field]) {
+      return res
+        .status(400)
+        .json({ success: false, message: `hr_profile.${field} is required.` });
+    }
+  }
+
+  // Validate work_type values match DB enum
+  const validWorkTypes = ["Full Time", "Part Time"];
+  if (!validWorkTypes.includes(admin_profile.work_type)) {
+    return res.status(400).json({
+      success: false,
+      message: `admin_profile.work_type must be 'Full Time' or 'Part Time'.`,
+    });
+  }
+  if (!validWorkTypes.includes(hr_profile.work_type)) {
+    return res.status(400).json({
+      success: false,
+      message: `hr_profile.work_type must be 'Full Time' or 'Part Time'.`,
+    });
+  }
+
+  // ── Retrieve & validate session ───────────────────────────────────────────
+  let sessionData;
+  try {
+    const [[row]] = await db.query(
+      `SELECT * FROM registration_sessions WHERE session_id = ? AND status = 'verified' LIMIT 1`,
+      [session_id],
+    );
+    if (!row) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired session. Please restart registration.",
+      });
+    }
+    sessionData = row;
+  } catch (err) {
+    console.error("[/complete] session lookup", err);
+    return res.status(500).json({ success: false, message: "Server error." });
+  }
+
+  if (
+    sessionData.admin_email.toLowerCase() !==
+      admin_email.trim().toLowerCase() ||
+    sessionData.hr_email.toLowerCase() !== hr_email.trim().toLowerCase()
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Email mismatch with verified session.",
+    });
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // ── 1. Duplicate username checks ────────────────────────────────────────
+    const [[dupAdmin]] = await conn.query(
+      "SELECT login_id FROM login_master WHERE username = ? LIMIT 1",
+      [admin_login.username.trim()],
+    );
+    if (dupAdmin) {
+      await conn.rollback();
+      return res.status(409).json({
+        success: false,
+        message: `Username '${admin_login.username}' is already taken.`,
+      });
+    }
+
+    const [[dupHr]] = await conn.query(
+      "SELECT login_id FROM login_master WHERE username = ? LIMIT 1",
+      [hr_login.username.trim()],
+    );
+    if (dupHr) {
+      await conn.rollback();
+      return res.status(409).json({
+        success: false,
+        message: `Username '${hr_login.username}' is already taken.`,
+      });
+    }
+
+    // ── 2. Create tenant ────────────────────────────────────────────────────
+    // tenants table requires: company_name, company_code (UNI), plan_id
+    // Generate a unique company_code from org_name + timestamp
+    const companyCode =
+      (org_name || "ORG")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "_")
+        .substring(0, 20) +
+      "_" +
+      Date.now();
+    const tenantId = crypto.randomUUID(); // tenant_id is varchar(36) = UUID
+
+    await conn.query(
+      `INSERT INTO tenants
+        (tenant_id, company_name, company_code, plan_id,
+         contact_person, contact_number,
+         admin_email, hr_email, max_users,
+         company_address, domain_name, gst_number,
+         status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())`,
+      [
+        tenantId,
+        (org_name || "").trim(),
+        companyCode,
+        process.env.DEFAULT_PLAN_ID || "1", // set DEFAULT_PLAN_ID in your .env
+        nullIfEmpty(contact_person),
+        nullIfEmpty(contact_number),
+        admin_email.trim().toLowerCase(),
+        hr_email.trim().toLowerCase(),
+        expected_employees || 50,
+        nullIfEmpty(company_address),
+        nullIfEmpty(domain_name),
+        nullIfEmpty(gst_number),
+      ],
+    );
+
+    // ── 3. Insert Admin into employee_master ─────────────────────────────────
+    const ap = admin_profile;
+    const [adminEmpResult] = await conn.query(
+      `INSERT INTO employee_master
+        (tenant_id, first_name, mid_name, last_name,
+         email_id, phone_number, date_of_birth, gender,
+         department_id, role_id, date_of_joining,
+         employment_type, work_type,
+         permanent_address, communication_address,
+         father_name,
+         emergency_contact, emergency_contact_relation,
+         aadhar_number, pan_number,
+         pf_number, esic_number, years_experience,
+         status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())`,
+      [
+        tenantId,
+        ap.first_name.trim(),
+        nullIfEmpty(ap.mid_name),
+        ap.last_name.trim(),
+        admin_email.trim().toLowerCase(),
+        ap.phone_number.trim(),
+        ap.date_of_birth,
+        ap.gender,
+        ap.date_of_joining,
+        ap.employment_type,
+        ap.work_type,
+        ap.permanent_address.trim(),
+        nullIfEmpty(ap.communication_address),
+        nullIfEmpty(ap.father_name),
+        nullIfEmpty(ap.emergency_contact),
+        nullIfEmpty(ap.emergency_contact_relation),
+        nullIfEmpty(ap.aadhar_number),
+        nullIfEmpty(ap.pan_number),
+        nullIfEmpty(ap.pf_number),
+        nullIfEmpty(ap.esic_number),
+        ap.years_experience !== undefined
+          ? parseInt(ap.years_experience, 10)
+          : null,
+      ],
+    );
+    const adminEmpId = adminEmpResult.insertId;
+
+    // ── 4. Create Admin login_master row ─────────────────────────────────────
+    const hashedAdminPass = await bcrypt.hash(admin_login.password, 12);
+    await conn.query(
+      `INSERT INTO login_master
+        (tenant_id, company_id, emp_id, username, password,
+         role_id, is_first_login, status, created_at)
+       VALUES (?, ?, ?, ?, ?, 1, 0, 'Active', NOW())`,
+      [
+        tenantId,
+        tenantId,
+        adminEmpId,
+        admin_login.username.trim(),
+        hashedAdminPass,
+      ],
+    );
+
+    // ── 5. Insert HR into employee_master ─────────────────────────────────────
+    const hp = hr_profile;
+    const [hrEmpResult] = await conn.query(
+      `INSERT INTO employee_master
+        (tenant_id, first_name, mid_name, last_name,
+         email_id, phone_number, date_of_birth, gender,
+         department_id, role_id, date_of_joining,
+         employment_type, work_type,
+         permanent_address, communication_address,
+         father_name,
+         emergency_contact, emergency_contact_relation,
+         aadhar_number, pan_number,
+         pf_number, esic_number, years_experience,
+         status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())`,
+      [
+        tenantId,
+        hp.first_name.trim(),
+        nullIfEmpty(hp.mid_name),
+        hp.last_name.trim(),
+        hr_email.trim().toLowerCase(),
+        hp.phone_number.trim(),
+        hp.date_of_birth,
+        hp.gender,
+        hp.date_of_joining,
+        hp.employment_type,
+        hp.work_type,
+        hp.permanent_address.trim(),
+        nullIfEmpty(hp.communication_address),
+        nullIfEmpty(hp.father_name),
+        nullIfEmpty(hp.emergency_contact),
+        nullIfEmpty(hp.emergency_contact_relation),
+        nullIfEmpty(hp.aadhar_number),
+        nullIfEmpty(hp.pan_number),
+        nullIfEmpty(hp.pf_number),
+        nullIfEmpty(hp.esic_number),
+        hp.years_experience !== undefined
+          ? parseInt(hp.years_experience, 10)
+          : null,
+      ],
+    );
+    const hrEmpId = hrEmpResult.insertId;
+
+    // ── 6. Create HR login_master row ─────────────────────────────────────────
+    const hashedHrPass = await bcrypt.hash(hr_login.password, 12);
+    await conn.query(
+      `INSERT INTO login_master
+        (tenant_id, company_id, emp_id, username, password,
+         role_id, is_first_login, status, created_at)
+       VALUES (?, ?, ?, ?, ?, 2, 1, 'Active', NOW())`,
+      [tenantId, tenantId, hrEmpId, hr_login.username.trim(), hashedHrPass],
+    );
+
+    // ── 7. Mark session as completed ──────────────────────────────────────────
+    await conn.query(
+      "UPDATE registration_sessions SET status = 'completed' WHERE session_id = ?",
+      [session_id],
+    );
+
+    await conn.commit();
+
+    return res.status(201).json({
+      success: true,
+      message: "Organisation registered successfully.",
+      admin_username: admin_login.username.trim(),
+      hr_username: hr_login.username.trim(),
+      tenant_id: tenantId,
+      admin_emp_id: adminEmpId,
+      hr_emp_id: hrEmpId,
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("[POST /auth/complete]", err);
+
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Duplicate entry detected (email, phone, Aadhar or PAN already exists).",
+      });
+    }
+
+    return res
+      .status(500)
+      .json({ success: false, message: `Server error: ${err.message}` });
+  } finally {
+    conn.release();
+  }
+});
+
+router.post("/forgot-password/verify-otp", async (req, res) => {
+  try {
+    const { username, otp } = req.body;
+
+    const [rows] = await db.query(
+      `SELECT login_id
+       FROM login_master
+       WHERE username = ?
+       AND reset_otp = ?
+       AND reset_otp_expiry > NOW()
+       LIMIT 1`,
+      [username, otp],
+    );
+
+    if (rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "OTP verified",
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+});
+
+router.post("/forgot-password/reset", async (req, res) => {
+  try {
+    const { username, otp, new_password } = req.body;
+
+    if (!username || !otp || !new_password) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing fields",
+      });
+    }
+
+    const [rows] = await db.query(
+      `SELECT login_id
+       FROM login_master
+       WHERE username = ?
+       AND reset_otp = ?
+       AND reset_otp_expiry > NOW()
+       LIMIT 1`,
+      [username, otp],
+    );
+
+    if (rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(new_password, 12);
+
+    await db.query(
+      `UPDATE login_master
+       SET password = ?,
+           reset_otp = NULL,
+           reset_otp_expiry = NULL
+       WHERE login_id = ?`,
+      [hashedPassword, rows[0].login_id],
+    );
+
+    res.json({
+      success: true,
+      message: "Password reset successful",
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+});
+// Auto-cleanup expired login OTPs every 2 minutes
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [key, val] of loginOtpStore.entries()) {
+      if (val.expiresAt < now) loginOtpStore.delete(key);
+    }
+  },
+  2 * 60 * 1000,
+);
+
+module.exports = router;

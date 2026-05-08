@@ -1,0 +1,98 @@
+# ==============================
+# 🔹 NODE.JS
+# ==============================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files (DO NOT PUSH REAL SECRETS)
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+
+# Logs
+logs/
+*.log
+
+# ==============================
+# 🔹 FLUTTER / DART
+# ==============================
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+
+# Flutter generated
+**/generated_plugin_registrant.dart
+
+# ==============================
+# 🔹 ANDROID
+# ==============================
+android/.gradle/
+android/app/build/
+android/local.properties
+android/.kotlin/
+
+# ==============================
+# 🔹 iOS
+# ==============================
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/ServiceDefinitions.json
+
+# ==============================
+# 🔹 WEB (optional Flutter web)
+# ==============================
+build/web/
+
+# ==============================
+# 🔹 WINDOWS / LINUX / MACOS (Flutter desktop)
+# ==============================
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+macos/Flutter/ephemeral/
+
+# ==============================
+# 🔹 IDE / EDITOR
+# ==============================
+.vscode/
+.idea/
+*.iml
+
+# ==============================
+# 🔹 SYSTEM FILES
+# ==============================
+.DS_Store
+Thumbs.db
+
+# ==============================
+# 🔹 TEMP / CACHE
+# ==============================
+*.tmp
+*.temp
+.cache/
+
+# ==============================
+# 🔹 OPTIONAL (if using Firebase / keys)
+# ==============================
+google-services.json
+GoogleService-Info.plist
+
+# Node
+backend/node_modules/
+node_modules/
+
+# Flutter
+.dart_tool/
+build/
