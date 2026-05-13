@@ -860,12 +860,14 @@ class TLDashboardScreen extends StatefulWidget {
   final String role;
   final int initialIndex;
   final int loginId;
+  final String tenantId;
 
   const TLDashboardScreen({
     super.key,
     required this.loginId,
     required this.employeeId,
     required this.role,
+    required this.tenantId,
     this.initialIndex = 0,
   });
 

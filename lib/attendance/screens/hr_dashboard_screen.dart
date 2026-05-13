@@ -21,12 +21,15 @@ class HRDashboardScreen extends StatefulWidget {
   final String employeeId;
   final String roleId;
   final int loginId;
+  
+  final String tenantId;
 
   const HRDashboardScreen({
     super.key,
     required this.loginId,
     required this.employeeId,
     required this.roleId,
+    required this.tenantId,
     this.initialIndex = 0,
   });
 
@@ -75,7 +78,7 @@ class _HRDashboardScreenState extends State<HRDashboardScreen>
       AdminHrAttendanceScreen(loginId: widget.loginId), // 2
       TL_HR_LeaveScreen(employeeId: widget.employeeId), // 3
       EmployeeAssignmentsScreen(),
-      ManageUserScreen(roleId: widget.roleId), // 10
+      // ManageUserScreen(roleId: widget.roleId), // 10
       EmployeeProfileScreen(employeeId: widget.employeeId.toString()), // 15
     ]);
   }

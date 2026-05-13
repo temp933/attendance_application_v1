@@ -7,6 +7,9 @@ const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const db = require("./config/db");
 
+const APP_ADMIN_USERNAME = process.env.APP_ADMIN_USERNAME;
+const APP_ADMIN_PASSWORD = process.env.APP_ADMIN_PASSWORD;
+
 // ── Nodemailer ────────────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
@@ -29,13 +32,38 @@ function nullIfEmpty(v) {
 }
 
 const loginOtpStore = new Map();
-
+const appAdminSessions = new Map();
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /auth/login
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/login", async (req, res) => {
   const { username, password, device_id, device_info } = req.body;
 
+  // ── APP ADMIN LOGIN ─────────────────────────────
+  if (
+    username.trim() === APP_ADMIN_USERNAME &&
+    password === APP_ADMIN_PASSWORD
+  ) {
+    const sessionToken = generateToken();
+
+    appAdminSessions.set(sessionToken, {
+      username: APP_ADMIN_USERNAME,
+      roleId: 999,
+      createdAt: Date.now(),
+    });
+
+    console.log("[APP ADMIN SESSION TOKEN]:", sessionToken);
+
+    return res.json({
+      success: true,
+      loginId: 0,
+      roleId: 999,
+      userType: "app_admin",
+      username: APP_ADMIN_USERNAME,
+      sessionToken,
+      tenantId: "0",
+    });
+  }
   if (!username || !password) {
     return res
       .status(400)
@@ -142,13 +170,26 @@ router.post("/login", async (req, res) => {
     }
 
     const sessionToken = generateToken();
+    console.log("====================================");
+    console.log("[LOGIN] Session Token Generated");
+    console.log("User:", user.username);
+    console.log("Login ID:", user.login_id);
+    console.log("SessionToken:", sessionToken);
+    console.log("====================================");
+
     const deviceInfoStr = JSON.stringify(device_info || {});
 
     await db.query(
       `UPDATE login_master SET session_token = ?, device_logged_in = 1, session_device = ?, last_login_at = NOW() WHERE login_id = ?`,
       [sessionToken, deviceInfoStr, user.login_id],
     );
-
+    console.log("DEBUG tenant_id from DB:", user.tenant_id);
+    console.log("DEBUG full user object keys:", Object.keys(user));
+    console.log("DEBUG full response being sent:", {
+      loginId: user.login_id,
+      empId: user.emp_id,
+      tenantId: user.tenant_id,
+    });
     return res.json({
       success: true,
       firstLogin: false,
@@ -158,6 +199,7 @@ router.post("/login", async (req, res) => {
       userType,
       username: user.username,
       sessionToken,
+      tenantId: user.tenant_id,
     });
   } catch (err) {
     console.error("[/auth/login]", err);
@@ -169,36 +211,89 @@ router.post("/login", async (req, res) => {
 // POST /auth/validate-session
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/validate-session", async (req, res) => {
-  const { login_id, session_token, device_id } = req.body;
-  if (!login_id || !session_token) return res.json({ valid: false });
-
   try {
+    const { login_id, sessionToken } = req.body;
+
+    // ─────────────────────────────────────────────
+    // APP ADMIN SESSION VALIDATION (NO DB)
+    // ─────────────────────────────────────────────
+    if (login_id === 0 || login_id === "0" || Number(login_id) === 0) {
+      if (!sessionToken) {
+        return res.json({
+          valid: false,
+          expired: true,
+          force_logout: false,
+        });
+      }
+
+      const session = appAdminSessions.get(sessionToken);
+
+      if (!session) {
+        return res.json({
+          valid: false,
+          expired: true,
+          force_logout: false,
+        });
+      }
+
+      return res.json({
+        valid: true,
+        expired: false,
+        force_logout: false,
+      });
+    }
+
+    // ─────────────────────────────────────────────
+    // NORMAL USERS (DB VALIDATION)
+    // ─────────────────────────────────────────────
     const [rows] = await db.query(
-      `SELECT session_token, session_device, status, device_logged_in FROM login_master WHERE login_id = ? AND status = 'Active' LIMIT 1`,
+      `SELECT device_logged_in AS is_logged_in, force_logout
+       FROM login_master
+       WHERE login_id = ?`,
       [login_id],
     );
 
-    if (rows.length === 0) return res.json({ valid: false });
-    const user = rows[0];
-
-    if (user.session_token !== session_token)
-      return res.json({ valid: false, force_logout: true });
-
-    if (user.session_device) {
-      const storedDevice = JSON.parse(user.session_device || "{}");
-      if (
-        storedDevice.deviceId &&
-        device_id &&
-        storedDevice.deviceId !== device_id
-      ) {
-        return res.json({ valid: false, force_logout: true });
-      }
+    if (!rows.length) {
+      return res.json({
+        valid: false,
+        expired: true,
+        force_logout: true,
+      });
     }
 
-    return res.json({ valid: true });
+    const user = rows[0];
+
+    if (user.force_logout == 1) {
+      await db.query(
+        `UPDATE login_master SET force_logout = 0 WHERE login_id = ?`,
+        [login_id],
+      );
+
+      return res.json({
+        valid: false,
+        force_logout: true,
+      });
+    }
+
+    if (!user.is_logged_in) {
+      return res.json({
+        valid: false,
+        expired: true,
+        force_logout: false,
+      });
+    }
+
+    return res.json({
+      valid: true,
+      expired: false,
+      force_logout: false,
+    });
   } catch (err) {
     console.error("[/auth/validate-session]", err);
-    return res.json({ valid: true });
+    return res.status(500).json({
+      valid: false,
+      message: "Server error",
+    });
   }
 });
 
@@ -207,6 +302,10 @@ router.post("/validate-session", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/logout", async (req, res) => {
   const { login_id } = req.body;
+  // ── APP ADMIN LOGOUT ────────────────────────────
+  if (login_id == 0 || login_id == "0") {
+    return res.json({ success: true });
+  }
   if (!login_id) return res.json({ success: true });
 
   try {
@@ -474,6 +573,7 @@ router.post("/verify-login-otp", async (req, res) => {
       userType,
       username: user.username,
       sessionToken,
+      tenantId: user.tenant_id,
     });
   } catch (err) {
     console.error("[/auth/verify-login-otp]", err);

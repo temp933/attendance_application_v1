@@ -559,7 +559,12 @@ Widget _errorWidget(String msg, VoidCallback retry) => Center(
 // ─────────────────────────────────────────────────────────────────────────────
 class ManageUserScreen extends StatefulWidget {
   final String roleId;
-  const ManageUserScreen({super.key, required this.roleId});
+  final String tenantId;
+  const ManageUserScreen({
+    super.key,
+    required this.roleId,
+    required this.tenantId,
+  });
   @override
   State<ManageUserScreen> createState() => ManageUserScreenState();
 }

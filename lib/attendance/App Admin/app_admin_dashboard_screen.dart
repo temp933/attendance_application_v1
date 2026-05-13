@@ -12,16 +12,22 @@ import '../services/attendance_state.dart';
 import '../services/api_service.dart';
 import '../services/site_cache.dart';
 import '../services/app_admin_provider.dart';
+import 'app_admin_org_screen.dart';
+import '../providers/api_config.dart';
+
+const String baseUrl = ApiConfig.baseUrl;
 
 class AppAdminDashboardScreen extends StatefulWidget {
   final int initialIndex;
   final String employeeId;
   final String roleId;
   final int loginId;
+  final String tenantId;
 
   const AppAdminDashboardScreen({
     super.key,
     required this.loginId,
+    required this.tenantId,
     required this.employeeId,
     required this.roleId,
     this.initialIndex = 0,
@@ -71,6 +77,7 @@ class _AppAdminDashboardScreenState extends State<AppAdminDashboardScreen>
       ), // 0
       AppAdminCreateCompanyScreen(), // 1
       AppAdminPlanManagementScreen(), // 2
+      AppAdminOrgScreen(), // 3
     ]);
   }
 
@@ -79,6 +86,7 @@ class _AppAdminDashboardScreenState extends State<AppAdminDashboardScreen>
     'Dashboard', // 0
     'Create Company', // 1
     'Plan Management', // 2
+    'Organization Management', // 3
   ];
 
   // ── Rail items ─────────────────────────────────────────────────────────────
@@ -96,7 +104,12 @@ class _AppAdminDashboardScreenState extends State<AppAdminDashboardScreen>
     NavigationRailDestination(
       icon: Icon(Icons.fingerprint_outlined),
       selectedIcon: Icon(Icons.fingerprint),
-      label: Text('Attendance'),
+      label: Text('Plane Management'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.local_post_office),
+      selectedIcon: Icon(Icons.offline_share),
+      label: Text('Organization Management'),
     ),
   ];
   // ── Build ──────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import 'session_guard_mixin.dart';
 
 class DashboardScreen extends StatefulWidget {
   final int loginId;
+  final String tenantId;
   final int empId;
   final String role;
   final int initialIndex;
@@ -21,6 +22,7 @@ class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
     super.key,
     required this.loginId,
+    required this.tenantId,
     required this.empId,
     required this.role,
     this.initialIndex = 0,

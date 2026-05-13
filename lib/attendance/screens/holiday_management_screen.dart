@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/api_client.dart';
 
-// ─── Design tokens (same palette as LeaveApprovalScreen) ─────────────────────
+// ─── Design tokens ────────────────────────────────────────────────────────────
 const Color _primary = Color(0xFF1A56DB);
 const Color _accent = Color(0xFF0E9F6E);
 const Color _purple = Color(0xFF7C3AED);
@@ -33,25 +33,48 @@ class HolidayModel {
     required this.isRecurring,
   });
 
-  factory HolidayModel.fromJson(Map<String, dynamic> j) => HolidayModel(
-    holidayId: j['holiday_id'] as int,
-    holidayName: j['holiday_name'] as String,
-    holidayDate: DateTime.parse(j['holiday_date'] as String),
-    holidayType: j['holiday_type'] as String,
-    description: j['description'] as String?,
-    isRecurring: (j['is_recurring'] == 1 || j['is_recurring'] == true),
-  );
+  factory HolidayModel.fromJson(Map<String, dynamic> j) {
+    final rawDate = (j['holiday_date'] as String).split(
+      'T',
+    )[0]; // strips T18:30:00.000Z
+    final parts = rawDate.split('-');
+    return HolidayModel(
+      holidayId: j['holiday_id'] as int,
+      holidayName: j['holiday_name'] as String,
+      holidayDate: DateTime(
+        int.parse(parts[0]),
+        int.parse(parts[1]),
+        int.parse(parts[2]),
+      ),
+      holidayType: j['holiday_type'] as String,
+      description: j['description'] as String?,
+      isRecurring: (j['is_recurring'] == 1 || j['is_recurring'] == true),
+    );
+  }
+  static DateTime _parseDate(String s) {
+    // Parse as local date, not UTC — avoids timezone shift
+    final parts = s.split('T')[0].split('-');
+    return DateTime(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
+    );
+  }
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 class HolidayService {
+  // GET /api/holidays?year=YYYY
   Future<List<HolidayModel>> fetchHolidays(int year) async {
     final res = await ApiClient.get('/holidays?year=$year');
     if (res.statusCode != 200) throw Exception('Failed to load holidays');
-    final body = jsonDecode(res.body);
-    return (body['data'] as List).map((e) => HolidayModel.fromJson(e)).toList();
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    return (body['data'] as List)
+        .map((e) => HolidayModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
+  // POST /api/holidays
   Future<void> addHoliday({
     required String name,
     required String date,
@@ -68,10 +91,13 @@ class HolidayService {
       'is_recurring': isRecurring,
       'login_id': loginId,
     });
-    final body = jsonDecode(res.body);
-    if (res.statusCode != 201) throw Exception(body['message'] ?? 'Add failed');
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode != 201) {
+      throw Exception(body['message'] ?? 'Add failed');
+    }
   }
 
+  // PUT /api/holidays/:id
   Future<void> updateHoliday({
     required int id,
     required String name,
@@ -87,111 +113,33 @@ class HolidayService {
       'description': description,
       'is_recurring': isRecurring,
     });
-    final body = jsonDecode(res.body);
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode != 200) {
       throw Exception(body['message'] ?? 'Update failed');
     }
   }
 
+  // DELETE /api/holidays/:id
   Future<void> deleteHoliday(int id) async {
     final res = await ApiClient.delete('/holidays/$id');
-    final body = jsonDecode(res.body);
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode != 200) {
       throw Exception(body['message'] ?? 'Delete failed');
     }
   }
 
+  // POST /api/holidays/defaults?year=YYYY
+  // Uses the server-side default_holiday_master table — no hardcoded list in Dart.
   Future<Map<String, dynamic>> bulkImport(int year, int loginId) async {
-    // Build the preset holidays list for the selected year
-    final List<Map<String, dynamic>> holidays = [
-      {
-        'holiday_name': "New Year's Day",
-        'holiday_date': '$year-01-01',
-        'holiday_type': 'National',
-        'description': 'First day of the year',
-        'is_recurring': true,
-      },
-      {
-        'holiday_name': 'Pongal',
-        'holiday_date': '$year-01-14',
-        'holiday_type': 'Public',
-        'description': 'Tamil harvest festival',
-        'is_recurring': true,
-      },
-      {
-        'holiday_name': 'Pongal Holiday',
-        'holiday_date': '$year-01-15',
-        'holiday_type': 'Public',
-        'description': 'Day after Pongal',
-        'is_recurring': true,
-      },
-      {
-        'holiday_name': 'Republic Day',
-        'holiday_date': '$year-01-26',
-        'holiday_type': 'National',
-        'description': "India's Republic Day",
-        'is_recurring': true,
-      },
-      {
-        'holiday_name': 'Maha Shivaratri',
-        'holiday_date': '$year-02-26',
-        'holiday_type': 'Public',
-        'description': 'Festival of Lord Shiva',
-        'is_recurring': false,
-      },
-      {
-        'holiday_name': 'Holi',
-        'holiday_date': '$year-03-14',
-        'holiday_type': 'Public',
-        'description': 'Festival of colours',
-        'is_recurring': false,
-      },
-      {
-        'holiday_name': 'Tamil New Year',
-        'holiday_date': '$year-04-14',
-        'holiday_type': 'Public',
-        'description': 'Puthandu – Tamil New Year',
-        'is_recurring': true,
-      },
-      {
-        'holiday_name': 'Good Friday',
-        'holiday_date': '$year-04-18',
-        'holiday_type': 'Public',
-        'description': 'Crucifixion of Jesus Christ',
-        'is_recurring': false,
-      },
-      {
-        'holiday_name': 'May Day',
-        'holiday_date': '$year-05-01',
-        'holiday_type': 'National',
-        'description': "International Workers' Day",
-        'is_recurring': true,
-      },
-      {
-        'holiday_name': 'Independence Day',
-        'holiday_date': '$year-08-15',
-        'holiday_type': 'National',
-        'description': "India's Independence Day",
-        'is_recurring': true,
-      },
-      {
-        'holiday_name': 'Gandhi Jayanti',
-        'holiday_date': '$year-10-02',
-        'holiday_type': 'National',
-        'description': 'Birthday of Mahatma Gandhi',
-        'is_recurring': true,
-      },
-      {
-        'holiday_name': 'Christmas',
-        'holiday_date': '$year-12-25',
-        'holiday_type': 'National',
-        'description': 'Christmas Day',
-        'is_recurring': true,
-      },
-    ];
-
-    final res = await ApiClient.post('/holidays/bulk', {'holidays': holidays});
-    return jsonDecode(res.body);
+    final res = await ApiClient.post(
+      '/holidays/defaults?year=$year',
+      {'login_id': loginId}, // backend uses this as created_by
+    );
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode != 200) {
+      throw Exception(body['message'] ?? 'Import failed');
+    }
+    return body;
   }
 }
 
@@ -222,12 +170,14 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
     'Optional',
     'Office',
   ];
+
   static const Map<String, Color> _typeColors = {
     'Public': _primary,
     'National': _accent,
     'Optional': _purple,
     'Office': _amber,
   };
+
   static const Map<String, IconData> _typeIcons = {
     'Public': Icons.celebration_rounded,
     'National': Icons.flag_rounded,
@@ -235,7 +185,8 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
     'Office': Icons.apartment_rounded,
   };
 
-  // 19 common Indian / TN presets (name, MM-DD, type, description)
+  // Quick-fill presets for Add dialog.
+  // '00-00' means no date auto-fill (user must pick manually).
   static const List<(String, String, String, String)> _presets = [
     ("New Year's Day", '01-01', 'National', 'First day of the year'),
     ('Pongal', '01-14', 'Public', 'Tamil harvest festival'),
@@ -256,6 +207,9 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
     ('Christmas', '12-25', 'National', 'Christmas Day'),
     ('Office Outing', '00-00', 'Office', 'Company team outing'),
     ('Company Anniversary', '00-00', 'Office', 'Company founding anniversary'),
+    // ── Birthdays / recurring personal ──────────────────────────────────────
+    ('Employee Birthday', '00-00', 'Optional', 'Employee birthday holiday'),
+    ('Work Anniversary', '00-00', 'Optional', 'Employee work anniversary'),
   ];
 
   @override
@@ -309,6 +263,7 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
 
   String _fmt(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')} ${_mon(d.month)} ${d.year}';
+
   String _mon(int m) => const [
     '',
     'Jan',
@@ -324,11 +279,15 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
     'Nov',
     'Dec',
   ][m];
+
   String _dayName(DateTime d) =>
       ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d.weekday - 1];
+
   bool _isPast(DateTime d) =>
       d.isBefore(DateTime.now()) && !_isSameDay(d, DateTime.now());
+
   bool _isToday(DateTime d) => _isSameDay(d, DateTime.now());
+
   bool _isSoon(DateTime d) {
     final diff = d.difference(DateTime.now()).inDays;
     return diff >= 0 && diff <= 7;
@@ -416,7 +375,7 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
                     ),
                   ),
                   Tooltip(
-                    message: 'Import common holidays',
+                    message: 'Import default holidays from server',
                     child: IconButton(
                       onPressed: _showBulkImportDialog,
                       icon: Container(
@@ -1136,6 +1095,8 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
   }
 
   // ── Bulk Import Dialog ────────────────────────────────────────────────────
+  // Calls POST /api/holidays/defaults?year=YYYY which reads default_holiday_master
+  // from the DB and inserts missing rows — no hardcoded list needed on the client.
   void _showBulkImportDialog() {
     int importYear = _selectedYear;
     showDialog(
@@ -1187,8 +1148,8 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
                   border: Border.all(color: _purple.withValues(alpha: 0.2)),
                 ),
                 child: const Text(
-                  'Imports common Indian national holidays for the selected year. '
-                  'Existing entries will be skipped automatically.',
+                  'Imports your company\'s default holidays from the server for the '
+                  'selected year. Holidays that already exist are skipped automatically.',
                   style: TextStyle(
                     fontSize: 12.5,
                     color: _textDark,
@@ -1407,7 +1368,7 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
   }
 }
 
-// ─── Holiday Card widget ──────────────────────────────────────────────────────
+// ─── Holiday Card ─────────────────────────────────────────────────────────────
 class _HolidayCard extends StatelessWidget {
   final HolidayModel holiday;
   final String Function(DateTime) fmt;
@@ -1572,9 +1533,9 @@ class _HolidayCard extends StatelessWidget {
                               ),
                               if (h.isRecurring) ...[
                                 const SizedBox(width: 6),
-                                Tooltip(
+                                const Tooltip(
                                   message: 'Recurring annually',
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.repeat_rounded,
                                     size: 13,
                                     color: _textLight,
@@ -1598,7 +1559,6 @@ class _HolidayCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    // Action buttons
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1622,6 +1582,7 @@ class _HolidayCard extends StatelessWidget {
   }
 }
 
+// ─── Small reusable widgets ───────────────────────────────────────────────────
 class _ActionBtn extends StatelessWidget {
   final IconData icon;
   final Color color;
@@ -1736,7 +1697,6 @@ class _TypeChip extends StatelessWidget {
   );
 }
 
-// Short alias widgets for dialog form
 class _FL extends StatelessWidget {
   final String text;
   const _FL(this.text);

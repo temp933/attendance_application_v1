@@ -22,10 +22,13 @@ class ManagerDashboardScreen extends StatefulWidget {
   final String roleId;
   final int initialIndex;
   final int loginId;
+  final String tenantId;
+
 
   const ManagerDashboardScreen({
     super.key,
     required this.loginId,
+    required this.tenantId,
     required this.employeeId,
     required this.roleId,
     this.initialIndex = 0,
@@ -71,7 +74,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen>
     AdminHrAttendanceScreen(loginId: widget.loginId), // 2
     LeaveApprovalScreen(loginId: widget.loginId), // 3
     MGLeaveScreen(employeeId: widget.employeeId), // 4
-    ManageUserScreen(roleId: widget.roleId), // 10
+    // ManageUserScreen(roleId: widget.roleId), // 10
     EmployeeAssignmentsScreen(), //5
 
     EmployeeProfileScreen(employeeId: widget.employeeId.toString()), // 6

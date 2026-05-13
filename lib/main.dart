@@ -13,6 +13,7 @@ import 'attendance/services/auth_service.dart';
 import 'attendance/services/background_service.dart';
 import 'attendance/screens/manager_dashboard.dart';
 import 'attendance/App Admin/app_admin_dashboard_screen.dart';
+import 'attendance/services/app_admin_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,7 +26,13 @@ void main() async {
 
   runApp(
     MultiProvider(
-      providers: [Provider<LocationService>(create: (_) => LocationService())],
+      providers: [
+        Provider<LocationService>(create: (_) => LocationService()),
+        Provider<AuthService>(create: (_) => AuthService()),
+        ChangeNotifierProvider<AppAdminProvider>(
+          create: (_) => AppAdminProvider(),
+        ),
+      ],
       child: const MyApp(),
     ),
   );
@@ -158,6 +165,9 @@ class _SplashRouterState extends State<SplashRouter>
     final int loginId = int.parse(session['loginId']!);
     final int empId = int.parse(session['empId']!);
     final int roleId = int.parse(session['role']!);
+    final String username = session['username'] ?? '';
+    final bool isAppAdmin = username.toLowerCase() == 'app_admin'.toLowerCase();
+    final String tenantId = session['tenantId'] ?? '';
 
     Widget destination;
 
@@ -166,36 +176,42 @@ class _SplashRouterState extends State<SplashRouter>
         loginId: loginId,
         employeeId: empId.toString(),
         roleId: roleId.toString(),
+        tenantId: tenantId,
       );
     } else if (roleId == 2) {
       destination = HRDashboardScreen(
         loginId: loginId,
         employeeId: empId.toString(),
         roleId: roleId.toString(),
+        tenantId: tenantId,
       );
     } else if (roleId == 3) {
       destination = TLDashboardScreen(
         loginId: loginId,
         employeeId: empId.toString(),
         role: roleId.toString(),
+        tenantId: tenantId,
       );
-    } else if (roleId == 6) {
+    } else if (roleId == 6 || isAppAdmin) {
       destination = AppAdminDashboardScreen(
         loginId: loginId,
         employeeId: empId.toString(),
         roleId: roleId.toString(),
+        tenantId: tenantId,
       );
     } else if (roleId == 8) {
       destination = ManagerDashboardScreen(
         loginId: loginId,
         employeeId: empId.toString(),
         roleId: roleId.toString(),
+        tenantId: tenantId,
       );
     } else {
       destination = DashboardScreen(
         loginId: loginId,
         empId: empId,
         role: roleId.toString(),
+        tenantId: tenantId,
       );
     }
 

@@ -428,20 +428,23 @@ class AppAdminProvider extends ChangeNotifier {
   Future<void> loadSystemModules() async {
     try {
       final res = await ApiClient.get('/app-admin/system-modules');
+
       if (res.statusCode != 200) {
         throw Exception('Server error ${res.statusCode}');
       }
+
       final body = jsonDecode(res.body) as Map<String, dynamic>;
+
       if (body['success'] != true) {
         throw Exception(body['message'] ?? 'Error');
       }
-      final data = body['data'] as Map<String, dynamic>;
-      _allModules = [];
-      for (final entry in data.entries) {
-        for (final m in entry.value as List) {
-          _allModules.add(SystemModule.fromJson(m as Map<String, dynamic>));
-        }
-      }
+
+      final data = body['data'] as List<dynamic>;
+
+      _allModules = data
+          .map((m) => SystemModule.fromJson(m as Map<String, dynamic>))
+          .toList();
+
       notifyListeners();
     } catch (e) {
       _setError(e.toString());

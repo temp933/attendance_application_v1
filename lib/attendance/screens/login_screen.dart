@@ -27,6 +27,9 @@ const _errorRed = Color(0xFFEF4444);
 const _amber = Color(0xFFF59E0B);
 const _green = Color(0xFF10B981);
 
+// ─── App Admin username constant ─────────────────────────────────────────────
+const _appAdminUsername = 'App_Admin';
+
 // ─────────────────────────────────────────────────────────────────────────────
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -80,14 +83,25 @@ class _LoginScreenState extends State<LoginScreen>
     required int empId,
     required int roleId,
     required String userType,
+    required String tenantId,
   }) {
+    ApiConfig.tenantId = tenantId;
     Widget screen;
 
-    if (userType == 'org_admin' || (userType == 'employee' && roleId == 1)) {
+    if (userType == 'app_admin' || roleId == 6) {
+      screen = AppAdminDashboardScreen(
+        loginId: loginId,
+        employeeId: empId.toString(),
+        roleId: roleId.toString(),
+        tenantId: tenantId,
+      );
+    } else if (userType == 'org_admin' ||
+        (userType == 'employee' && roleId == 1)) {
       screen = AdminDashboardScreen(
         loginId: loginId,
         employeeId: empId.toString(),
         roleId: roleId.toString(),
+        tenantId: tenantId,
       );
     } else if (userType == 'org_hr' ||
         (userType == 'employee' && roleId == 2)) {
@@ -95,30 +109,28 @@ class _LoginScreenState extends State<LoginScreen>
         loginId: loginId,
         employeeId: empId.toString(),
         roleId: roleId.toString(),
+        tenantId: tenantId,
       );
     } else if (roleId == 3) {
       screen = TLDashboardScreen(
         loginId: loginId,
         employeeId: empId.toString(),
         role: roleId.toString(),
-      );
-    } else if (roleId == 6) {
-      screen = AppAdminDashboardScreen(
-        loginId: loginId,
-        employeeId: empId.toString(),
-        roleId: roleId.toString(),
+        tenantId: tenantId,
       );
     } else if (roleId == 8) {
       screen = ManagerDashboardScreen(
         loginId: loginId,
         employeeId: empId.toString(),
         roleId: roleId.toString(),
+        tenantId: tenantId,
       );
     } else {
       screen = DashboardScreen(
         loginId: loginId,
         empId: empId,
         role: roleId.toString(),
+        tenantId: tenantId,
       );
     }
 
@@ -261,6 +273,7 @@ class _SignInTab extends StatefulWidget {
     required int empId,
     required int roleId,
     required String userType,
+    required String tenantId,
   })
   onNavigate;
 
@@ -276,7 +289,7 @@ class _SignInTab extends StatefulWidget {
 }
 
 class _SignInTabState extends State<_SignInTab> {
-  int _loginMode = 0;
+  int _loginMode = 0; // 0 = Password, 1 = OTP
 
   final _formKey = GlobalKey<FormState>();
   final _usernameCtrl = TextEditingController();
@@ -289,16 +302,35 @@ class _SignInTabState extends State<_SignInTab> {
   int _resendCd = 0;
   String? _error;
 
+  // ── App Admin OTP flow state ──────────────────────────────────────────────
+  bool _isAppAdminFlow = false;
+  String _appAdminSessionId = '';
+  String _appAdminEmailHint = '';
+  final _appAdminOtpCtrl = TextEditingController();
+
   @override
   void dispose() {
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
     _otpCtrl.dispose();
+    _appAdminOtpCtrl.dispose();
     super.dispose();
   }
 
+  // ── Detect App Admin username ─────────────────────────────────────────────
+  bool get _isAppAdminUsername =>
+      _usernameCtrl.text.trim() == _appAdminUsername;
+
+  // ── Regular password login ────────────────────────────────────────────────
   Future<void> _loginWithPassword() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Intercept App Admin
+    if (_isAppAdminUsername) {
+      await _initiateAppAdminLogin();
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -320,6 +352,150 @@ class _SignInTabState extends State<_SignInTab> {
     }
   }
 
+  // ── App Admin: Step 1 — validate credentials & request OTP ───────────────
+  Future<void> _initiateAppAdminLogin() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await http.post(
+        Uri.parse('$_baseUrl/auth/app-admin/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'username': _usernameCtrl.text.trim(),
+          'password': _passwordCtrl.text,
+        }),
+      );
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+
+      if (res.statusCode == 200) {
+        if (!mounted) return;
+        setState(() {
+          _isAppAdminFlow = true;
+          _appAdminSessionId = body['session_id'] as String;
+          _appAdminEmailHint = body['email_hint'] as String? ?? '***';
+        });
+        _startResendCd();
+      } else {
+        setState(
+          () => _error =
+              body['message'] as String? ??
+              'Invalid credentials. Please try again.',
+        );
+      }
+    } catch (_) {
+      setState(() => _error = 'Network error. Check your connection.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // ── App Admin: Step 2 — verify OTP ───────────────────────────────────────
+  Future<void> _verifyAppAdminOtp() async {
+    final otp = _appAdminOtpCtrl.text.trim();
+    if (otp.length != 6) {
+      setState(() => _error = 'Enter the 6-digit OTP.');
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await http.post(
+        Uri.parse('$_baseUrl/auth/app-admin/verify'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'session_id': _appAdminSessionId, 'otp': otp}),
+      );
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+
+      if (res.statusCode == 200) {
+        if (!mounted) return;
+        FocusScope.of(context).unfocus();
+
+        // ── Save session so validateSession() knows this is App Admin ──
+        await AuthService.saveSession(
+          loginId: ((body['loginId'] as num?)?.toInt() ?? 0).toString(),
+          empId: ((body['empId'] as num?)?.toInt() ?? 0).toString(),
+          role: ((body['roleId'] as num?)?.toInt() ?? 6).toString(),
+          userType: body['userType'] as String? ?? 'app_admin',
+          username: 'App_Admin',
+          sessionToken: body['sessionToken'] as String? ?? '',
+          tenantId: body['tenantId'] as String? ?? 'global',
+        );
+
+        widget.onNavigate(
+          loginId: (body['loginId'] as num?)?.toInt() ?? 0,
+          empId: (body['empId'] as num?)?.toInt() ?? 0,
+          roleId: (body['roleId'] as num?)?.toInt() ?? 6,
+          userType: body['userType'] as String? ?? 'app_admin',
+          tenantId: body['tenantId'] as String? ?? 'global',
+        );
+      } else {
+        setState(
+          () =>
+              _error = body['message'] as String? ?? 'OTP verification failed.',
+        );
+      }
+    } catch (_) {
+      setState(() => _error = 'Unexpected error. Please try again.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // ── App Admin: Resend OTP ─────────────────────────────────────────────────
+  Future<void> _resendAppAdminOtp() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await http.post(
+        Uri.parse('$_baseUrl/auth/app-admin/resend'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'session_id': _appAdminSessionId}),
+      );
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode == 200) {
+        setState(() {
+          _appAdminSessionId = body['session_id'] as String;
+          _appAdminEmailHint =
+              body['email_hint'] as String? ?? _appAdminEmailHint;
+        });
+        _appAdminOtpCtrl.clear();
+        _startResendCd();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('New OTP sent.'),
+              backgroundColor: _green,
+            ),
+          );
+        }
+      } else {
+        setState(() => _error = body['message'] as String? ?? 'Resend failed.');
+      }
+    } catch (_) {
+      setState(() => _error = 'Network error.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // ── Cancel App Admin flow ─────────────────────────────────────────────────
+  void _cancelAppAdminFlow() {
+    setState(() {
+      _isAppAdminFlow = false;
+      _appAdminSessionId = '';
+      _appAdminEmailHint = '';
+      _appAdminOtpCtrl.clear();
+      _error = null;
+    });
+  }
+
+  // ── Regular OTP login ─────────────────────────────────────────────────────
   Future<void> _sendOtp() async {
     final username = _usernameCtrl.text.trim();
     if (username.isEmpty) {
@@ -333,9 +509,7 @@ class _SignInTabState extends State<_SignInTab> {
     try {
       await AuthService.sendLoginOtp(username: username);
       if (!mounted) return;
-      setState(() {
-        _otpSent = true;
-      });
+      setState(() => _otpSent = true);
       _startResendCd();
     } on AuthException catch (e) {
       setState(() => _error = e.message);
@@ -381,11 +555,13 @@ class _SignInTabState extends State<_SignInTab> {
     try {
       final session = await AuthService.getSession();
       if (session != null) {
+        ApiConfig.tenantId = session['tenantId'] ?? '';
         widget.onNavigate(
           loginId: int.parse(session['loginId']!),
           empId: int.parse(session['empId']!),
           roleId: int.parse(session['role']!),
           userType: session['userType'] ?? 'employee',
+          tenantId: session['tenantId'] ?? '',
         );
       } else {
         if (mounted) {
@@ -405,14 +581,23 @@ class _SignInTabState extends State<_SignInTab> {
   }
 
   void _handleLoginResponse(Map<String, dynamic> data) {
+    final int loginId = int.parse(data['loginId'].toString());
+    final int empId = int.parse((data['empId'] ?? 0).toString());
+    final int roleId = int.parse(data['roleId'].toString());
+    final String tenantId =
+        (data['tenantId'] ?? data['tenant_id'])?.toString() ?? '';
+
+    ApiConfig.tenantId = tenantId;
+
     if (data['firstLogin'] == true) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (_) => ChangePasswordScreen(
-            loginId: data['loginId'] as int,
-            empId: (data['empId'] ?? 0) as int,
-            roleId: data['roleId'] as int,
+            loginId: loginId,
+            empId: empId,
+            roleId: roleId,
             username: data['username'] as String,
+            tenantId: tenantId,
           ),
         ),
         (r) => false,
@@ -420,10 +605,11 @@ class _SignInTabState extends State<_SignInTab> {
       return;
     }
     widget.onNavigate(
-      loginId: data['loginId'] as int,
-      empId: (data['empId'] ?? 0) as int,
-      roleId: data['roleId'] as int,
+      loginId: loginId,
+      empId: empId,
+      roleId: roleId,
       userType: data['userType'] ?? 'employee',
+      tenantId: tenantId,
     );
   }
 
@@ -443,11 +629,18 @@ class _SignInTabState extends State<_SignInTab> {
       _error = null;
       _otpSent = false;
       _otpCtrl.clear();
+      _isAppAdminFlow = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    // ── App Admin OTP verification screen ─────────────────────────────────
+    if (_isAppAdminFlow) {
+      return _buildAppAdminOtpScreen();
+    }
+
+    // ── Normal sign-in screen ─────────────────────────────────────────────
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
       child: Form(
@@ -621,6 +814,130 @@ class _SignInTabState extends State<_SignInTab> {
       ),
     );
   }
+
+  // ── App Admin OTP verification panel ─────────────────────────────────────
+  Widget _buildAppAdminOtpScreen() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEEF2FF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE0E7FF)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [_primary, _primaryLight],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.admin_panel_settings_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'App Admin Verification',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: _textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'OTP sent to $_appAdminEmailHint',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: _textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          const Text(
+            'Enter the 6-digit OTP sent to your\nregistered email address.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: _textSecondary, height: 1.5),
+          ),
+          const SizedBox(height: 16),
+
+          _OtpCard(
+            label: 'App Admin OTP',
+            email: _appAdminEmailHint,
+            ctrl: _appAdminOtpCtrl,
+            icon: Icons.security_rounded,
+          ),
+          const SizedBox(height: 12),
+
+          // Resend row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _resendCd > 0 ? 'Resend in ${_resendCd}s' : "Didn't receive? ",
+                style: const TextStyle(color: _textSecondary, fontSize: 13),
+              ),
+              if (_resendCd == 0)
+                GestureDetector(
+                  onTap: _loading ? null : _resendAppAdminOtp,
+                  child: const Text(
+                    'Resend',
+                    style: TextStyle(
+                      color: _primary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            _AppErrorBanner(message: _error!),
+          ],
+          const SizedBox(height: 20),
+
+          _AppPrimaryBtn(
+            label: 'Verify & Sign In',
+            loading: _loading,
+            onTap: _verifyAppAdminOtp,
+            icon: Icons.verified_rounded,
+          ),
+          const SizedBox(height: 10),
+
+          TextButton(
+            onPressed: _loading ? null : _cancelAppAdminFlow,
+            child: const Text(
+              '← Back to Sign In',
+              style: TextStyle(color: _textSecondary, fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -661,7 +978,7 @@ class _ModeBtn extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SIGN UP TAB  — 3-step registration (org details → OTP → profiles+credentials)
+// SIGN UP TAB  (unchanged from original)
 // ─────────────────────────────────────────────────────────────────────────────
 class _SignUpTab extends StatefulWidget {
   final bool isDesktop;
@@ -674,7 +991,6 @@ class _SignUpTab extends StatefulWidget {
 class _SignUpTabState extends State<_SignUpTab> {
   int _step = 0;
 
-  // ── Step 1 controllers ────────────────────────────────────────────────────
   final _orgFormKey = GlobalKey<FormState>();
   final _orgNameCtrl = TextEditingController();
   final _contactPersonCtrl = TextEditingController();
@@ -686,13 +1002,11 @@ class _SignUpTabState extends State<_SignUpTab> {
   final _domainCtrl = TextEditingController();
   final _gstCtrl = TextEditingController();
 
-  // ── Step 2 controllers ────────────────────────────────────────────────────
   final _adminOtpCtrl = TextEditingController();
   final _hrOtpCtrl = TextEditingController();
   String _sessionId = '';
   int _resendCd = 0;
 
-  // ── Step 3: Admin credentials form key + controllers ─────────────────────
   final _adminCredFormKey = GlobalKey<FormState>();
   final _adminUsernameCtrl = TextEditingController();
   final _adminPassCtrl = TextEditingController();
@@ -700,7 +1014,6 @@ class _SignUpTabState extends State<_SignUpTab> {
   bool _adminHidePass = true;
   bool _adminHideConfirm = true;
 
-  // ── Step 3: HR credentials form key + controllers ─────────────────────────
   final _hrCredFormKey = GlobalKey<FormState>();
   final _hrUsernameCtrl = TextEditingController();
   final _hrPassCtrl = TextEditingController();
@@ -708,11 +1021,9 @@ class _SignUpTabState extends State<_SignUpTab> {
   bool _hrHidePass = true;
   bool _hrHideConfirm = true;
 
-  // ── Step 3: Separate profile form keys for Admin and HR ──────────────────
   final _adminProfileFormKey = GlobalKey<FormState>();
   final _hrProfileFormKey = GlobalKey<FormState>();
 
-  // Admin profile
   final _adminFirstCtrl = TextEditingController();
   final _adminMidCtrl = TextEditingController();
   final _adminLastCtrl = TextEditingController();
@@ -734,7 +1045,6 @@ class _SignUpTabState extends State<_SignUpTab> {
   final _adminEsicCtrl = TextEditingController();
   final _adminYearsExpCtrl = TextEditingController();
 
-  // HR profile
   final _hrFirstCtrl = TextEditingController();
   final _hrMidCtrl = TextEditingController();
   final _hrLastCtrl = TextEditingController();
@@ -753,8 +1063,9 @@ class _SignUpTabState extends State<_SignUpTab> {
   final _hrPfCtrl = TextEditingController();
   final _hrEsicCtrl = TextEditingController();
   final _hrYearsExpCtrl = TextEditingController();
-
-  // Which profile section is shown in step 3: 0=Admin, 1=HR
+  Map<String, dynamic>? _selectedPlan;
+  List<Map<String, dynamic>> _plans = [];
+  bool _plansLoading = false;
   int _profileSection = 0;
 
   bool _loading = false;
@@ -763,34 +1074,61 @@ class _SignUpTabState extends State<_SignUpTab> {
   @override
   void dispose() {
     for (final c in [
-      _orgNameCtrl, _contactPersonCtrl, _contactNumCtrl,
-      _adminEmailCtrl, _hrEmailCtrl, _expectedEmpCtrl,
-      _addressCtrl, _domainCtrl, _gstCtrl,
-      _adminOtpCtrl, _hrOtpCtrl,
-      // Admin credentials
-      _adminUsernameCtrl, _adminPassCtrl, _adminConfirmCtrl,
-      // HR credentials
-      _hrUsernameCtrl, _hrPassCtrl, _hrConfirmCtrl,
-      // Admin profile
-      _adminFirstCtrl, _adminMidCtrl, _adminLastCtrl,
-      _adminPhoneCtrl, _adminDobCtrl, _adminDojCtrl,
-      _adminAddressCtrl, _adminCommAddressCtrl,
-      _adminFatherCtrl, _adminEmergencyContactCtrl, _adminEmergencyRelCtrl,
-      _adminAadharCtrl, _adminPanCtrl, _adminPfCtrl, _adminEsicCtrl,
+      _orgNameCtrl,
+      _contactPersonCtrl,
+      _contactNumCtrl,
+      _adminEmailCtrl,
+      _hrEmailCtrl,
+      _expectedEmpCtrl,
+      _addressCtrl,
+      _domainCtrl,
+      _gstCtrl,
+      _adminOtpCtrl,
+      _hrOtpCtrl,
+      _adminUsernameCtrl,
+      _adminPassCtrl,
+      _adminConfirmCtrl,
+      _hrUsernameCtrl,
+      _hrPassCtrl,
+      _hrConfirmCtrl,
+      _adminFirstCtrl,
+      _adminMidCtrl,
+      _adminLastCtrl,
+      _adminPhoneCtrl,
+      _adminDobCtrl,
+      _adminDojCtrl,
+      _adminAddressCtrl,
+      _adminCommAddressCtrl,
+      _adminFatherCtrl,
+      _adminEmergencyContactCtrl,
+      _adminEmergencyRelCtrl,
+      _adminAadharCtrl,
+      _adminPanCtrl,
+      _adminPfCtrl,
+      _adminEsicCtrl,
       _adminYearsExpCtrl,
-      // HR profile
-      _hrFirstCtrl, _hrMidCtrl, _hrLastCtrl,
-      _hrPhoneCtrl, _hrDobCtrl, _hrDojCtrl,
-      _hrAddressCtrl, _hrCommAddressCtrl,
-      _hrFatherCtrl, _hrEmergencyContactCtrl, _hrEmergencyRelCtrl,
-      _hrAadharCtrl, _hrPanCtrl, _hrPfCtrl, _hrEsicCtrl, _hrYearsExpCtrl,
+      _hrFirstCtrl,
+      _hrMidCtrl,
+      _hrLastCtrl,
+      _hrPhoneCtrl,
+      _hrDobCtrl,
+      _hrDojCtrl,
+      _hrAddressCtrl,
+      _hrCommAddressCtrl,
+      _hrFatherCtrl,
+      _hrEmergencyContactCtrl,
+      _hrEmergencyRelCtrl,
+      _hrAadharCtrl,
+      _hrPanCtrl,
+      _hrPfCtrl,
+      _hrEsicCtrl,
+      _hrYearsExpCtrl,
     ]) {
       c.dispose();
     }
     super.dispose();
   }
 
-  // ── Validators ────────────────────────────────────────────────────────────
   String? _req(String? v) =>
       (v == null || v.trim().isEmpty) ? 'Required' : null;
 
@@ -864,7 +1202,26 @@ class _SignUpTabState extends State<_SignUpTab> {
     return null;
   }
 
-  // ── Date picker helper ────────────────────────────────────────────────────
+  Future<void> _fetchPlans() async {
+    if (_plans.isNotEmpty) return; // already loaded
+    setState(() => _plansLoading = true);
+    try {
+      final res = await http.get(Uri.parse('$_baseUrl/plans/list'));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        if (body['success'] == true) {
+          setState(() {
+            _plans = List<Map<String, dynamic>>.from(body['plans'] as List);
+          });
+        }
+      }
+    } catch (_) {
+      // silently fail — user can retry by tapping again
+    } finally {
+      if (mounted) setState(() => _plansLoading = false);
+    }
+  }
+
   Future<void> _pickDate(
     BuildContext context,
     TextEditingController ctrl, {
@@ -890,21 +1247,29 @@ class _SignUpTabState extends State<_SignUpTab> {
     }
   }
 
-  // ── Step 1: Send OTP ──────────────────────────────────────────────────────
   Future<void> _sendOtp() async {
     if (!_orgFormKey.currentState!.validate()) return;
+
+    // Validate plan selection
+    if (_selectedPlan == null) {
+      setState(() => _error = 'Please select a plan before continuing.');
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/api/auth/send-otp'),
+        Uri.parse('$_baseUrl/auth/send-otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'org_name': _orgNameCtrl.text.trim(),
           'admin_email': _adminEmailCtrl.text.trim(),
           'hr_email': _hrEmailCtrl.text.trim(),
+          'plan_id': _selectedPlan!['plan_id'], // ← ADD
+          'plan_code': _selectedPlan!['plan_code'], // ← ADD
         }),
       );
       final body = jsonDecode(res.body);
@@ -924,7 +1289,6 @@ class _SignUpTabState extends State<_SignUpTab> {
     }
   }
 
-  // ── Step 2: Verify OTP → advance to profile step ─────────────────────────
   Future<void> _verifyOtp() async {
     final a = _adminOtpCtrl.text.trim(), h = _hrOtpCtrl.text.trim();
     if (a.length != 6 || h.length != 6) {
@@ -937,7 +1301,7 @@ class _SignUpTabState extends State<_SignUpTab> {
     });
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/api/auth/verify-otp'),
+        Uri.parse('$_baseUrl/auth/verify-otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'session_id': _sessionId,
@@ -947,7 +1311,6 @@ class _SignUpTabState extends State<_SignUpTab> {
       );
       final body = jsonDecode(res.body);
       if (res.statusCode == 200) {
-        // Pre-fill Admin name/phone from org contact if empty
         if (_adminFirstCtrl.text.isEmpty) {
           final parts = _contactPersonCtrl.text.trim().split(' ');
           if (parts.isNotEmpty) _adminFirstCtrl.text = parts.first;
@@ -968,9 +1331,7 @@ class _SignUpTabState extends State<_SignUpTab> {
     }
   }
 
-  // ── Step 3: Complete registration ─────────────────────────────────────────
   Future<void> _complete() async {
-    // Validate all four forms regardless of which tab is currently visible
     final adminCredValid = _adminCredFormKey.currentState?.validate() ?? false;
     final hrCredValid = _hrCredFormKey.currentState?.validate() ?? false;
     final adminProfileValid =
@@ -1016,11 +1377,10 @@ class _SignUpTabState extends State<_SignUpTab> {
 
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/api/auth/complete'),
+        Uri.parse('$_baseUrl/auth/complete'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'session_id': _sessionId,
-          // Org details
           'org_name': _orgNameCtrl.text.trim(),
           'contact_person': _contactPersonCtrl.text.trim(),
           'contact_number': _contactNumCtrl.text.trim(),
@@ -1030,17 +1390,15 @@ class _SignUpTabState extends State<_SignUpTab> {
           'company_address': _addressCtrl.text.trim(),
           'domain_name': _domainCtrl.text.trim(),
           'gst_number': _gstCtrl.text.trim(),
-          // Admin login credentials
+          'plan_id': _selectedPlan?['plan_id'] ?? 'plan-free-trial',
           'admin_login': {
             'username': _adminUsernameCtrl.text.trim(),
             'password': _adminPassCtrl.text,
           },
-          // HR login credentials
           'hr_login': {
             'username': _hrUsernameCtrl.text.trim(),
             'password': _hrPassCtrl.text,
           },
-          // Admin profile
           'admin_profile': {
             'first_name': _adminFirstCtrl.text.trim(),
             'mid_name': _adminMidCtrl.text.trim(),
@@ -1063,7 +1421,6 @@ class _SignUpTabState extends State<_SignUpTab> {
             'years_experience':
                 int.tryParse(_adminYearsExpCtrl.text.trim()) ?? 0,
           },
-          // HR profile
           'hr_profile': {
             'first_name': _hrFirstCtrl.text.trim(),
             'mid_name': _hrMidCtrl.text.trim(),
@@ -1131,7 +1488,7 @@ class _SignUpTabState extends State<_SignUpTab> {
     });
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/api/auth/resend-otp'),
+        Uri.parse('$_baseUrl/auth/resend-otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'session_id': _sessionId,
@@ -1172,7 +1529,6 @@ class _SignUpTabState extends State<_SignUpTab> {
         : _buildProfileStep(),
   );
 
-  // ── Step 1: Org Details ───────────────────────────────────────────────────
   Widget _buildOrgForm() => Padding(
     key: const ValueKey('s0'),
     padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -1270,6 +1626,66 @@ class _SignUpTabState extends State<_SignUpTab> {
             ],
             validator: _gst,
           ),
+
+          const SizedBox(height: 12),
+          FormField<String>(
+            validator: (_) => _selectedPlan == null
+                ? 'Please select a plan to continue'
+                : null,
+            builder: (field) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _PlanPickerField(
+                  selectedPlan: _selectedPlan,
+                  loading: _plansLoading,
+                  hasError: field.hasError,
+                  onTap: () async {
+                    await _fetchPlans();
+                    if (!mounted) return;
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => _PlanBottomSheet(
+                        plans: _plans,
+                        loading: _plansLoading,
+                        selectedPlanId: _selectedPlan?['plan_id'] as String?,
+                        onSelect: (plan) {
+                          setState(() => _selectedPlan = plan);
+                          field.didChange(plan['plan_id'] as String);
+                          Navigator.pop(context);
+                        },
+                      ),
+                    );
+                  },
+                ),
+                if (field.hasError) ...[
+                  const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          size: 13,
+                          color: _errorRed,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          field.errorText!,
+                          style: const TextStyle(
+                            color: _errorRed,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
           if (_error != null) ...[
             const SizedBox(height: 12),
             _AppErrorBanner(message: _error!),
@@ -1287,7 +1703,6 @@ class _SignUpTabState extends State<_SignUpTab> {
     ),
   );
 
-  // ── Step 2: OTP Verification ──────────────────────────────────────────────
   Widget _buildOtpStep() => Padding(
     key: const ValueKey('s1'),
     padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -1364,7 +1779,6 @@ class _SignUpTabState extends State<_SignUpTab> {
     ),
   );
 
-  // ── Step 3: Profiles + Credentials ───────────────────────────────────────
   Widget _buildProfileStep() => Padding(
     key: const ValueKey('s2'),
     padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -1377,8 +1791,6 @@ class _SignUpTabState extends State<_SignUpTab> {
           subtitle: 'Set profiles and login credentials for Admin and HR',
         ),
         const SizedBox(height: 16),
-
-        // ── Section switcher ─────────────────────────────────────────
         Container(
           decoration: BoxDecoration(
             color: const Color(0xFFF0F0FF),
@@ -1401,7 +1813,6 @@ class _SignUpTabState extends State<_SignUpTab> {
           ),
         ),
         const SizedBox(height: 16),
-
         IndexedStack(
           index: _profileSection,
           children: [
@@ -1491,7 +1902,6 @@ class _SignUpTabState extends State<_SignUpTab> {
           _AppErrorBanner(message: _error!),
         ],
         const SizedBox(height: 20),
-
         if (_profileSection == 0)
           _AppPrimaryBtn(
             label: 'Next: HR Setup →',
@@ -1507,7 +1917,6 @@ class _SignUpTabState extends State<_SignUpTab> {
             onTap: _complete,
             icon: Icons.check_circle_outline_rounded,
           ),
-
         const SizedBox(height: 10),
         TextButton(
           onPressed: _loading
@@ -1530,14 +1939,12 @@ class _SignUpTabState extends State<_SignUpTab> {
     ),
   );
 
-  // ── Combined credentials + profile section ────────────────────────────────
   Widget _buildPersonSection({
     required Key key,
     required String role,
     required Color roleColor,
     required IconData roleIcon,
     required String prefillEmail,
-    // credentials
     required GlobalKey<FormState> credFormKey,
     required TextEditingController usernameCtrl,
     required TextEditingController passCtrl,
@@ -1546,7 +1953,6 @@ class _SignUpTabState extends State<_SignUpTab> {
     required bool hideConfirm,
     required VoidCallback onTogglePass,
     required VoidCallback onToggleConfirm,
-    // profile
     required GlobalKey<FormState> profileFormKey,
     required TextEditingController firstCtrl,
     required TextEditingController midCtrl,
@@ -1575,7 +1981,6 @@ class _SignUpTabState extends State<_SignUpTab> {
       key: key,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Role badge
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
@@ -1608,11 +2013,8 @@ class _SignUpTabState extends State<_SignUpTab> {
           ),
         ),
         const SizedBox(height: 16),
-
-        // ── Login Credentials ────────────────────────────────────────
         _SectionDivider(label: '$role Login Credentials'),
         const SizedBox(height: 12),
-
         Form(
           key: credFormKey,
           child: Column(
@@ -1661,12 +2063,9 @@ class _SignUpTabState extends State<_SignUpTab> {
             ],
           ),
         ),
-
-        // ── Personal Information ─────────────────────────────────────
         const SizedBox(height: 20),
         _SectionDivider(label: 'Personal Information'),
         const SizedBox(height: 12),
-
         Form(
           key: profileFormKey,
           child: Column(
@@ -1751,12 +2150,9 @@ class _SignUpTabState extends State<_SignUpTab> {
                 label: "Father's Name",
                 icon: Icons.family_restroom_outlined,
               ),
-
-              // ── Employment Details ───────────────────────────────
               const SizedBox(height: 16),
               _SectionDivider(label: 'Employment Details'),
               const SizedBox(height: 12),
-
               GestureDetector(
                 onTap: () => _pickDate(context, dojCtrl),
                 child: AbsorbPointer(
@@ -1818,12 +2214,9 @@ class _SignUpTabState extends State<_SignUpTab> {
                   LengthLimitingTextInputFormatter(2),
                 ],
               ),
-
-              // ── Address ──────────────────────────────────────────
               const SizedBox(height: 16),
               _SectionDivider(label: 'Address'),
               const SizedBox(height: 12),
-
               _AppField(
                 ctrl: addressCtrl,
                 label: 'Permanent Address *',
@@ -1839,12 +2232,9 @@ class _SignUpTabState extends State<_SignUpTab> {
                 maxLines: 2,
                 hint: 'Leave blank if same as permanent',
               ),
-
-              // ── Emergency Contact ────────────────────────────────
               const SizedBox(height: 16),
               _SectionDivider(label: 'Emergency Contact'),
               const SizedBox(height: 12),
-
               _AppField(
                 ctrl: emergencyContactCtrl,
                 label: 'Emergency Contact Number',
@@ -1863,12 +2253,9 @@ class _SignUpTabState extends State<_SignUpTab> {
                 icon: Icons.people_outline_rounded,
                 hint: 'e.g. Spouse, Parent, Sibling',
               ),
-
-              // ── Government & Payroll IDs ─────────────────────────
               const SizedBox(height: 16),
               _SectionDivider(label: 'Government & Payroll IDs'),
               const SizedBox(height: 12),
-
               _AppField(
                 ctrl: aadharCtrl,
                 label: 'Aadhar Number',
@@ -1986,7 +2373,6 @@ class _SectionDivider extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED WIDGETS
 // ─────────────────────────────────────────────────────────────────────────────
-
 class _Header extends StatelessWidget {
   final bool isDesktop;
   const _Header({required this.isDesktop});
@@ -2439,4 +2825,730 @@ class _UpperCase extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue o, TextEditingValue n) =>
       n.copyWith(text: n.text.toUpperCase(), selection: n.selection);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plan picker field (tappable, shows selected plan name)
+// ─────────────────────────────────────────────────────────────────────────────
+class _PlanPickerField extends StatelessWidget {
+  final Map<String, dynamic>? selectedPlan;
+  final bool loading;
+  final bool hasError; // ← ADD
+  final VoidCallback onTap;
+
+  const _PlanPickerField({
+    required this.selectedPlan,
+    required this.loading,
+    required this.onTap,
+    this.hasError = false, // ← ADD
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSelection = selectedPlan != null;
+
+    // Border color: error = red, selected = primary, default = grey
+    final borderColor = hasError
+        ? _errorRed
+        : hasSelection
+        ? _primary.withOpacity(0.5)
+        : Colors.grey.shade200;
+    final borderWidth = (hasError || hasSelection) ? 1.5 : 1.0;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: hasError
+              ? _errorRed.withOpacity(0.03)
+              : const Color(0xFFF5F5FF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor, width: borderWidth),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.workspace_premium_rounded,
+              color: hasError ? _errorRed : _primary,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: loading
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: _primary,
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          hasSelection
+                              ? selectedPlan!['plan_name'] as String
+                              : 'Select a Plan *',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: hasSelection
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            color: hasError
+                                ? _errorRed
+                                : hasSelection
+                                ? _textPrimary
+                                : _textSecondary,
+                          ),
+                        ),
+                        if (hasSelection) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '₹${selectedPlan!['price_monthly']}/month · '
+                            '${selectedPlan!['total_modules']} modules',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: _primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+            ),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: hasError ? _errorRed : _textSecondary,
+              size: 22,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plan bottom sheet — DTH/recharge-style cards
+// ─────────────────────────────────────────────────────────────────────────────
+class _PlanBottomSheet extends StatefulWidget {
+  final List<Map<String, dynamic>> plans;
+  final bool loading;
+  final String? selectedPlanId;
+  final void Function(Map<String, dynamic>) onSelect;
+
+  const _PlanBottomSheet({
+    required this.plans,
+    required this.loading,
+    required this.selectedPlanId,
+    required this.onSelect,
+  });
+
+  @override
+  State<_PlanBottomSheet> createState() => _PlanBottomSheetState();
+}
+
+class _PlanBottomSheetState extends State<_PlanBottomSheet> {
+  String _billing = 'monthly'; // 'monthly' | 'yearly'
+  String? _expandedPlanId;
+
+  // Plan-tier accent colours (matches plan_code order from API)
+  static const _tierColors = [
+    Color(0xFF6B7280), // Free Trial — neutral grey
+    Color(0xFF0EA5E9), // Starter — sky blue
+    Color(0xFF8B5CF6), // Growth — violet
+    Color(0xFFF59E0B), // Enterprise — amber/gold
+  ];
+
+  Color _colorFor(int index) =>
+      _tierColors[index.clamp(0, _tierColors.length - 1)];
+
+  String _formatPrice(dynamic price) {
+    final d = double.tryParse(price.toString()) ?? 0;
+    if (d == 0) return 'Free';
+    // Format Indian style: 2999 → ₹2,999
+    final parts = d.toStringAsFixed(0).split('');
+    if (parts.length > 3) {
+      parts.insert(parts.length - 3, ',');
+    }
+    return '₹${parts.join()}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sh = MediaQuery.of(context).size.height;
+
+    return Container(
+      height: sh * 0.92,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        children: [
+          // ── Handle ──────────────────────────────────────────────────
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Header ──────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.workspace_premium_rounded,
+                    color: _primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Choose Your Plan',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: _textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Select the best fit for your organisation',
+                        style: TextStyle(fontSize: 11, color: _textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded, color: _textSecondary),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // ── Billing toggle ───────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F0FF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  _BillingTab(
+                    label: 'Monthly',
+                    active: _billing == 'monthly',
+                    onTap: () => setState(() => _billing = 'monthly'),
+                  ),
+                  _BillingTab(
+                    label: 'Yearly  🏷️ Save ~17%',
+                    active: _billing == 'yearly',
+                    onTap: () => setState(() => _billing = 'yearly'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          const Divider(height: 1),
+
+          // ── Plan cards ───────────────────────────────────────────────
+          Expanded(
+            child: widget.loading
+                ? const Center(
+                    child: CircularProgressIndicator(color: _primary),
+                  )
+                : widget.plans.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No plans available.',
+                      style: TextStyle(color: _textSecondary),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    itemCount: widget.plans.length,
+                    itemBuilder: (_, i) {
+                      final plan = widget.plans[i];
+                      final planId = plan['plan_id'] as String;
+                      final isSelected = planId == widget.selectedPlanId;
+                      final isExpanded = planId == _expandedPlanId;
+                      final color = _colorFor(i);
+                      final price = _billing == 'monthly'
+                          ? plan['price_monthly']
+                          : plan['price_yearly'];
+                      final modules =
+                          (plan['modules'] as List?)?.cast<String>() ?? [];
+                      final totalMods =
+                          (plan['total_modules'] as num?)?.toInt() ?? 0;
+                      final maxUsers =
+                          (plan['max_users'] as num?)?.toInt() ?? 0;
+                      final isFree = double.tryParse(price.toString()) == 0;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: GestureDetector(
+                          onTap: () => setState(
+                            () => _expandedPlanId = isExpanded ? null : planId,
+                          ),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? color.withOpacity(0.05)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isSelected
+                                    ? color
+                                    : Colors.grey.shade200,
+                                width: isSelected ? 2 : 1,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: color.withOpacity(
+                                    isSelected ? 0.12 : 0.04,
+                                  ),
+                                  blurRadius: isSelected ? 16 : 6,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                // ── Card header ──────────────────
+                                Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // Left: colour dot + name
+                                      Container(
+                                        width: 44,
+                                        height: 44,
+                                        decoration: BoxDecoration(
+                                          color: color.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          _planIcon(
+                                            plan['plan_code'] as String,
+                                          ),
+                                          color: color,
+                                          size: 22,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  plan['plan_name'] as String,
+                                                  style: TextStyle(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: _textPrimary,
+                                                  ),
+                                                ),
+                                                if (plan['plan_code'] ==
+                                                    'GROWTH') ...[
+                                                  const SizedBox(width: 6),
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 2,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: _amber.withOpacity(
+                                                        0.15,
+                                                      ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            4,
+                                                          ),
+                                                    ),
+                                                    child: const Text(
+                                                      '⭐ Popular',
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: _amber,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            // User limit chip
+                                            Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.people_outline,
+                                                  size: 12,
+                                                  color: _textSecondary,
+                                                ),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  maxUsers == -1
+                                                      ? 'Unlimited users'
+                                                      : 'Up to $maxUsers users',
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: _textSecondary,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Icon(
+                                                  Icons.grid_view_rounded,
+                                                  size: 12,
+                                                  color: _textSecondary,
+                                                ),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  '$totalMods modules',
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: _textSecondary,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // Right: price
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          Text(
+                                            isFree
+                                                ? 'Free'
+                                                : _formatPrice(price),
+                                            style: TextStyle(
+                                              fontSize: isFree ? 18 : 20,
+                                              fontWeight: FontWeight.w900,
+                                              color: color,
+                                            ),
+                                          ),
+                                          if (!isFree)
+                                            Text(
+                                              _billing == 'monthly'
+                                                  ? '/month'
+                                                  : '/year',
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                color: _textSecondary,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // ── Module chips row ──────────────
+                                if (modules.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      0,
+                                      16,
+                                      0,
+                                    ),
+                                    child: SizedBox(
+                                      height: 26,
+                                      child: ListView.separated(
+                                        scrollDirection: Axis.horizontal,
+                                        itemCount: isExpanded
+                                            ? modules.length
+                                            : modules.take(5).length,
+                                        separatorBuilder: (_, __) =>
+                                            const SizedBox(width: 6),
+                                        itemBuilder: (_, mi) {
+                                          final mod = modules[mi];
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: color.withOpacity(0.08),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              mod,
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                                color: color,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+
+                                // ── Expanded: full module grid ────
+                                if (isExpanded && modules.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
+                                    child: Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: modules.map((mod) {
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: color.withOpacity(0.08),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                            border: Border.all(
+                                              color: color.withOpacity(0.2),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.check_rounded,
+                                                size: 10,
+                                                color: color,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                mod,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: color,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ],
+
+                                // ── Bottom bar: expand + select ───
+                                const SizedBox(height: 12),
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    0,
+                                    12,
+                                    12,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      // View details toggle
+                                      TextButton.icon(
+                                        onPressed: () => setState(
+                                          () => _expandedPlanId = isExpanded
+                                              ? null
+                                              : planId,
+                                        ),
+                                        icon: Icon(
+                                          isExpanded
+                                              ? Icons.keyboard_arrow_up_rounded
+                                              : Icons
+                                                    .keyboard_arrow_down_rounded,
+                                          size: 16,
+                                          color: color,
+                                        ),
+                                        label: Text(
+                                          isExpanded
+                                              ? 'Hide details'
+                                              : 'View details',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: color,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 6,
+                                          ),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      // Select button
+                                      SizedBox(
+                                        height: 36,
+                                        child: isSelected
+                                            ? OutlinedButton.icon(
+                                                onPressed: () =>
+                                                    widget.onSelect(plan),
+                                                icon: Icon(
+                                                  Icons.check_circle_rounded,
+                                                  size: 15,
+                                                  color: color,
+                                                ),
+                                                label: Text(
+                                                  'Selected',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: color,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                                style: OutlinedButton.styleFrom(
+                                                  side: BorderSide(
+                                                    color: color,
+                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 14,
+                                                      ),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          10,
+                                                        ),
+                                                  ),
+                                                ),
+                                              )
+                                            : ElevatedButton(
+                                                onPressed: () =>
+                                                    widget.onSelect(plan),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: color,
+                                                  foregroundColor: Colors.white,
+                                                  elevation: 0,
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 20,
+                                                      ),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          10,
+                                                        ),
+                                                  ),
+                                                ),
+                                                child: const Text(
+                                                  'Select',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _planIcon(String code) {
+    switch (code) {
+      case 'FREE_TRIAL':
+        return Icons.free_breakfast_rounded;
+      case 'STARTER':
+        return Icons.rocket_launch_rounded;
+      case 'GROWTH':
+        return Icons.trending_up_rounded;
+      case 'ENTERPRISE':
+        return Icons.diamond_rounded;
+      default:
+        return Icons.workspace_premium_rounded;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Billing toggle tab (used inside _PlanBottomSheet)
+// ─────────────────────────────────────────────────────────────────────────────
+class _BillingTab extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _BillingTab({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        decoration: BoxDecoration(
+          color: active ? _primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: active ? Colors.white : _textSecondary,
+          ),
+        ),
+      ),
+    ),
+  );
 }

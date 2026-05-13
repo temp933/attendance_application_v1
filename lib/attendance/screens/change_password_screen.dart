@@ -8,6 +8,7 @@ class ChangePasswordScreen extends StatefulWidget {
   final int empId;
   final int roleId;
   final String username;
+  final String tenantId;
 
   const ChangePasswordScreen({
     super.key,
@@ -15,6 +16,7 @@ class ChangePasswordScreen extends StatefulWidget {
     required this.empId,
     required this.roleId,
     required this.username,
+    required this.tenantId,
   });
 
   @override

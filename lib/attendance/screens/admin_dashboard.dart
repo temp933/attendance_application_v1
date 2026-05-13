@@ -18,18 +18,22 @@ import 'session_guard_mixin.dart';
 import '../services/attendance_state.dart';
 import '../services/api_service.dart';
 import '../services/site_cache.dart';
+import '../providers/api_config.dart';
+import '../App Admin/app_admin_plan_management_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final int initialIndex;
   final String employeeId;
   final String roleId;
   final int loginId;
+  final String tenantId;
 
   const AdminDashboardScreen({
     super.key,
     required this.loginId,
     required this.employeeId,
     required this.roleId,
+    required this.tenantId,
     this.initialIndex = 0,
   });
 
@@ -59,6 +63,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     super.initState();
     selectedIndex = widget.initialIndex;
     startSessionGuard();
+    ApiConfig.tenantId = widget.tenantId;
   }
 
   // ── Pages ──────────────────────────────────────────────────────────────────
@@ -69,6 +74,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     pages.clear();
+
+    print('DEBUG AdminDashboard widget.tenantId: "${widget.tenantId}"');
+    print('DEBUG AdminDashboard widget.employeeId: "${widget.employeeId}"');
+
     pages.addAll([
       AdminHomeScreen(
         employeeId: widget.employeeId,
@@ -77,25 +86,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       AttendanceScreen(employeeId: int.parse(widget.employeeId)), // 1
       AdminHrAttendanceScreen(loginId: widget.loginId), // 2
       LeaveApprovalScreen(loginId: widget.loginId), // 3
-      // ExpenseApprovalScreen(), // 4
-      // AssignTaskScreen(), // 5
-      // ManageTaskScreen(), // 6
-      AdminDepartmentsScreen(), // 7
-      // DrawCampusOSM(), // 8
-      // AdminReportScreen(), // 9
-      ManageUserScreen(roleId: widget.roleId), // 10
-      AdminApprovalPage(), // 11
-      ManageLocationPage(), // 12
-      // AdminAssignLocation(role: widget.roleId), // 13
-      AdminSessionManagementScreen(), // 14
-      EmployeeProfileScreen(employeeId: widget.employeeId.toString()), // 15
-      // const Center(
-      //   child: Text(
-      //     'Notifications',
-      //     style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-      //   ),
-      // ), // 16
+      AdminDepartmentsScreen(tenantId: widget.tenantId), // 4
+      ManageUserScreen(roleId: widget.roleId, tenantId: widget.tenantId), // 5
+      AppAdminPlanManagementScreen(),
     ]);
+    print(
+      'DEBUG AdminDepartmentsScreen receiving tenantId: "${widget.tenantId}"',
+    );
   }
 
   // ── Titles ─────────────────────────────────────────────────────────────────
@@ -104,19 +101,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     'Attendance',
     'Manage Attendance',
     'Leave Management',
-    // 'Manage Expenses',
-    // 'Assign Task',
-    // 'Manage Tasks',
     'Departments',
-    // 'Audit Logs',
-    // 'System Reports',
     'Manage Users',
-    'Approval Page',
-    'Add Location',
-    // 'Assign Location',
-    'Session Management',
-    'Profile',
-    // 'Notifications',
+    'Plan Management',
   ];
 
   // ── Rail items ─────────────────────────────────────────────────────────────
@@ -141,65 +128,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       selectedIcon: Icon(Icons.event_busy),
       label: Text('Leave Management'),
     ),
-    // NavigationRailDestination(
-    //   icon: Icon(Icons.payments_outlined),
-    //   selectedIcon: Icon(Icons.payments),
-    //   label: Text('Manage Expenses'),
-    // ),
-    // NavigationRailDestination(
-    //   icon: Icon(Icons.assignment_add),
-    //   selectedIcon: Icon(Icons.assignment_add),
-    //   label: Text('Assign Task'),
-    // ),
-    // NavigationRailDestination(
-    //   icon: Icon(Icons.task_alt_outlined),
-    //   selectedIcon: Icon(Icons.task_alt),
-    //   label: Text('Manage Tasks'),
-    // ),
     NavigationRailDestination(
       icon: Icon(Icons.apartment_outlined),
       selectedIcon: Icon(Icons.apartment),
       label: Text('Departments'),
     ),
-    // NavigationRailDestination(
-    //   icon: Icon(Icons.history_outlined),
-    //   selectedIcon: Icon(Icons.history),
-    //   label: Text('Audit Logs'),
-    // ),
-    // NavigationRailDestination(
-    //   icon: Icon(Icons.summarize_outlined),
-    //   selectedIcon: Icon(Icons.summarize),
-    //   label: Text('System Reports'),
-    // ),
     NavigationRailDestination(
-      icon: Icon(Icons.manage_accounts_outlined),
-      selectedIcon: Icon(Icons.manage_accounts),
+      icon: Icon(Icons.people),
+      selectedIcon: Icon(Icons.people),
       label: Text('Manage Users'),
     ),
     NavigationRailDestination(
-      icon: Icon(Icons.approval_outlined),
-      selectedIcon: Icon(Icons.approval),
-      label: Text('Approval Page'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.place_outlined),
-      selectedIcon: Icon(Icons.place),
-      label: Text('Location'),
-    ),
-    // NavigationRailDestination(
-    //   icon: Icon(Icons.location_on_outlined),
-    //   selectedIcon: Icon(Icons.location_on),
-    //   label: Text('Assign Location'),
-    // ),
-    NavigationRailDestination(
-      icon: Icon(Icons.devices_outlined),
-      selectedIcon: Icon(Icons.devices),
-      label: Text('Sessions'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.person_outline),
-      selectedIcon: Icon(Icons.person),
-      label: Text('Profile'),
+      icon: Icon(Icons.money_outlined),
+      selectedIcon: Icon(Icons.money),
+      label: Text('plan management'),
     ),
   ];
 
