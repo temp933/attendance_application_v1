@@ -13,8 +13,7 @@ serviceAccountKey.json
 *.p12
 
 
-serviceAccountKey.json
-backend/serviceAccountKey.json
+
 
 # Logs
 logs/
