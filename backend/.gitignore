@@ -12,6 +12,10 @@ serviceAccountKey.json
 *.pem
 *.p12
 
+
+*.json
+backend/serviceAccountKey.json
+
 # Logs
 logs/
 *.log
