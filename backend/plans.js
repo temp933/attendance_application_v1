@@ -8,42 +8,36 @@ const db = require("./config/db");
 router.get("/list", async (req, res) => {
   try {
     const sql = `
-      SELECT
-        p.plan_id,
-        p.plan_name,
-        p.plan_code,
-        p.max_users,
-        p.price_monthly,
-        p.price_yearly,
-        p.is_active,
+  SELECT
+    p.plan_id,
+    p.plan_name,
+    p.plan_code,
+    p.max_users,
+    p.price_monthly,
+    p.price_yearly,
+    p.is_active,
+    p.trial_days,          -- ← NEW
+    p.billing_cycle,       -- ← NEW
 
-        COUNT(
-          CASE WHEN pm.is_included = 1 THEN pm.module_id END
-        ) AS total_modules,
+    COUNT(
+      CASE WHEN pm.is_included = 1 THEN pm.module_id END
+    ) AS total_modules,
 
-        JSON_ARRAYAGG(
-          CASE WHEN pm.is_included = 1 THEN m.module_name END
-        ) AS modules
+    JSON_ARRAYAGG(
+      CASE WHEN pm.is_included = 1 THEN m.module_name END
+    ) AS modules
 
-      FROM plans p
+  FROM plans p
+  LEFT JOIN plan_modules pm ON pm.plan_id = p.plan_id
+  LEFT JOIN modules m ON m.module_code = pm.module_id
 
-      LEFT JOIN plan_modules pm
-        ON pm.plan_id = p.plan_id
+  GROUP BY
+    p.plan_id, p.plan_name, p.plan_code,
+    p.max_users, p.price_monthly, p.price_yearly,
+    p.is_active, p.trial_days, p.billing_cycle   -- ← NEW
 
-      LEFT JOIN modules m
-        ON m.module_code = pm.module_id
-
-      GROUP BY
-        p.plan_id,
-        p.plan_name,
-        p.plan_code,
-        p.max_users,
-        p.price_monthly,
-        p.price_yearly,
-        p.is_active
-
-      ORDER BY p.price_monthly ASC
-    `;
+  ORDER BY p.price_monthly ASC
+`;
 
     const [rows] = await db.query(sql);
 

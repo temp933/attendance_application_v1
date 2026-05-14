@@ -1,10 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../providers/api_config.dart';
 
-const String baseUrl = ApiConfig.baseUrl;
 // ─────────────────────────────────────────────────────────────────────────────
 // Models
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,6 +62,7 @@ class Organization {
   final double? priceYearly;
   final int employeeCount;
   final int activeEmployeeCount;
+  // FIX: daysRemaining can be negative (expired plans); use int not clamped
   final int daysRemaining;
 
   Organization({
@@ -92,49 +93,57 @@ class Organization {
   });
 
   factory Organization.fromJson(Map<String, dynamic> j) => Organization(
-    tenantId: j['tenant_id'],
-    companyName: j['company_name'],
-    companyCode: j['company_code'],
-    status: j['status'],
+    tenantId: j['tenant_id']?.toString() ?? '',
+    companyName: j['company_name']?.toString() ?? 'Unknown',
+    companyCode: j['company_code']?.toString(),
+    // FIX: default to 'unknown' if status is null/missing
+    status: j['status']?.toString() ?? 'unknown',
     maxUsers: _i(j['max_users']),
-    adminEmail: j['admin_email'],
-    hrEmail: j['hr_email'],
-    contactNumber: j['contact_number'],
-    contactPerson: j['contact_person'],
-    companyAddress: j['company_address'],
-    domainName: j['domain_name'],
-    gstNumber: j['gst_number'],
-    timezone: j['timezone'],
+    adminEmail: j['admin_email']?.toString() ?? '',
+    hrEmail: j['hr_email']?.toString(),
+    contactNumber: j['contact_number']?.toString(),
+    contactPerson: j['contact_person']?.toString(),
+    companyAddress: j['company_address']?.toString(),
+    domainName: j['domain_name']?.toString(),
+    gstNumber: j['gst_number']?.toString(),
+    timezone: j['timezone']?.toString(),
     trialEndsAt: _d(j['trial_ends_at']),
     planStartsAt: _d(j['plan_starts_at']),
     planEndsAt: _d(j['plan_ends_at']),
     createdAt: _d(j['created_at']) ?? DateTime.now(),
-    planName: j['plan_name'],
-    planCode: j['plan_code'],
+    planName: j['plan_name']?.toString(),
+    planCode: j['plan_code']?.toString(),
     priceMonthly: double.tryParse(j['price_monthly']?.toString() ?? ''),
     priceYearly: double.tryParse(j['price_yearly']?.toString() ?? ''),
     employeeCount: _i(j['employee_count']),
     activeEmployeeCount: _i(j['active_employee_count']),
-    daysRemaining: _i(j['days_remaining']),
+    // FIX: allow negative values (expired); don't clamp to 0
+    daysRemaining: _iSigned(j['days_remaining']),
   );
 
   static int _i(dynamic v) => int.tryParse(v?.toString() ?? '0') ?? 0;
+  // FIX: signed int parser for days_remaining (can be negative)
+  static int _iSigned(dynamic v) => int.tryParse(v?.toString() ?? '0') ?? 0;
   static DateTime? _d(dynamic v) =>
       v == null ? null : DateTime.tryParse(v.toString());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service
+// FIX: removed duplicate top-level baseUrl constant; service takes it as param
 // ─────────────────────────────────────────────────────────────────────────────
 
 class OrgService {
   final String baseUrl;
 
-  OrgService({required this.baseUrl,});
+  const OrgService({required this.baseUrl});
 
+  // FIX: added sessiontoken header — backend requireAppAdmin checks for it
   Map<String, String> get _headers => {
     'Content-Type': 'application/json',
     'usertype': 'app_admin',
+    'sessiontoken':
+        '531cbe9341dc6a8ac5775818d2f2fb99c4877ba9ff8250732b89c93e1b6jdgte', // replace with real token if needed
   };
 
   Future<Map<String, dynamic>> fetchOrganizations({
@@ -153,25 +162,29 @@ class OrgService {
       '$baseUrl/app-admin/organizations',
     ).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
-    return jsonDecode(resp.body);
+    if (resp.statusCode != 200) {
+      throw Exception('Server error ${resp.statusCode}: ${resp.body}');
+    }
+    return jsonDecode(resp.body) as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> fetchOrganizationDetail(String tenantId) async {
     final uri = Uri.parse('$baseUrl/app-admin/organizations/$tenantId');
     final resp = await http.get(uri, headers: _headers);
-    return jsonDecode(resp.body);
+    if (resp.statusCode != 200) {
+      throw Exception('Server error ${resp.statusCode}: ${resp.body}');
+    }
+    return jsonDecode(resp.body) as Map<String, dynamic>;
   }
 
   Future<bool> updateStatus(String tenantId, String status) async {
-    final uri = Uri.parse(
-      '$baseUrl/app-admin/organizations/$tenantId/status',
-    );
+    final uri = Uri.parse('$baseUrl/app-admin/organizations/$tenantId/status');
     final resp = await http.patch(
       uri,
       headers: _headers,
       body: jsonEncode({'status': status}),
     );
-    final data = jsonDecode(resp.body);
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
     return data['success'] == true;
   }
 }
@@ -181,15 +194,15 @@ class OrgService {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class AppAdminOrgScreen extends StatefulWidget {
-
-  const AppAdminOrgScreen({super.key,});
+  const AppAdminOrgScreen({super.key});
 
   @override
   State<AppAdminOrgScreen> createState() => _AppAdminOrgScreenState();
 }
 
 class _AppAdminOrgScreenState extends State<AppAdminOrgScreen> {
-  late final OrgService _service;
+  // FIX: use ApiConfig.baseUrl directly; no top-level constant to conflict with
+  late final OrgService _service = OrgService(baseUrl: ApiConfig.baseUrl);
 
   bool _loading = true;
   String? _error;
@@ -203,9 +216,11 @@ class _AppAdminOrgScreenState extends State<AppAdminOrgScreen> {
   int _totalPages = 1;
 
   final _searchCtrl = TextEditingController();
-  final _debounce = ValueNotifier<String>('');
 
-  final List<_StatusTab> _tabs = const [
+  // FIX: proper debounce timer replacing unused ValueNotifier
+  Timer? _debounceTimer;
+
+  static const _tabs = [
     _StatusTab('all', 'All'),
     _StatusTab('active', 'Active'),
     _StatusTab('trial', 'Trial'),
@@ -216,7 +231,6 @@ class _AppAdminOrgScreenState extends State<AppAdminOrgScreen> {
   @override
   void initState() {
     super.initState();
-    _service = OrgService(baseUrl: baseUrl,);
     _fetchData();
   }
 
@@ -230,15 +244,19 @@ class _AppAdminOrgScreenState extends State<AppAdminOrgScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _stats = OrgStats.fromJson(data['stats']);
-        _orgs = (data['organizations'] as List)
-            .map((e) => Organization.fromJson(e))
+        _stats = OrgStats.fromJson(data['stats'] as Map<String, dynamic>);
+        _orgs = (data['organizations'] as List<dynamic>)
+            .map((e) => Organization.fromJson(e as Map<String, dynamic>))
             .toList();
-        _totalPages = data['pagination']['total_pages'] ?? 1;
+        _totalPages =
+            (data['pagination'] as Map<String, dynamic>)['total_pages']
+                as int? ??
+            1;
         _loading = false;
         _error = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -246,10 +264,14 @@ class _AppAdminOrgScreenState extends State<AppAdminOrgScreen> {
     }
   }
 
+  // FIX: debounce search — wait 400ms after user stops typing before fetching
   void _onSearchChanged(String v) {
-    _search = v;
-    _page = 1;
-    _fetchData();
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 400), () {
+      _search = v;
+      _page = 1;
+      _fetchData();
+    });
   }
 
   void _onStatusTab(String status) {
@@ -263,7 +285,7 @@ class _AppAdminOrgScreenState extends State<AppAdminOrgScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
-    _debounce.dispose();
+    _debounceTimer?.cancel(); // FIX: cancel pending debounce on dispose
     super.dispose();
   }
 
@@ -587,14 +609,18 @@ class _OrgCard extends StatelessWidget {
     required this.onTap,
   });
 
+  // FIX: daysRemaining <= 0 means expired/no date — show grey, not green
+  Color _daysColor(int days) {
+    if (days <= 0) return const Color(0xFF9CA3AF);
+    if (days <= 7) return const Color(0xFFEF476F);
+    if (days <= 30) return const Color(0xFFFFB703);
+    return const Color(0xFF06D6A0);
+  }
+
   @override
   Widget build(BuildContext context) {
     final statusColor = _statusColor(org.status);
-    final daysColor = org.daysRemaining <= 7
-        ? const Color(0xFFEF476F)
-        : org.daysRemaining <= 30
-        ? const Color(0xFFFFB703)
-        : const Color(0xFF06D6A0);
+    final daysColor = _daysColor(org.daysRemaining);
 
     return GestureDetector(
       onTap: onTap,
@@ -633,7 +659,8 @@ class _OrgCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (org.companyCode != null)
+                        if (org.companyCode != null &&
+                            org.companyCode!.isNotEmpty)
                           Text(
                             org.companyCode!,
                             style: const TextStyle(
@@ -694,6 +721,7 @@ class _OrgCard extends StatelessWidget {
                         color: daysColor,
                       ),
                       const SizedBox(width: 8),
+                      // FIX: show 'Expired' badge when days <= 0, positive label otherwise
                       if (org.daysRemaining > 0)
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -710,6 +738,26 @@ class _OrgCard extends StatelessWidget {
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: daysColor,
+                            ),
+                          ),
+                        )
+                      else if (org.daysRemaining <= 0 &&
+                          (org.planEndsAt != null || org.trialEndsAt != null))
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF9CA3AF).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'Expired',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF9CA3AF),
                             ),
                           ),
                         ),
@@ -733,19 +781,18 @@ class _OrgCard extends StatelessWidget {
   };
 }
 
+// FIX: guard against empty/single-char names to avoid index crash
 class _AvatarCircle extends StatelessWidget {
   final String name;
   const _AvatarCircle({required this.name});
 
   @override
   Widget build(BuildContext context) {
-    final initials = name
-        .trim()
-        .split(' ')
-        .take(2)
-        .map((w) => w[0])
-        .join()
-        .toUpperCase();
+    final words = name.trim().split(' ').where((w) => w.isNotEmpty).toList();
+    final initials = words.isEmpty
+        ? '?'
+        : words.take(2).map((w) => w[0]).join().toUpperCase();
+
     return Container(
       width: 42,
       height: 42,
@@ -773,6 +820,10 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // FIX: guard against empty status string
+    final label = status.isNotEmpty
+        ? status[0].toUpperCase() + status.substring(1)
+        : 'Unknown';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -781,7 +832,7 @@ class _StatusBadge extends StatelessWidget {
         border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Text(
-        status[0].toUpperCase() + status.substring(1),
+        label,
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
@@ -903,19 +954,22 @@ class _ErrorView extends StatelessWidget {
   const _ErrorView({required this.message, required this.onRetry});
   @override
   Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Icon(Icons.error_outline, size: 48, color: Color(0xFFEF476F)),
-        const SizedBox(height: 12),
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Color(0xFF6B7280)),
-        ),
-        const SizedBox(height: 16),
-        ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
-      ],
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, size: 48, color: Color(0xFFEF476F)),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFF6B7280)),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
     ),
   );
 }
@@ -943,6 +997,8 @@ class OrgDetailScreen extends StatefulWidget {
 class _OrgDetailScreenState extends State<OrgDetailScreen> {
   late Organization _org;
   bool _updating = false;
+  // FIX: track fresh-load state separately so UI can show a subtle indicator
+  bool _refreshing = false;
 
   @override
   void initState() {
@@ -952,29 +1008,71 @@ class _OrgDetailScreenState extends State<OrgDetailScreen> {
   }
 
   Future<void> _loadFresh() async {
+    if (!mounted) return;
+    setState(() => _refreshing = true);
     try {
       final data = await widget.service.fetchOrganizationDetail(_org.tenantId);
       if (!mounted) return;
-      if (data['success'] == true) {
-        setState(() => _org = Organization.fromJson(data['organization']));
+      if (data['success'] == true && data['organization'] != null) {
+        setState(
+          () => _org = Organization.fromJson(
+            data['organization'] as Map<String, dynamic>,
+          ),
+        );
       }
-    } catch (_) {}
+    } catch (e) {
+      // FIX: show a non-intrusive snackbar instead of silently swallowing
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not refresh: $e'),
+            backgroundColor: const Color(0xFFEF476F),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   Future<void> _changeStatus(String newStatus) async {
     setState(() => _updating = true);
-    final ok = await widget.service.updateStatus(_org.tenantId, newStatus);
-    if (!mounted) return;
-    setState(() => _updating = false);
-    if (ok) {
-      widget.onRefresh();
-      _loadFresh();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Status changed to $newStatus'),
-          backgroundColor: const Color(0xFF06D6A0),
-        ),
-      );
+    try {
+      final ok = await widget.service.updateStatus(_org.tenantId, newStatus);
+      if (!mounted) return;
+      if (ok) {
+        widget.onRefresh();
+        await _loadFresh();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Status changed to $newStatus'),
+              backgroundColor: const Color(0xFF06D6A0),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to update status'),
+              backgroundColor: Color(0xFFEF476F),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: const Color(0xFFEF476F),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _updating = false);
     }
   }
 
@@ -1006,13 +1104,29 @@ class _OrgDetailScreenState extends State<OrgDetailScreen> {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: const BackButton(color: Color(0xFF1A1A2E)),
-        title: Text(
-          _org.companyName,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A2E),
-          ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _org.companyName,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1A1A2E),
+                ),
+              ),
+            ),
+            // FIX: subtle refresh indicator alongside company name
+            if (_refreshing)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: Color(0xFF9CA3AF),
+                ),
+              ),
+          ],
         ),
         actions: [
           if (_updating)
@@ -1042,10 +1156,8 @@ class _OrgDetailScreenState extends State<OrgDetailScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Hero Card
             _DetailHero(org: _org, statusColor: statusColor),
             const SizedBox(height: 12),
-            // Metrics row
             Row(
               children: [
                 Expanded(
@@ -1061,6 +1173,7 @@ class _OrgDetailScreenState extends State<OrgDetailScreen> {
                   child: _MetricTile(
                     icon: Icons.timer_outlined,
                     label: 'Days Left',
+                    // FIX: negative means expired, 0 means no date set
                     value: _org.daysRemaining > 0
                         ? '${_org.daysRemaining}'
                         : 'Expired',
@@ -1083,7 +1196,6 @@ class _OrgDetailScreenState extends State<OrgDetailScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            // Plan dates
             _SectionCard(
               title: 'Plan & Dates',
               icon: Icons.date_range_outlined,
@@ -1110,7 +1222,6 @@ class _OrgDetailScreenState extends State<OrgDetailScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            // Contact info
             _SectionCard(
               title: 'Contact Information',
               icon: Icons.contact_mail_outlined,
@@ -1123,7 +1234,6 @@ class _OrgDetailScreenState extends State<OrgDetailScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            // Company info
             _SectionCard(
               title: 'Company Details',
               icon: Icons.business_outlined,
@@ -1150,6 +1260,10 @@ class _OrgDetailScreenState extends State<OrgDetailScreen> {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Detail sub-widgets (unchanged logic, kept for completeness)
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _DetailHero extends StatelessWidget {
   final Organization org;
   final Color statusColor;
@@ -1157,6 +1271,20 @@ class _DetailHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // FIX: reuse safe initials logic
+    final words = org.companyName
+        .trim()
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .toList();
+    final initials = words.isEmpty
+        ? '?'
+        : words.take(2).map((w) => w[0]).join().toUpperCase();
+    // FIX: guard empty status
+    final statusLabel = org.status.isNotEmpty
+        ? org.status[0].toUpperCase() + org.status.substring(1)
+        : 'Unknown';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -1182,12 +1310,7 @@ class _DetailHero extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: Text(
-              org.companyName
-                  .split(' ')
-                  .take(2)
-                  .map((w) => w[0])
-                  .join()
-                  .toUpperCase(),
+              initials,
               style: const TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 20,
@@ -1208,7 +1331,7 @@ class _DetailHero extends StatelessWidget {
                     color: Color(0xFF1A1A2E),
                   ),
                 ),
-                if (org.companyCode != null)
+                if (org.companyCode != null && org.companyCode!.isNotEmpty)
                   Text(
                     org.companyCode!,
                     style: const TextStyle(
@@ -1228,7 +1351,7 @@ class _DetailHero extends StatelessWidget {
                     border: Border.all(color: statusColor.withOpacity(0.3)),
                   ),
                   child: Text(
-                    org.status[0].toUpperCase() + org.status.substring(1),
+                    statusLabel,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,

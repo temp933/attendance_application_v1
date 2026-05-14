@@ -1647,13 +1647,13 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       _snack('Please select a role / designation');
       return;
     }
-    // ← ADD THIS
     if (!(_eduKey.currentState?.validate() ?? false)) {
       _snack('Please add at least one education record');
       return;
     }
 
     setState(() => _submitting = true);
+
     final body = {
       'first_name': firstNameCtrl.text,
       'mid_name': midNameCtrl.text,
@@ -1684,20 +1684,37 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       'education': _eduKey.currentState?.getEntries() ?? [],
       'tl_id': selectedTlId,
     };
+
     try {
       final res = await ApiClient.post('/employee-pending-request', body);
       if (!mounted) return;
+
       final data = jsonDecode(res.body);
+
       if (data['success'] == true) {
-        final requestId = data['request_id'];
-        if (_selectedPhotoBytes != null && requestId != null) {
+        // ── Upload photo if one was selected ─────────────────────────────────
+        if (_selectedPhotoBytes != null) {
           try {
-            final photoReq = http.MultipartRequest(
-              'POST',
-              Uri.parse(
+            // Admin path returns emp_id; non-admin returns request_id.
+            final empId = data['emp_id'];
+            final requestId = data['request_id'];
+
+            late Uri photoUri;
+            if (empId != null) {
+              // Admin: direct to employee_master photo endpoint
+              photoUri = Uri.parse(
+                '${ApiConfig.baseUrl}/employees/$empId/photo',
+              );
+            } else if (requestId != null) {
+              // Non-admin: pending-request photo endpoint
+              photoUri = Uri.parse(
                 '${ApiConfig.baseUrl}/pending-request/$requestId/photo',
-              ),
-            );
+              );
+            } else {
+              throw Exception('No ID returned for photo upload');
+            }
+
+            final photoReq = http.MultipartRequest('POST', photoUri);
             photoReq.files.add(
               http.MultipartFile.fromBytes(
                 'photo',
@@ -1706,9 +1723,18 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
               ),
             );
             await photoReq.send();
-          } catch (_) {}
+          } catch (_) {
+            // Photo upload failure is non-fatal; employee was already saved.
+          }
         }
-        _snack('Employee request submitted successfully!', ok: true);
+
+        final isDirectSave = data['emp_id'] != null;
+        _snack(
+          isDirectSave
+              ? 'Employee added successfully!'
+              : 'Employee request submitted for approval.',
+          ok: true,
+        );
         if (mounted) Navigator.pop(context);
       } else {
         _snack(data['message'] ?? 'Submission failed');

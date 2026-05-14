@@ -1,3 +1,5 @@
+import 'dart:math';
+import 'admin_profile_screen.dart';
 import '../services/auth_service.dart';
 import '../providers/attendance_provider.dart';
 import 'package:provider/provider.dart';
@@ -19,7 +21,6 @@ import '../services/attendance_state.dart';
 import '../services/api_service.dart';
 import '../services/site_cache.dart';
 import '../providers/api_config.dart';
-import '../App Admin/app_admin_plan_management_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final int initialIndex;
@@ -88,7 +89,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       LeaveApprovalScreen(loginId: widget.loginId), // 3
       AdminDepartmentsScreen(tenantId: widget.tenantId), // 4
       ManageUserScreen(roleId: widget.roleId, tenantId: widget.tenantId), // 5
-      AppAdminPlanManagementScreen(),
+      AdminProfileScreen(employeeId: widget.employeeId), // 6
     ]);
     print(
       'DEBUG AdminDepartmentsScreen receiving tenantId: "${widget.tenantId}"',
@@ -103,7 +104,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     'Leave Management',
     'Departments',
     'Manage Users',
-    'Plan Management',
+    'Profile',
   ];
 
   // ── Rail items ─────────────────────────────────────────────────────────────
@@ -139,9 +140,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       label: Text('Manage Users'),
     ),
     NavigationRailDestination(
-      icon: Icon(Icons.money_outlined),
-      selectedIcon: Icon(Icons.money),
-      label: Text('plan management'),
+      icon: Icon(Icons.person),
+      selectedIcon: Icon(Icons.person),
+      label: Text('Profile'),
     ),
   ];
 

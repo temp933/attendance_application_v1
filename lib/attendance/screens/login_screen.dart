@@ -587,6 +587,8 @@ class _SignInTabState extends State<_SignInTab> {
     final String tenantId =
         (data['tenantId'] ?? data['tenant_id'])?.toString() ?? '';
 
+    // ← ADD THESE TWO LINES
+    ApiConfig.setToken(data['sessionToken']?.toString() ?? '');
     ApiConfig.tenantId = tenantId;
 
     if (data['firstLogin'] == true) {

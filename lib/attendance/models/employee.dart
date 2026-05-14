@@ -1,6 +1,6 @@
 class Employee {
   final int empId;
-
+  final String? tenant_id;
   final String? firstName;
   final String? midName;
   final String? lastName;
@@ -51,6 +51,7 @@ class Employee {
 
   Employee({
     required this.empId,
+    this.tenant_id,
     this.firstName,
     this.midName,
     this.lastName,

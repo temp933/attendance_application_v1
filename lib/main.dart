@@ -14,6 +14,7 @@ import 'attendance/services/background_service.dart';
 import 'attendance/screens/manager_dashboard.dart';
 import 'attendance/App Admin/app_admin_dashboard_screen.dart';
 import 'attendance/services/app_admin_provider.dart';
+import 'attendance/providers/api_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -117,19 +118,19 @@ class _SplashRouterState extends State<SplashRouter>
       );
 
       if (open == true) {
-        // User tapped Turn On — open settings and wait for resume
         await Geolocator.openLocationSettings();
         _checking = false;
-        return; // didChangeAppLifecycleState will re-trigger _checkSession
+        return;
       } else {
-        // User tapped Exit — close the app
         _checking = false;
         SystemNavigator.pop();
         return;
       }
     }
 
-    // ── Step 1: Check session ──────────────────────────────────────────────
+    // ── Step 1: Load token + check session ────────────────────────────────
+    await ApiConfig.loadFromPrefs(); // ← load token & tenantId from prefs
+
     final session = await AuthService.getSession();
 
     if (!mounted) {
@@ -142,6 +143,10 @@ class _SplashRouterState extends State<SplashRouter>
       _go(const LoginScreen());
       return;
     }
+
+    // Token is already loaded by loadFromPrefs, but set explicitly for safety
+    ApiConfig.setToken(session['session_token'] ?? '');
+    ApiConfig.tenantId = session['tenantId'] ?? '';
 
     final isValid = await AuthService.validateSession();
 

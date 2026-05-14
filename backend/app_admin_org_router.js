@@ -20,7 +20,7 @@ function requireAppAdmin(req, res, next) {
     req.headers["x-sessiontoken"];
 
   // debug (remove in production)
-  console.log("HEADERS:", req.headers);
+  // console.log("HEADERS:", req.headers);
 
   if (!usertype || !sessiontoken) {
     return res.status(403).json({
@@ -179,7 +179,6 @@ router.get("/organizations/:tenant_id", requireAppAdmin, async (req, res) => {
           p.plan_code,
           p.price_monthly,
           p.price_yearly,
-          p.features AS plan_features,
 
           COALESCE(emp.employee_count, 0) AS employee_count,
           COALESCE(emp.active_count, 0) AS active_employee_count,

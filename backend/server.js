@@ -6,6 +6,7 @@ const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const cors = require("cors");
 const app = express();
+const authMiddleware = require("./middleware/auth");
 
 app.use(cors());
 app.use(express.json());
@@ -217,6 +218,50 @@ app.post("/api/auth/complete", async (req, res) => {
   try {
     await conn.beginTransaction();
 
+    // ─────────────────────────────────────────────────────────────
+    // FETCH PLAN DETAILS
+    // ─────────────────────────────────────────────────────────────
+    const [[planRow]] = await conn.query(
+      `SELECT 
+      trial_days,
+      billing_cycle,
+      price_monthly,
+      price_yearly
+   FROM plans
+   WHERE plan_id = ?
+   LIMIT 1`,
+      [plan_id || "plan-free-trial"],
+    );
+
+    const trialDays = planRow?.trial_days ?? 30;
+    const billingCycle = planRow?.billing_cycle ?? "monthly";
+
+    // ─────────────────────────────────────────────────────────────
+    // CALCULATE PLAN DATES
+    // ─────────────────────────────────────────────────────────────
+    const today = new Date();
+
+    const trialEndsAt = new Date(today);
+    trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
+
+    // Plan starts after trial
+    const planStartsAt = new Date(trialEndsAt);
+    planStartsAt.setDate(planStartsAt.getDate() + 1);
+
+    // Plan end based on billing cycle
+    const planEndsAt = new Date(planStartsAt);
+
+    if (billingCycle === "yearly") {
+      planEndsAt.setFullYear(planEndsAt.getFullYear() + 1);
+    } else {
+      planEndsAt.setMonth(planEndsAt.getMonth() + 1);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // MYSQL DATE FORMATTER
+    // ─────────────────────────────────────────────────────────────
+    const toMysqlDate = (d) => d.toISOString().split("T")[0];
+
     // ── Generate unique tenant ID ─────────────────────────────────────────
     let tenantId;
     let exists = true;
@@ -242,10 +287,14 @@ app.post("/api/auth/complete", async (req, res) => {
     // ── Step 1: Insert tenant ─────────────────────────────────────────────
     await conn.query(
       `INSERT INTO tenants
-        (tenant_id, company_name, contact_person, contact_number,
-         admin_email, hr_email, max_users, company_address,
-         domain_name, gst_number, plan_id, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'trial', NOW())`,
+    (tenant_id, company_name, contact_person, contact_number,
+     admin_email, hr_email, max_users, company_address,
+     domain_name, gst_number, plan_id, status,
+     trial_ends_at, plan_starts_at, plan_ends_at,   -- ← NEW
+     created_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'trial',
+     ?, ?, ?,                                        -- ← NEW
+     NOW())`,
       [
         tenantId,
         org_name,
@@ -258,6 +307,9 @@ app.post("/api/auth/complete", async (req, res) => {
         domain_name,
         gst_number || null,
         plan_id || "plan-free-trial",
+        toMysqlDate(trialEndsAt), // ← NEW
+        toMysqlDate(planStartsAt), // ← NEW
+        toMysqlDate(planEndsAt), // ← NEW
       ],
     );
 
@@ -569,7 +621,7 @@ const planRoutes = require("./plans_routes");
 app.use("/api/app-admin/plans", planRoutes);
 
 const employeeRoutes = require("./employee_routes");
-app.use("/api/employees", employeeRoutes);
+app.use("/api/employees", authMiddleware, employeeRoutes);
 
 const holidayRoutes = require("./holiday_routes");
 app.use("/api/holidays", holidayRoutes);
@@ -580,12 +632,16 @@ app.use("/api/app-admin/system-modules", systemModulesRoutes);
 const appAdminLogin = require("./app_admin_login");
 app.use("/api/auth/app-admin", appAdminLogin);
 
-const userManagementRouter = require("./user_management_router");
-app.use("/api", userManagementRouter);
+// const userManagementRouter = require("./user_management_router");
+// app.use("/api", userManagementRouter);
 
 const ManageOrganizationRouter = require("./app_admin_org_router");
+app.use("/api/app-admin", ManageOrganizationRouter);
 const plansRoutes = require("./plans");
 app.use("/api/plans", plansRoutes);
+
+const add_user_router = require("./manage_employee");
+app.use("/api", authMiddleware, add_user_router);
 // ─────────────────────────────────────────────────────────────────────────────
 // START SERVER
 // ─────────────────────────────────────────────────────────────────────────────

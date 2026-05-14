@@ -5,10 +5,13 @@ const router = express.Router();
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
+const rateLimit = require("express-rate-limit"); // FIX #12
 const db = require("./config/db");
 
 const APP_ADMIN_USERNAME = process.env.APP_ADMIN_USERNAME;
-const APP_ADMIN_PASSWORD = process.env.APP_ADMIN_PASSWORD;
+// FIX #2: Use hashed password from env instead of plaintext
+// Generate hash once: node -e "console.log(require('bcryptjs').hashSync('yourpassword', 12))"
+// Then set APP_ADMIN_PASSWORD_HASH=<hash> in your .env
 
 // ── Nodemailer ────────────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
@@ -31,25 +34,57 @@ function nullIfEmpty(v) {
   return v === undefined || v === null || v === "" ? null : v;
 }
 
+// FIX #10: Hash session token before storing in DB
+function hashToken(rawToken) {
+  return crypto.createHash("sha256").update(rawToken).digest("hex");
+}
+
 const loginOtpStore = new Map();
 const appAdminSessions = new Map();
+
+// FIX #12: Rate limiters for brute-force protection
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { success: false, message: "Too many attempts. Try again later." },
+});
+
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { success: false, message: "Too many attempts. Try again later." },
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /auth/login
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   const { username, password, device_id, device_info } = req.body;
 
+  if (!username || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "Username and password are required.",
+    });
+  }
+
+  const normalizedUsername = username.trim().toLowerCase();
+
   // ── APP ADMIN LOGIN ─────────────────────────────
-  if (
-    username.trim() === APP_ADMIN_USERNAME &&
-    password === APP_ADMIN_PASSWORD
-  ) {
+  // FIX #2: Compare against bcrypt hash instead of plaintext
+  const isAppAdmin =
+    normalizedUsername === APP_ADMIN_USERNAME.toLowerCase() &&
+    (await bcrypt.compare(password, process.env.APP_ADMIN_PASSWORD_HASH));
+
+  if (isAppAdmin) {
     const sessionToken = generateToken();
 
+    // FIX #3: Add expiresAt to app admin session
     appAdminSessions.set(sessionToken, {
       username: APP_ADMIN_USERNAME,
       roleId: 999,
       createdAt: Date.now(),
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
     });
 
     console.log("[APP ADMIN SESSION TOKEN]:", sessionToken);
@@ -64,20 +99,25 @@ router.post("/login", async (req, res) => {
       tenantId: "0",
     });
   }
-  if (!username || !password) {
-    return res
-      .status(400)
-      .json({ success: false, message: "Username and password are required." });
-  }
+  // FIX #1: Removed duplicate `if (!username || !password)` block that was here
 
   try {
     const [rows] = await db.query(
-      `SELECT lm.*, t.admin_email, t.hr_email
-         FROM login_master lm
-         LEFT JOIN tenants t ON t.tenant_id = lm.tenant_id
-        WHERE lm.status = 'Active'
-          AND (lm.username = ? OR lm.username = ?)
-        LIMIT 1`,
+      `SELECT
+lm.*,
+t.admin_email,
+t.hr_email,
+t.is_active,
+t.block_reason,
+t.status AS tenant_status
+ FROM login_master lm
+INNER JOIN tenants t ON t.tenant_id = lm.tenant_id
+WHERE lm.status = 'Active'
+  AND lm.tenant_id IS NOT NULL
+  AND t.is_active = 1
+  AND t.status IN ('trial', 'active')
+  AND (lm.username = ? OR lm.username = ?)
+LIMIT 1`,
       [username.trim(), username.trim().toLowerCase()],
     );
 
@@ -88,6 +128,39 @@ router.post("/login", async (req, res) => {
     }
 
     const user = rows[0];
+
+    // ─────────────────────────────────────────────
+    // TENANT VALIDATION
+    // ─────────────────────────────────────────────
+
+    if (user.is_active === 0) {
+      return res.status(403).json({
+        success: false,
+        message:
+          user.block_reason || "Company access blocked. Contact support.",
+      });
+    }
+
+    if (user.tenant_status === "suspended") {
+      return res.status(403).json({
+        success: false,
+        message: "Company account suspended.",
+      });
+    }
+
+    if (user.tenant_status === "expired") {
+      return res.status(403).json({
+        success: false,
+        message: "Subscription expired. Please renew your plan.",
+      });
+    }
+
+    if (user.tenant_status !== "trial" && user.tenant_status !== "active") {
+      return res.status(403).json({
+        success: false,
+        message: "Company account inactive.",
+      });
+    }
 
     if (user.locked_until && new Date(user.locked_until) > new Date()) {
       const remaining = Math.ceil(
@@ -169,27 +242,23 @@ router.post("/login", async (req, res) => {
       }
     }
 
-    const sessionToken = generateToken();
+    // FIX #10: Generate raw token, store hashed token in DB, return raw to client
+    const rawToken = generateToken();
+    const hashedToken = hashToken(rawToken);
+
     console.log("====================================");
     console.log("[LOGIN] Session Token Generated");
     console.log("User:", user.username);
     console.log("Login ID:", user.login_id);
-    console.log("SessionToken:", sessionToken);
     console.log("====================================");
 
     const deviceInfoStr = JSON.stringify(device_info || {});
 
     await db.query(
       `UPDATE login_master SET session_token = ?, device_logged_in = 1, session_device = ?, last_login_at = NOW() WHERE login_id = ?`,
-      [sessionToken, deviceInfoStr, user.login_id],
+      [hashedToken, deviceInfoStr, user.login_id],
     );
-    console.log("DEBUG tenant_id from DB:", user.tenant_id);
-    console.log("DEBUG full user object keys:", Object.keys(user));
-    console.log("DEBUG full response being sent:", {
-      loginId: user.login_id,
-      empId: user.emp_id,
-      tenantId: user.tenant_id,
-    });
+
     return res.json({
       success: true,
       firstLogin: false,
@@ -198,7 +267,7 @@ router.post("/login", async (req, res) => {
       roleId: user.role_id,
       userType,
       username: user.username,
-      sessionToken,
+      sessionToken: rawToken, // client holds raw token
       tenantId: user.tenant_id,
     });
   } catch (err) {
@@ -212,7 +281,7 @@ router.post("/login", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/validate-session", async (req, res) => {
   try {
-    const { login_id, sessionToken } = req.body;
+    const { login_id, session_token: sessionToken } = req.body;
 
     // ─────────────────────────────────────────────
     // APP ADMIN SESSION VALIDATION (NO DB)
@@ -236,6 +305,16 @@ router.post("/validate-session", async (req, res) => {
         });
       }
 
+      // Check app admin session expiry
+      if (Date.now() > session.expiresAt) {
+        appAdminSessions.delete(sessionToken);
+        return res.json({
+          valid: false,
+          expired: true,
+          force_logout: false,
+        });
+      }
+
       return res.json({
         valid: true,
         expired: false,
@@ -246,10 +325,27 @@ router.post("/validate-session", async (req, res) => {
     // ─────────────────────────────────────────────
     // NORMAL USERS (DB VALIDATION)
     // ─────────────────────────────────────────────
+
+    // Guard: token must exist before hashing
+    if (!sessionToken) {
+      return res.json({
+        valid: false,
+        expired: true,
+        force_logout: false,
+      });
+    }
+
+    const hashedToken = hashToken(sessionToken);
+
     const [rows] = await db.query(
-      `SELECT device_logged_in AS is_logged_in, force_logout
-       FROM login_master
-       WHERE login_id = ?`,
+      `
+      SELECT
+        session_token,
+        device_logged_in AS is_logged_in,
+        force_logout
+      FROM login_master
+      WHERE login_id = ?
+      `,
       [login_id],
     );
 
@@ -263,6 +359,15 @@ router.post("/validate-session", async (req, res) => {
 
     const user = rows[0];
 
+    // Compare hashed tokens
+    if (user.session_token !== hashedToken) {
+      return res.json({
+        valid: false,
+        expired: true,
+        force_logout: false,
+      });
+    }
+
     if (user.force_logout == 1) {
       await db.query(
         `UPDATE login_master SET force_logout = 0 WHERE login_id = ?`,
@@ -271,6 +376,7 @@ router.post("/validate-session", async (req, res) => {
 
       return res.json({
         valid: false,
+        expired: false,
         force_logout: true,
       });
     }
@@ -290,6 +396,7 @@ router.post("/validate-session", async (req, res) => {
     });
   } catch (err) {
     console.error("[/auth/validate-session]", err);
+
     return res.status(500).json({
       valid: false,
       message: "Server error",
@@ -301,11 +408,16 @@ router.post("/validate-session", async (req, res) => {
 // POST /auth/logout
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/logout", async (req, res) => {
-  const { login_id } = req.body;
-  // ── APP ADMIN LOGOUT ────────────────────────────
+  const { login_id, sessionToken } = req.body;
+
+  // FIX #5: Actually delete app admin session from memory on logout
   if (login_id == 0 || login_id == "0") {
+    if (sessionToken) {
+      appAdminSessions.delete(sessionToken);
+    }
     return res.json({ success: true });
   }
+
   if (!login_id) return res.json({ success: true });
 
   try {
@@ -435,7 +547,7 @@ router.post("/reset-password", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /auth/send-login-otp
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/send-login-otp", async (req, res) => {
+router.post("/send-login-otp", otpLimiter, async (req, res) => {
   const { username } = req.body;
   if (!username)
     return res
@@ -443,13 +555,17 @@ router.post("/send-login-otp", async (req, res) => {
       .json({ success: false, message: "Username is required." });
 
   try {
+    // FIX #8: Changed LEFT JOIN to INNER JOIN for tenants (tenant is mandatory)
     const [rows] = await db.query(
       `SELECT lm.login_id, lm.username, lm.status,
               COALESCE(e.email_id, t.admin_email) AS contact_email
          FROM login_master lm
          LEFT JOIN employee_master e ON e.emp_id = lm.emp_id
-         LEFT JOIN tenants t ON t.tenant_id = lm.tenant_id
+         INNER JOIN tenants t ON t.tenant_id = lm.tenant_id
         WHERE lm.status = 'Active'
+  AND lm.tenant_id IS NOT NULL
+  AND t.is_active = 1
+  AND t.status IN ('trial', 'active')
           AND (lm.username = ? OR lm.username = ?)
         LIMIT 1`,
       [username.trim(), username.trim().toLowerCase()],
@@ -500,7 +616,7 @@ router.post("/send-login-otp", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /auth/verify-login-otp
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/verify-login-otp", async (req, res) => {
+router.post("/verify-login-otp", otpLimiter, async (req, res) => {
   const { username, otp, device_id, device_info } = req.body;
 
   if (!username || !otp) {
@@ -511,12 +627,21 @@ router.post("/verify-login-otp", async (req, res) => {
 
   try {
     const [rows] = await db.query(
-      `SELECT lm.*, t.admin_email, t.hr_email
-         FROM login_master lm
-         LEFT JOIN tenants t ON t.tenant_id = lm.tenant_id
-        WHERE lm.status = 'Active'
-          AND (lm.username = ? OR lm.username = ?)
-        LIMIT 1`,
+      `SELECT
+lm.*,
+t.admin_email,
+t.hr_email,
+t.is_active,
+t.block_reason,
+t.status AS tenant_status
+ FROM login_master lm
+INNER JOIN tenants t ON t.tenant_id = lm.tenant_id
+WHERE lm.status = 'Active'
+  AND lm.tenant_id IS NOT NULL
+  AND t.is_active = 1
+  AND t.status IN ('trial', 'active')
+  AND (lm.username = ? OR lm.username = ?)
+LIMIT 1`,
       [username.trim(), username.trim().toLowerCase()],
     );
 
@@ -526,6 +651,29 @@ router.post("/verify-login-otp", async (req, res) => {
         .json({ success: false, message: "Invalid credentials." });
 
     const user = rows[0];
+
+    if (user.is_active === 0) {
+      return res.status(403).json({
+        success: false,
+        message:
+          user.block_reason || "Company access blocked. Contact support.",
+      });
+    }
+
+    if (user.tenant_status === "suspended") {
+      return res.status(403).json({
+        success: false,
+        message: "Company account suspended.",
+      });
+    }
+
+    if (user.tenant_status === "expired") {
+      return res.status(403).json({
+        success: false,
+        message: "Subscription expired. Please renew your plan.",
+      });
+    }
+
     const entry = loginOtpStore.get(`login:${user.login_id}`);
 
     if (!entry)
@@ -545,6 +693,18 @@ router.post("/verify-login-otp", async (req, res) => {
 
     loginOtpStore.delete(`login:${user.login_id}`);
 
+    // FIX #6: Single-device check for OTP login (same as password login)
+    if (user.device_logged_in === 1 && user.session_device) {
+      const existingDevice = JSON.parse(user.session_device || "{}");
+      if (existingDevice.deviceId && existingDevice.deviceId !== device_id) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Account is active on another device. Please log out from that device first.",
+        });
+      }
+    }
+
     let userType = "employee";
     if (user.emp_id === null || user.emp_id === undefined) {
       const adminEmail = (user.admin_email || "").toLowerCase();
@@ -556,12 +716,14 @@ router.post("/verify-login-otp", async (req, res) => {
           : "org_admin";
     }
 
-    const sessionToken = generateToken();
+    // FIX #10: Hash token before storing in DB
+    const rawToken = generateToken();
+    const hashedToken = hashToken(rawToken);
     const deviceInfoStr = JSON.stringify(device_info || {});
 
     await db.query(
       `UPDATE login_master SET session_token = ?, device_logged_in = 1, session_device = ?, last_login_at = NOW(), failed_attempts = 0, locked_until = NULL WHERE login_id = ?`,
-      [sessionToken, deviceInfoStr, user.login_id],
+      [hashedToken, deviceInfoStr, user.login_id],
     );
 
     return res.json({
@@ -572,7 +734,7 @@ router.post("/verify-login-otp", async (req, res) => {
       roleId: user.role_id,
       userType,
       username: user.username,
-      sessionToken,
+      sessionToken: rawToken, // client holds raw token
       tenantId: user.tenant_id,
     });
   } catch (err) {
@@ -583,13 +745,6 @@ router.post("/verify-login-otp", async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /auth/complete  — Organisation registration (Step 3)
-//
-// FIXES applied vs previous version:
-//   1. tenants table: correct column names (company_name, max_users, company_code, plan_id)
-//   2. employee_master: added department_id = 1 (default), fixed work_type enum
-//   3. Flutter sends admin_login{} and hr_login{} objects — destructured correctly
-//   4. Removed stale company_master insert (use tenants.tenant_id directly)
-//   5. login_master.company_id is varchar(50) — cast tenantId to string
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/complete", async (req, res) => {
   const {
@@ -603,13 +758,12 @@ router.post("/complete", async (req, res) => {
     company_address,
     domain_name,
     gst_number,
-    admin_login, // { username, password }
-    hr_login, // { username, password }
+    admin_login,
+    hr_login,
     admin_profile,
     hr_profile,
   } = req.body;
 
-  // ── Basic presence checks ─────────────────────────────────────────────────
   if (!session_id || !admin_email || !hr_email) {
     return res
       .status(400)
@@ -634,7 +788,6 @@ router.post("/complete", async (req, res) => {
     });
   }
 
-  // Validate required profile fields
   const profileRequired = [
     "first_name",
     "last_name",
@@ -660,7 +813,6 @@ router.post("/complete", async (req, res) => {
     }
   }
 
-  // Validate work_type values match DB enum
   const validWorkTypes = ["Full Time", "Part Time"];
   if (!validWorkTypes.includes(admin_profile.work_type)) {
     return res.status(400).json({
@@ -675,7 +827,6 @@ router.post("/complete", async (req, res) => {
     });
   }
 
-  // ── Retrieve & validate session ───────────────────────────────────────────
   let sessionData;
   try {
     const [[row]] = await db.query(
@@ -709,7 +860,6 @@ router.post("/complete", async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // ── 1. Duplicate username checks ────────────────────────────────────────
     const [[dupAdmin]] = await conn.query(
       "SELECT login_id FROM login_master WHERE username = ? LIMIT 1",
       [admin_login.username.trim()],
@@ -734,18 +884,13 @@ router.post("/complete", async (req, res) => {
       });
     }
 
-    // ── 2. Create tenant ────────────────────────────────────────────────────
-    // tenants table requires: company_name, company_code (UNI), plan_id
-    // Generate a unique company_code from org_name + timestamp
-    const companyCode =
-      (org_name || "ORG")
-        .trim()
-        .toUpperCase()
-        .replace(/\s+/g, "_")
-        .substring(0, 20) +
-      "_" +
-      Date.now();
-    const tenantId = crypto.randomUUID(); // tenant_id is varchar(36) = UUID
+    // FIX #9: Safer company code generation — strip all non-alphanumeric chars
+    const safeOrgName = (org_name || "ORG")
+      .replace(/[^A-Z0-9]/gi, "")
+      .toUpperCase();
+    const companyCode = safeOrgName.substring(0, 10) + "_" + Date.now();
+
+    const tenantId = crypto.randomUUID();
 
     await conn.query(
       `INSERT INTO tenants
@@ -759,7 +904,7 @@ router.post("/complete", async (req, res) => {
         tenantId,
         (org_name || "").trim(),
         companyCode,
-        process.env.DEFAULT_PLAN_ID || "1", // set DEFAULT_PLAN_ID in your .env
+        process.env.DEFAULT_PLAN_ID || "1",
         nullIfEmpty(contact_person),
         nullIfEmpty(contact_number),
         admin_email.trim().toLowerCase(),
@@ -771,7 +916,6 @@ router.post("/complete", async (req, res) => {
       ],
     );
 
-    // ── 3. Insert Admin into employee_master ─────────────────────────────────
     const ap = admin_profile;
     const [adminEmpResult] = await conn.query(
       `INSERT INTO employee_master
@@ -814,7 +958,6 @@ router.post("/complete", async (req, res) => {
     );
     const adminEmpId = adminEmpResult.insertId;
 
-    // ── 4. Create Admin login_master row ─────────────────────────────────────
     const hashedAdminPass = await bcrypt.hash(admin_login.password, 12);
     await conn.query(
       `INSERT INTO login_master
@@ -830,7 +973,6 @@ router.post("/complete", async (req, res) => {
       ],
     );
 
-    // ── 5. Insert HR into employee_master ─────────────────────────────────────
     const hp = hr_profile;
     const [hrEmpResult] = await conn.query(
       `INSERT INTO employee_master
@@ -873,7 +1015,6 @@ router.post("/complete", async (req, res) => {
     );
     const hrEmpId = hrEmpResult.insertId;
 
-    // ── 6. Create HR login_master row ─────────────────────────────────────────
     const hashedHrPass = await bcrypt.hash(hr_login.password, 12);
     await conn.query(
       `INSERT INTO login_master
@@ -883,7 +1024,6 @@ router.post("/complete", async (req, res) => {
       [tenantId, tenantId, hrEmpId, hr_login.username.trim(), hashedHrPass],
     );
 
-    // ── 7. Mark session as completed ──────────────────────────────────────────
     await conn.query(
       "UPDATE registration_sessions SET status = 'completed' WHERE session_id = ?",
       [session_id],
@@ -955,7 +1095,8 @@ router.post("/forgot-password/verify-otp", async (req, res) => {
   }
 });
 
-router.post("/forgot-password/reset", async (req, res) => {
+// FIX #7: Added password strength validation to forgot-password/reset
+router.post("/forgot-password/reset", otpLimiter, async (req, res) => {
   try {
     const { username, otp, new_password } = req.body;
 
@@ -963,6 +1104,27 @@ router.post("/forgot-password/reset", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Missing fields",
+      });
+    }
+
+    if (new_password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters.",
+      });
+    }
+
+    if (!/[a-zA-Z]/.test(new_password)) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least one letter.",
+      });
+    }
+
+    if (!/[0-9]/.test(new_password)) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least one number.",
       });
     }
 
@@ -1007,6 +1169,7 @@ router.post("/forgot-password/reset", async (req, res) => {
     });
   }
 });
+
 // Auto-cleanup expired login OTPs every 2 minutes
 setInterval(
   () => {
@@ -1016,6 +1179,17 @@ setInterval(
     }
   },
   2 * 60 * 1000,
+);
+
+// Auto-cleanup expired app admin sessions every 30 minutes
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [token, session] of appAdminSessions.entries()) {
+      if (session.expiresAt < now) appAdminSessions.delete(token);
+    }
+  },
+  30 * 60 * 1000,
 );
 
 module.exports = router;
