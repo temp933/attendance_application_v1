@@ -62,13 +62,20 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen>
         ApiClient.get('/employees/${widget.employeeId}'),
         ApiClient.get('/employees/${widget.employeeId}/education'),
       ]);
+
       if (results[0].statusCode == 200) {
-        setState(() => employeeData = jsonDecode(results[0].body));
+        final body = jsonDecode(results[0].body);
+        // ── Unwrap nested 'data' if present ──
+        final emp = (body is Map && body.containsKey('data'))
+            ? body['data']
+            : body;
+        setState(() => employeeData = Map<String, dynamic>.from(emp));
       } else {
         setState(
           () => errorMessage = 'Employee not found (${results[0].statusCode})',
         );
       }
+
       if (results[1].statusCode == 200) {
         final edu = jsonDecode(results[1].body);
         if (edu['success'] == true) {
@@ -83,7 +90,6 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen>
       );
     } finally {
       setState(() => isLoading = false);
-      if (employeeData != null) _animCtrl.forward();
       if (employeeData != null) {
         _animCtrl.forward();
         _photoFuture = ApiClient.get('/employees/${widget.employeeId}/photo');
@@ -454,9 +460,8 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen>
                     // Avatar
                     // Avatar with photo
                     FutureBuilder<http.Response>(
-                      future: ApiClient.get(
-                        '/employees/${widget.employeeId}/photo',
-                      ),
+                      future:
+                          _photoFuture ?? Future.value(http.Response('', 404)),
                       builder: (context, snap) {
                         final hasPhoto =
                             snap.hasData &&

@@ -91,6 +91,44 @@ class Employee {
     this.educationList,
     this.tlId,
   });
+  // In employee.dart — add this method to the Employee class
+  Employee copyWithPendingStatus({String? adminApprove, int? requestId}) {
+    return Employee(
+      empId: empId,
+      firstName: firstName,
+      midName: midName,
+      lastName: lastName,
+      email: email,
+      phone: phone,
+      departmentName: departmentName,
+      departmentId: departmentId,
+      roleId: roleId,
+      roleName: roleName,
+      status: status,
+      gender: gender,
+      dob: dob,
+      address: address,
+      city: city,
+      dateOfJoining: dateOfJoining,
+      dateOfRelieving: dateOfRelieving,
+      employmentType: employmentType,
+      workType: workType,
+      yearsExperience: yearsExperience,
+      aadharNumber: aadharNumber,
+      panNumber: panNumber,
+      passportNumber: passportNumber,
+      pfNumber: pfNumber,
+      esicNumber: esicNumber,
+      fatherName: fatherName,
+      emergencyContact: emergencyContact,
+      emergencyContactRelation: emergencyContactRelation,
+      communicationAddress: communicationAddress,
+      tlId: tlId,
+      // overlay these two:
+      adminApprove: adminApprove ?? this.adminApprove,
+      requestId: requestId ?? this.requestId,
+    );
+  }
 
   factory Employee.fromJson(Map<String, dynamic> json) {
     String? val(String key) => json[key]?.toString();

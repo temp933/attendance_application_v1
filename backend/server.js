@@ -620,8 +620,14 @@ app.use("/api/departments", departmentRoutes);
 const planRoutes = require("./plans_routes");
 app.use("/api/app-admin/plans", planRoutes);
 
-const employeeRoutes = require("./employee_routes");
+const employeeRoutes = require("./employees");
 app.use("/api/employees", authMiddleware, employeeRoutes);
+
+const pendingRequestRoutes = require("./employee_pending_request");
+app.use("/api/pending-request", authMiddleware, pendingRequestRoutes);
+
+const approvalRouter = require('./admin_approval');
+app.use('/api/admin', approvalRouter);
 
 const holidayRoutes = require("./holiday_routes");
 app.use("/api/holidays", holidayRoutes);
@@ -640,8 +646,6 @@ app.use("/api/app-admin", ManageOrganizationRouter);
 const plansRoutes = require("./plans");
 app.use("/api/plans", plansRoutes);
 
-const add_user_router = require("./manage_employee");
-app.use("/api", authMiddleware, add_user_router);
 // ─────────────────────────────────────────────────────────────────────────────
 // START SERVER
 // ─────────────────────────────────────────────────────────────────────────────

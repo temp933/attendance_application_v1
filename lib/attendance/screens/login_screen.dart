@@ -88,23 +88,22 @@ class _LoginScreenState extends State<LoginScreen>
     ApiConfig.tenantId = tenantId;
     Widget screen;
 
-    if (userType == 'app_admin' || roleId == 6) {
+    // ── Strictly check userType first, fall back to roleId only as tiebreaker ──
+    if (userType == 'app_admin') {
       screen = AppAdminDashboardScreen(
         loginId: loginId,
         employeeId: empId.toString(),
         roleId: roleId.toString(),
         tenantId: tenantId,
       );
-    } else if (userType == 'org_admin' ||
-        (userType == 'employee' && roleId == 1)) {
+    } else if (userType == 'org_admin' || roleId == 1) {
       screen = AdminDashboardScreen(
         loginId: loginId,
         employeeId: empId.toString(),
         roleId: roleId.toString(),
         tenantId: tenantId,
       );
-    } else if (userType == 'org_hr' ||
-        (userType == 'employee' && roleId == 2)) {
+    } else if (userType == 'org_hr' || roleId == 2) {
       screen = HRDashboardScreen(
         loginId: loginId,
         employeeId: empId.toString(),
@@ -555,7 +554,11 @@ class _SignInTabState extends State<_SignInTab> {
     try {
       final session = await AuthService.getSession();
       if (session != null) {
+        // ── Restore ApiConfig from saved session ──────────────────────
+        ApiConfig.setToken(session['sessionToken'] ?? '');
         ApiConfig.tenantId = session['tenantId'] ?? '';
+        ApiConfig.employeeId = session['empId'] ?? ''; // ← ADD THIS
+        // ─────────────────────────────────────────────────────────────
         widget.onNavigate(
           loginId: int.parse(session['loginId']!),
           empId: int.parse(session['empId']!),
@@ -580,17 +583,45 @@ class _SignInTabState extends State<_SignInTab> {
     }
   }
 
-  void _handleLoginResponse(Map<String, dynamic> data) {
+  Future<void> _handleLoginResponse(Map<String, dynamic> data) async {
     final int loginId = int.parse(data['loginId'].toString());
     final int empId = int.parse((data['empId'] ?? 0).toString());
     final int roleId = int.parse(data['roleId'].toString());
+
     final String tenantId =
         (data['tenantId'] ?? data['tenant_id'])?.toString() ?? '';
 
-    // ← ADD THESE TWO LINES
-    ApiConfig.setToken(data['sessionToken']?.toString() ?? '');
-    ApiConfig.tenantId = tenantId;
+    final String token = data['sessionToken']?.toString() ?? '';
 
+    final String userType = data['userType']?.toString() ?? 'employee';
+
+    final String username = data['username']?.toString() ?? '';
+
+    // ── GLOBAL MEMORY STATE ─────────────────────────────
+    ApiConfig.setToken(token);
+    ApiConfig.tenantId = tenantId;
+    ApiConfig.employeeId = empId.toString();
+
+    debugPrint(
+      '✅ ApiConfig.token     : '
+      '${token.isEmpty ? "❌ EMPTY" : "${token.substring(0, 10)}..."}',
+    );
+
+    debugPrint('✅ ApiConfig.tenantId  : $tenantId');
+    debugPrint('✅ ApiConfig.employeeId: $empId');
+
+    // ── PERSIST SESSION ─────────────────────────────────
+    await ApiConfig.saveSession(
+      loginId: loginId.toString(),
+      empId: empId.toString(),
+      role: roleId.toString(),
+      userType: userType,
+      username: username,
+      sessionToken: token,
+      tenantId: tenantId,
+    );
+
+    // ── FORCE FIRST LOGIN ───────────────────────────────
     if (data['firstLogin'] == true) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
@@ -598,7 +629,7 @@ class _SignInTabState extends State<_SignInTab> {
             loginId: loginId,
             empId: empId,
             roleId: roleId,
-            username: data['username'] as String,
+            username: username,
             tenantId: tenantId,
           ),
         ),
@@ -606,11 +637,13 @@ class _SignInTabState extends State<_SignInTab> {
       );
       return;
     }
+
+    // ── NAVIGATE ────────────────────────────────────────
     widget.onNavigate(
       loginId: loginId,
       empId: empId,
       roleId: roleId,
-      userType: data['userType'] ?? 'employee',
+      userType: userType,
       tenantId: tenantId,
     );
   }

@@ -65,6 +65,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     selectedIndex = widget.initialIndex;
     startSessionGuard();
     ApiConfig.tenantId = widget.tenantId;
+    ApiConfig.employeeId = widget.employeeId;
   }
 
   // ── Pages ──────────────────────────────────────────────────────────────────
@@ -89,7 +90,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       LeaveApprovalScreen(loginId: widget.loginId), // 3
       AdminDepartmentsScreen(tenantId: widget.tenantId), // 4
       ManageUserScreen(roleId: widget.roleId, tenantId: widget.tenantId), // 5
+      AdminApprovalPage(),
       AdminProfileScreen(employeeId: widget.employeeId), // 6
+      // 7
     ]);
     print(
       'DEBUG AdminDepartmentsScreen receiving tenantId: "${widget.tenantId}"',
@@ -104,6 +107,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     'Leave Management',
     'Departments',
     'Manage Users',
+    'Approvals',
     'Profile',
   ];
 
@@ -138,6 +142,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       icon: Icon(Icons.people),
       selectedIcon: Icon(Icons.people),
       label: Text('Manage Users'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.check_circle_outline),
+      selectedIcon: Icon(Icons.check_circle),
+      label: Text('Approvals'),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.person),

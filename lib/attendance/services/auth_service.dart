@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:http/http.dart' as http;
@@ -87,26 +88,28 @@ class AuthService {
     required String tenantId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('loginId', loginId);
+    await prefs.setString('empId', empId);
+    await prefs.setString('role', role);
+    await prefs.setString('userType', userType);
+    await prefs.setString('username', username);
+    await prefs.setString('session_token', sessionToken);
+    await prefs.setString('tenantId', tenantId);
+    await prefs.setString('employeeId', empId);
 
-    final cleanUsername = username.trim();
-
-    await prefs.setString(_kLoginId, loginId);
-    await prefs.setString(_kEmpId, empId);
-    await prefs.setString(_kRole, role);
-    await prefs.setString(_kUserType, userType);
-    await prefs.setString(_kUsername, cleanUsername);
-    await prefs.setString(_kToken, sessionToken);
-    await prefs.setString(_kTenantId, tenantId);
-
-    // Store app admin flag
-    await prefs.setBool('is_app_admin', isAppAdminUsername(cleanUsername));
+    // ✅ ADD THESE TWO LINES — keeps ApiConfig in sync
+    await prefs.setString(
+      'sessionToken',
+      sessionToken,
+    ); // ApiConfig reads this key
+    ApiConfig.setToken(sessionToken); // set in memory immediately
+    ApiConfig.tenantId = tenantId;
+    ApiConfig.employeeId = empId;
   }
 
   static Future<Map<String, String>?> getSession() async {
     final prefs = await SharedPreferences.getInstance();
-
     final loginId = prefs.getString(_kLoginId);
-
     if (loginId == null) return null;
 
     return {
@@ -115,7 +118,7 @@ class AuthService {
       'role': prefs.getString(_kRole) ?? '',
       'userType': prefs.getString(_kUserType) ?? 'employee',
       'username': prefs.getString(_kUsername) ?? '',
-      'session_token': prefs.getString(_kToken) ?? '',
+      'sessionToken': prefs.getString(_kToken) ?? '', // ← was 'session_token'
       'tenantId': prefs.getString(_kTenantId) ?? '',
       'isAppAdmin': (prefs.getBool('is_app_admin') ?? false).toString(),
     };
@@ -129,17 +132,16 @@ class AuthService {
 
   static Future<bool> validateSession() async {
     final session = await getSession();
-
     if (session == null) return false;
 
-    // ✅ Skip validation for App Admin
     final isAppAdmin = (session['isAppAdmin'] ?? 'false') == 'true';
-
-    if (isAppAdmin) {
-      return true;
-    }
+    if (isAppAdmin) return true;
 
     final deviceId = await getDeviceId();
+
+    // ✅ Use correct key 'sessionToken' not 'session_token'
+    final token = session['sessionToken'] ?? '';
+    if (token.isEmpty) return false;
 
     try {
       final response = await http
@@ -148,11 +150,12 @@ class AuthService {
             headers: ApiConfig.headers,
             body: jsonEncode({
               'login_id': session['loginId'],
-              'session_token': session['session_token'],
+              'session_token':
+                  token, // server expects this key name, value from 'sessionToken'
               'device_id': deviceId,
             }),
           )
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 8));
 
       final data = jsonDecode(response.body);
 
@@ -164,7 +167,8 @@ class AuthService {
       return data['valid'] == true;
     } on SocketException {
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[validateSession] error (keeping session): $e');
       return true;
     }
   }
@@ -388,8 +392,8 @@ class AuthService {
         } catch (_) {}
       }
     }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    // ✅ Clear in-memory state too
+    await ApiConfig.clearSession();
   }
 
   static Future<void> logoutById(int loginId) async {

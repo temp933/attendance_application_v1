@@ -4,6 +4,7 @@ import '../models/employee.dart';
 import 'package:flutter/material.dart';
 import '../models/employee_work_status.dart';
 import '../providers/api_config.dart';
+import '../providers/api_client.dart';
 
 const String baseUrl = ApiConfig.baseUrl;
 
@@ -53,11 +54,30 @@ class EmployeeService {
       Uri.parse('$baseUrl/dashboard'),
       headers: ApiConfig.headers, // ← ADDED
     );
+    // debugPrint('🌐 Fetching dashboard data...');
+    // debugPrint('   URL    : ${ApiConfig.baseUrl}/your-endpoint');
+    // debugPrint('   token  : ${ApiConfig.headers['Authorization']}');
+    // debugPrint('   tenant : ${ApiConfig.headers['x-tenant-id']}');
+    // debugPrint('   empId  : ${ApiConfig.headers['x-employee-id']}');
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     } else {
       throw Exception('Failed to fetch dashboard data');
     }
+  }
+
+  // ================= GET ALL PENDING REQUESTS =================
+  // In employee_service.dart
+  static Future<List<Employee>> fetchPendingRequests() async {
+    // Only fetch PENDING and REJECTED — never APPROVED (those are in master)
+    final res = await ApiClient.get('/pending-request?status=PENDING');
+    // Also fetch REJECTED separately and merge
+    final res2 = await ApiClient.get('/pending-request?status=REJECTED');
+
+    final List pending = jsonDecode(res.body)['data'] ?? [];
+    final List rejected = jsonDecode(res2.body)['data'] ?? [];
+
+    return [...pending, ...rejected].map((e) => Employee.fromJson(e)).toList();
   }
 
   static Future<Map<String, dynamic>> fetchTlDashboardData(
@@ -134,7 +154,7 @@ class EmployeeService {
   // ================= GET ALL EMPLOYEES =================
   static Future<List<Employee>> fetchAllEmployees() async {
     final response = await http.get(
-      Uri.parse('$baseUrl/all-employees'),
+      Uri.parse('$baseUrl/employees'),
       headers: ApiConfig.headers, // ← ADDED
     );
     if (response.statusCode == 200) {
@@ -208,7 +228,7 @@ class EmployeeService {
   static Future<List<Map<String, dynamic>>> fetchDepartments() async {
     final response = await http.get(
       Uri.parse('$baseUrl/departments'),
-      headers: ApiConfig.headers, // ← ADDED
+      headers: ApiConfig.headers, // x-tenant-id is inside ApiConfig.headers
     );
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -219,16 +239,54 @@ class EmployeeService {
   }
 
   // ================= GET ROLES =================
-  static Future<List<Map<String, dynamic>>> fetchRoles() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/roles'),
-      headers: ApiConfig.headers, // ← ADDED
-    );
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return List<Map<String, dynamic>>.from(data['data']);
-    } else {
-      throw Exception("Failed to load roles");
+  static Future<List<Map<String, dynamic>>> fetchRoles({int? deptId}) async {
+    if (deptId != null) {
+      try {
+        final response = await http.get(
+          Uri.parse('$baseUrl/departments/$deptId/roles'),
+          headers: ApiConfig.headers,
+        );
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final raw = data['data'];
+          if (raw is! List) return [];
+          return List<Map<String, dynamic>>.from(raw);
+        }
+      } catch (_) {}
+      return [];
+    }
+
+    // Fan-out: get all depts, collect their roles
+    try {
+      final depts = await fetchDepartments();
+      final List<Map<String, dynamic>> allRoles = [];
+      final seen = <int>{};
+      for (final dept in depts) {
+        final id = dept['id'];
+        if (id == null) continue;
+        try {
+          final response = await http.get(
+            Uri.parse('$baseUrl/departments/$id/roles'),
+            headers: ApiConfig.headers,
+          );
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            final raw = data['data'];
+            if (raw is! List) continue;
+            for (final role in List<Map<String, dynamic>>.from(raw)) {
+              final roleId = role['role_id'];
+              if (roleId != null && seen.add(roleId as int)) {
+                allRoles.add({...role, 'department_id': id});
+              }
+            }
+          }
+        } catch (_) {
+          continue;
+        }
+      }
+      return allRoles;
+    } catch (_) {
+      return [];
     }
   }
 
@@ -444,20 +502,6 @@ class EmployeeService {
     final body = jsonDecode(response.body);
     if (response.statusCode != 200 || body['success'] != true) {
       throw Exception(body['message'] ?? 'Failed to perform TL action');
-    }
-  }
-
-  // ================= GET TEAM LEADS =================
-  static Future<List<Map<String, dynamic>>> fetchTeamLeads() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/team-leads'),
-      headers: ApiConfig.headers, // ← ADDED
-    );
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return List<Map<String, dynamic>>.from(data['data']);
-    } else {
-      throw Exception("Failed to load team leads");
     }
   }
 

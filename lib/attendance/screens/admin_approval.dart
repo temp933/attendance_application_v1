@@ -3,9 +3,6 @@ import 'package:flutter/material.dart';
 import '../providers/api_client.dart';
 import 'package:http/http.dart' as http;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Design Tokens — identical to EmployeeProfileScreen & LeaveApprovalScreen
-// ─────────────────────────────────────────────────────────────────────────────
 const Color _primary = Color(0xFF1A56DB);
 const Color _accent = Color(0xFF0E9F6E);
 const Color _purple = Color(0xFF7C3AED);
@@ -18,7 +15,9 @@ const Color _textMid = Color(0xFF64748B);
 const Color _textLight = Color(0xFF94A3B8);
 const Color _border = Color(0xFFE2E8F0);
 
-//  LIST PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+// LIST PAGE
+// ─────────────────────────────────────────────────────────────────────────────
 class AdminApprovalPage extends StatefulWidget {
   const AdminApprovalPage({super.key});
 
@@ -45,8 +44,9 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     try {
       final res = await ApiClient.get('/admin/pending-requests');
       if (res.statusCode == 200) {
-        
-        setState(() => _requests = jsonDecode(res.body));
+        // FIX: parse body first, then read ['data']
+        final body = jsonDecode(res.body);
+        setState(() => _requests = body['data'] ?? []);
       } else {
         setState(() => _error = 'Server error (${res.statusCode})');
       }
@@ -99,15 +99,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
       preferredSize: const Size.fromHeight(72),
       child: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color.fromARGB(255, 253, 253, 253),
-              Color.fromARGB(255, 255, 255, 255),
-              Color.fromARGB(255, 255, 255, 255),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: Colors.white,
           boxShadow: [
             BoxShadow(
               color: Color(0x401A56DB),
@@ -125,12 +117,12 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: _primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     Icons.pending_actions_rounded,
-                    color: Colors.white,
+                    color: _primary,
                     size: 19,
                   ),
                 ),
@@ -144,16 +136,13 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
-                        color: Color.fromARGB(255, 0, 0, 0),
+                        color: _textDark,
                         letterSpacing: 0.2,
                       ),
                     ),
                     Text(
                       'Review & approve employee requests',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Color.fromARGB(131, 5, 5, 5),
-                      ),
+                      style: TextStyle(fontSize: 11, color: _textMid),
                     ),
                   ],
                 ),
@@ -178,7 +167,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _red.withOpacity(0.08),
+                  color: _red.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -241,7 +230,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: _primary.withOpacity(0.08),
+                  color: _primary.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -283,7 +272,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Request Card (list item) - NOW WITH PHOTO
+// Request Card
 // ─────────────────────────────────────────────────────────────────────────────
 class _RequestCard extends StatefulWidget {
   final Map request;
@@ -303,7 +292,6 @@ class _RequestCardState extends State<_RequestCard> {
     final requestId = widget.request['request_id'];
     final empId = widget.request['emp_id'];
     final isUpdate = widget.request['request_type'] == 'UPDATE';
-
     _photoFuture = _resolvePhoto(requestId, empId, isUpdate);
   }
 
@@ -316,7 +304,6 @@ class _RequestCardState extends State<_RequestCard> {
       final res = await ApiClient.get('/pending-request/$requestId/photo');
       if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) return res;
     }
-    // Fallback to master table for UPDATE requests
     if (isUpdate && empId != null) {
       return ApiClient.get('/employees/$empId/photo');
     }
@@ -341,7 +328,7 @@ class _RequestCardState extends State<_RequestCard> {
         border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -362,7 +349,6 @@ class _RequestCardState extends State<_RequestCard> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // Avatar with photo support
               FutureBuilder<http.Response>(
                 future: _photoFuture,
                 builder: (context, snap) {
@@ -370,7 +356,6 @@ class _RequestCardState extends State<_RequestCard> {
                       snap.hasData &&
                       snap.data!.statusCode == 200 &&
                       snap.data!.bodyBytes.isNotEmpty;
-
                   return Container(
                     width: 48,
                     height: 48,
@@ -406,7 +391,6 @@ class _RequestCardState extends State<_RequestCard> {
                 },
               ),
               const SizedBox(width: 14),
-              // Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -440,7 +424,6 @@ class _RequestCardState extends State<_RequestCard> {
                 ),
               ),
               const SizedBox(width: 10),
-              // Type badge + chevron
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -452,7 +435,9 @@ class _RequestCardState extends State<_RequestCard> {
                     decoration: BoxDecoration(
                       color: typeBg,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: typeColor.withOpacity(0.3)),
+                      border: Border.all(
+                        color: typeColor.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -494,7 +479,7 @@ class _RequestCardState extends State<_RequestCard> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  DETAIL / APPROVAL PAGE
+// DETAIL / APPROVAL PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 class ApprovalDetailPage extends StatefulWidget {
   final Map request;
@@ -512,7 +497,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     final requestId = widget.request['request_id'];
     final empId = widget.request['emp_id'];
     final isUpdate = widget.request['request_type'] == 'UPDATE';
-
     _photoFuture = _resolvePhoto(requestId, empId, isUpdate);
   }
 
@@ -531,14 +515,11 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     return http.Response('', 404);
   }
 
-  // ... all existing methods moved here, replacing `request` with `widget.request`
-  // ── Helpers ──────────────────────────────────────────────────────────────
   String _fmt(dynamic date) {
     if (date == null || date.toString().isEmpty) return '-';
     try {
       final d = DateTime.parse(date.toString());
-      return '${d.day.toString().padLeft(2, '0')} '
-          '${_mon(d.month)} ${d.year}';
+      return '${d.day.toString().padLeft(2, '0')} ${_mon(d.month)} ${d.year}';
     } catch (_) {
       return date.toString();
     }
@@ -560,7 +541,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     'Dec',
   ][m];
 
-  // ── Section card (same style as EmployeeProfile) ──────────────────────────
   Widget _sectionCard({required Widget child}) => Container(
     margin: const EdgeInsets.only(bottom: 12),
     decoration: BoxDecoration(
@@ -569,7 +549,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
       border: Border.all(color: _border),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.05),
+          color: Colors.black.withValues(alpha: 0.05),
           blurRadius: 10,
           offset: const Offset(0, 2),
         ),
@@ -579,7 +559,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     child: child,
   );
 
-  // ── Section header ────────────────────────────────────────────────────────
   Widget _sectionHeader(
     IconData icon,
     String title,
@@ -617,7 +596,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     );
   }
 
-  // ── Info row — label + value tiles matching EmployeeProfile style ──────────
   Widget _infoTile({
     required IconData icon,
     required String label,
@@ -672,7 +650,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
   Widget _dividerRow() =>
       const Divider(height: 1, thickness: 1, color: _border);
 
-  // ── Hero card ─────────────────────────────────────────────────────────────
   Widget _profileHero() {
     final name = [
       widget.request['first_name'],
@@ -692,7 +669,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: _primary.withOpacity(0.35),
+            color: _primary.withValues(alpha: 0.35),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -708,7 +685,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
               ),
             ),
           ),
@@ -720,7 +697,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Photo-aware avatar ──────────────────────────────
                     FutureBuilder<http.Response>(
                       future: _photoFuture,
                       builder: (context, snap) {
@@ -733,9 +709,9 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                           height: 64,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(18),
-                            color: Colors.white.withOpacity(0.15),
+                            color: Colors.white.withValues(alpha: 0.15),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
+                              color: Colors.white.withValues(alpha: 0.3),
                               width: 2,
                             ),
                           ),
@@ -778,7 +754,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                           Text(
                             widget.request['role_name'] ?? '',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
+                              color: Colors.white.withValues(alpha: 0.8),
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                             ),
@@ -786,7 +762,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                           Text(
                             widget.request['department_name'] ?? '',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.55),
+                              color: Colors.white.withValues(alpha: 0.55),
                               fontSize: 12,
                             ),
                           ),
@@ -797,10 +773,10 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                               vertical: 5,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.15),
+                              color: Colors.white.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.3),
+                                color: Colors.white.withValues(alpha: 0.3),
                               ),
                             ),
                             child: Row(
@@ -833,17 +809,18 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                Container(height: 1, color: Colors.white.withOpacity(0.12)),
+                Container(
+                  height: 1,
+                  color: Colors.white.withValues(alpha: 0.12),
+                ),
                 const SizedBox(height: 14),
                 Row(
                   children: [
                     _heroStat(
-                      widget.request['request_type'] == 'NEW'
+                      isNew
                           ? 'NEW'
                           : (widget.request['emp_id']?.toString() ?? '-'),
-                      widget.request['request_type'] == 'NEW'
-                          ? 'REQUEST'
-                          : 'EMP ID',
+                      isNew ? 'REQUEST' : 'EMP ID',
                     ),
                     _heroVDiv(),
                     _heroStat(
@@ -867,7 +844,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
 
   String _shorten(String? v) {
     if (v == null || v.isEmpty) return '-';
-    // "Full Time" → "Full Time", "Permanent" → "Perm", "Contract" → "Contract"
     const map = {
       'Full Time': 'Full Time',
       'Part Time': 'Part Time',
@@ -884,9 +860,9 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
         Text(
           v,
           maxLines: 1,
-          overflow: TextOverflow.ellipsis, // ← ADD THIS
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            fontSize: 13, // ← reduce from 14 to 13
+            fontSize: 13,
             fontWeight: FontWeight.w800,
             color: Colors.white,
           ),
@@ -896,7 +872,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
           l,
           style: TextStyle(
             fontSize: 9,
-            color: Colors.white.withOpacity(0.5),
+            color: Colors.white.withValues(alpha: 0.5),
             letterSpacing: 0.5,
             fontWeight: FontWeight.w500,
           ),
@@ -904,10 +880,13 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
       ],
     ),
   );
-  Widget _heroVDiv() =>
-      Container(width: 1, height: 28, color: Colors.white.withOpacity(0.12));
 
-  // ── Education ─────────────────────────────────────────────────────────────
+  Widget _heroVDiv() => Container(
+    width: 1,
+    height: 28,
+    color: Colors.white.withValues(alpha: 0.12),
+  );
+
   Widget _educationSection(List educations) {
     const levelColors = {
       '10': Color(0xFF6366F1),
@@ -956,9 +935,9 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.04),
+                      color: color.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: color.withOpacity(0.2)),
+                      border: Border.all(color: color.withValues(alpha: 0.2)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -971,10 +950,10 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                                 vertical: 3,
                               ),
                               decoration: BoxDecoration(
-                                color: color.withOpacity(0.1),
+                                color: color.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: color.withOpacity(0.3),
+                                  color: color.withValues(alpha: 0.3),
                                 ),
                               ),
                               child: Text(
@@ -1053,9 +1032,9 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
   Widget _eduChip(IconData icon, String label, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.08),
+      color: color.withValues(alpha: 0.08),
       borderRadius: BorderRadius.circular(7),
-      border: Border.all(color: color.withOpacity(0.2)),
+      border: Border.all(color: color.withValues(alpha: 0.2)),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -1074,7 +1053,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     ),
   );
 
-  // ── Auto-reject dialog ────────────────────────────────────────────────────
   Future<void> _showAutoRejectedDialog(BuildContext context, String reason) {
     return showDialog(
       context: context,
@@ -1089,7 +1067,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _amber.withOpacity(0.1),
+                color: _amber.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
@@ -1166,8 +1144,11 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     );
   }
 
-  // ── Approve ───────────────────────────────────────────────────────────────
+  // FIX: BuildContext async gap — capture ScaffoldMessenger before await
   Future<void> _approve(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1175,23 +1156,27 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
         child: CircularProgressIndicator(color: _primary, strokeWidth: 2.5),
       ),
     );
+
     final res = await ApiClient.post('/admin/approve-request', {
       'request_id': widget.request['request_id'],
     });
-    if (context.mounted) Navigator.of(context).pop();
-    if (!context.mounted) return;
+
+    // Close loading dialog
+    navigator.pop();
 
     final data = jsonDecode(res.body);
 
     if (res.statusCode == 409) {
+      if (!context.mounted) return;
       await _showAutoRejectedDialog(
         context,
         data['error'] ?? 'Duplicate data. Request auto-rejected.',
       );
       return;
     }
+
     if (res.statusCode == 200 || res.statusCode == 201) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Row(
             children: [
@@ -1215,9 +1200,11 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
           ),
         ),
       );
-      Navigator.pop(context, true);
+      navigator.pop(true);
       return;
     }
+
+    if (!context.mounted) return;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -1246,7 +1233,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     );
   }
 
-  // ── Reject ────────────────────────────────────────────────────────────────
   void _reject(BuildContext context) {
     final ctrl = TextEditingController();
     showDialog(
@@ -1263,7 +1249,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _red.withOpacity(0.08),
+                color: _red.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
@@ -1353,12 +1339,13 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
             ),
             onPressed: () async {
               if (ctrl.text.trim().isEmpty) return;
+              final nav = Navigator.of(context);
               await ApiClient.post('/admin/reject-request', {
                 'request_id': widget.request['request_id'],
                 'reject_reason': ctrl.text,
               });
-              Navigator.pop(context);
-              Navigator.pop(context, true);
+              nav.pop();
+              nav.pop(true);
             },
             child: const Text(
               'Reject',
@@ -1440,11 +1427,9 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Hero ────────────────────────────────────────────
                 _profileHero(),
                 const SizedBox(height: 14),
 
-                // ── Previous rejection banner ────────────────────────
                 if (hasRejectReason) ...[
                   Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -1460,7 +1445,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: _red.withOpacity(0.1),
+                            color: _red.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Icon(
@@ -1499,7 +1484,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                   ),
                 ],
 
-                // ── Personal Info ────────────────────────────────────
                 _sectionCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1539,9 +1523,10 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         label: 'Emergency Contact',
                         value: widget.request['emergency_contact'] ?? '-',
                       ),
+                      _dividerRow(),
                       _infoTile(
-                        icon: Icons.phone_android_rounded,
-                        label: 'Emergency Contact relation ',
+                        icon: Icons.people_outline_rounded,
+                        label: 'Emergency Relation',
                         value:
                             widget.request['emergency_contact_relation'] ?? '-',
                       ),
@@ -1549,7 +1534,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                   ),
                 ),
 
-                // ── Contact ──────────────────────────────────────────
                 _sectionCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1590,7 +1574,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                   ),
                 ),
 
-                // ── Employment ───────────────────────────────────────
                 _sectionCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1652,12 +1635,10 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                   ),
                 ),
 
-                // ── Education ────────────────────────────────────────
                 _educationSection(
                   (widget.request['education_list'] as List?) ?? [],
                 ),
 
-                // ── Documents ────────────────────────────────────────
                 _sectionCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1701,7 +1682,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                   ),
                 ),
 
-                // ── Edit Reason (UPDATE only) ────────────────────────
                 if (hasEditReason)
                   _sectionCard(
                     child: Column(
@@ -1741,7 +1721,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
 
                 const SizedBox(height: 8),
 
-                // ── Action buttons ───────────────────────────────────
                 Row(
                   children: [
                     Expanded(

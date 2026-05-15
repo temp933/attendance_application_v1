@@ -1,3 +1,4 @@
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:typed_data';
 
@@ -576,13 +577,28 @@ class ManageUserScreenState extends State<ManageUserScreen> {
   String searchText = '';
   String selectedDepartment = 'All';
   List<String> departmentList = ['All'];
-  String selectedTeamLead = 'All';
-  List<Map<String, dynamic>> teamLeadList = [];
 
   @override
   void initState() {
     super.initState();
     _fetchEmployees();
+    debugPrint('╔══════════════════════════════════════════════╗');
+    debugPrint('║         ADD EMPLOYEE — API CONFIG             ║');
+    debugPrint('╠══════════════════════════════════════════════╣');
+    debugPrint(
+      '║  tenantId  : ${ApiConfig.tenantId.isEmpty ? "❌ EMPTY" : ApiConfig.tenantId}',
+    );
+    debugPrint(
+      '║  employeeId: ${ApiConfig.employeeId.isEmpty ? "❌ EMPTY" : ApiConfig.employeeId}',
+    );
+    debugPrint(
+      '║  token     : ${ApiConfig.headers['Authorization'] ?? "❌ MISSING"}',
+    );
+    debugPrint(
+      '║  x-tenant  : ${ApiConfig.headers['x-tenant-id'] ?? "❌ MISSING"}',
+    );
+    debugPrint('╚══════════════════════════════════════════════╝');
+    // ─────────────────────────────────────────────────────────────────
   }
 
   void refreshUsers() => _fetchEmployees();
@@ -596,14 +612,73 @@ class ManageUserScreenState extends State<ManageUserScreen> {
       final results = await Future.wait([
         EmployeeService.fetchAllEmployees(),
         EmployeeService.fetchDepartments(),
-        EmployeeService.fetchTeamLeads(), // ← ADD THIS
       ]);
       if (!mounted) return;
+
+      final masterList = results[0] as List<Employee>;
+      final deptData = results[1] as List<Map<String, dynamic>>;
+
+      // Fetch PENDING and REJECTED separately
+      final pendingRes = await ApiClient.get('/pending-request?status=PENDING');
+      final rejectedRes = await ApiClient.get(
+        '/pending-request?status=REJECTED',
+      );
+
+      final pendingJson = (jsonDecode(pendingRes.body)['data'] as List? ?? []);
+      final rejectedJson =
+          (jsonDecode(rejectedRes.body)['data'] as List? ?? []);
+
+      final pendingList = [
+        ...pendingJson,
+        ...rejectedJson,
+      ].map((e) => Employee.fromJson(e as Map<String, dynamic>)).toList();
+
+      // Only exclude pending/rejected entries whose emp_id already exists
+      // in master AND whose status is not what we need to show
+      // Rule:
+      //   - NEW requests (emp_id == 0 or null) → always show (they have no master record)
+      //   - UPDATE requests (emp_id != 0) → show the master record + show pending/rejected on top
+      //     but DON'T duplicate — only add if not already represented
+      final masterEmpIds = masterList
+          .map((e) => e.empId)
+          .where((id) => id != 0)
+          .toSet();
+
+      // For UPDATE requests: we want to show the pending/rejected badge on the
+      // existing master card — so we attach the pending info to the master employee
+      // For NEW requests: show as separate card with badge
+
+      // Step 1: attach pending/rejected status to master employees if they have one
+      final Map<int, Employee> pendingByEmpId = {};
+      final List<Employee> newRequests = []; // NEW requests only
+
+      for (final p in pendingList) {
+        if (p.empId != 0 && p.empId != null && masterEmpIds.contains(p.empId)) {
+          // This is an UPDATE request for an existing employee
+          // We'll overlay the status on the master record
+          pendingByEmpId[p.empId!] = p;
+        } else {
+          // This is a NEW request — show as its own card
+          newRequests.add(p);
+        }
+      }
+
+      // Step 2: build master list, overlaying pending status where applicable
+      final updatedMasterList = masterList.map((e) {
+        final pending = pendingByEmpId[e.empId];
+        if (pending != null) {
+          // Return a copy of the master employee but with pending status info
+          return e.copyWithPendingStatus(
+            adminApprove: pending.adminApprove,
+            requestId: pending.requestId,
+          );
+        }
+        return e;
+      }).toList();
+
       setState(() {
-        employees = results[0] as List<Employee>;
-        final deptData = results[1] as List<Map<String, dynamic>>;
+        employees = [...updatedMasterList, ...newRequests];
         departmentList = ['All', ...deptData.map((d) => d['name'].toString())];
-        teamLeadList = results[2] as List<Map<String, dynamic>>; // ← ADD THIS
       });
     } catch (e) {
       if (!mounted) return;
@@ -623,20 +698,6 @@ class ManageUserScreenState extends State<ManageUserScreen> {
 
     if (selectedDepartment != 'All') {
       list = list.where((e) => e.departmentName == selectedDepartment).toList();
-    }
-
-    if (selectedTeamLead != 'All') {
-      final tlEntry = teamLeadList.firstWhere(
-        (tl) => _tlName(tl) == selectedTeamLead,
-        orElse: () => {},
-      );
-      if (tlEntry.isNotEmpty) {
-        final tlId = tlEntry['id']; // int from API
-        list = list.where((e) {
-          if (e.tlId == null || tlId == null) return false;
-          return e.tlId == (tlId is int ? tlId : int.tryParse(tlId.toString()));
-        }).toList();
-      }
     }
 
     return list;
@@ -667,7 +728,7 @@ class ManageUserScreenState extends State<ManageUserScreen> {
                       const SizedBox(height: 8),
                       _deptFilter(),
                       const SizedBox(height: 8),
-                      _tlFilter(), // ← ADD
+                      // _tlFilter(), // ← ADD
                     ],
                   )
                 : s.isTablet
@@ -679,7 +740,7 @@ class ManageUserScreenState extends State<ManageUserScreen> {
                         children: [
                           Expanded(child: _deptFilter()),
                           const SizedBox(width: 10),
-                          Expanded(child: _tlFilter()), // ← ADD
+                          // Expanded(child: _tlFilter()), // ← ADD
                         ],
                       ),
                     ],
@@ -690,7 +751,7 @@ class ManageUserScreenState extends State<ManageUserScreen> {
                       const SizedBox(width: 10),
                       Expanded(flex: 2, child: _deptFilter()),
                       const SizedBox(width: 10),
-                      Expanded(flex: 2, child: _tlFilter()), // ← ADD
+                      // Expanded(flex: 2, child: _tlFilter()), // ← ADD
                     ],
                   ),
           ),
@@ -708,25 +769,23 @@ class ManageUserScreenState extends State<ManageUserScreen> {
           ),
         ],
       ),
-      floatingActionButton: widget.roleId == '2'
-          ? FloatingActionButton.extended(
-              backgroundColor: _primary,
-              foregroundColor: Colors.white,
-              elevation: 2,
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text(
-                'Add Employee',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AddEmployeePage()),
-                );
-                _fetchEmployees();
-              },
-            )
-          : null,
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: _primary,
+        foregroundColor: Colors.white,
+        elevation: 2,
+        icon: const Icon(Icons.person_add_alt_1_rounded),
+        label: const Text(
+          'Add Employee',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddEmployeePage()),
+          );
+          _fetchEmployees();
+        },
+      ),
     );
   }
 
@@ -753,60 +812,6 @@ class ManageUserScreenState extends State<ManageUserScreen> {
     ),
     onChanged: (v) => setState(() => searchText = v.toLowerCase()),
   );
-
-  Widget _tlFilter() {
-    final options = [
-      'All',
-      ...teamLeadList
-          .map(
-            (tl) => (tl['name']?.toString() ?? '').trim().replaceAll(
-              RegExp(r'\s+'),
-              ' ',
-            ),
-          )
-          .where((n) => n.isNotEmpty),
-    ];
-    final current = options.contains(selectedTeamLead)
-        ? selectedTeamLead
-        : 'All';
-
-    return DropdownButtonFormField<String>(
-      value: current,
-      isExpanded: true,
-      style: const TextStyle(color: _textDark, fontSize: 13),
-      decoration: InputDecoration(
-        labelText: 'By Team Lead', // ← ADD LABEL
-        labelStyle: const TextStyle(color: _textMid, fontSize: 12),
-        filled: true,
-        fillColor: _surface,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _primary, width: 1.5),
-        ),
-      ),
-      items: options
-          .map(
-            (e) => DropdownMenuItem(
-              value: e,
-              child: Text(e, overflow: TextOverflow.ellipsis),
-            ),
-          )
-          .toList(),
-      onChanged: (v) => setState(() => selectedTeamLead = v!),
-    );
-  }
 
   Widget _deptFilter() => DropdownButtonFormField<String>(
     initialValue: departmentList.contains(selectedDepartment)
@@ -898,49 +903,29 @@ class ManageUserScreenState extends State<ManageUserScreen> {
   }
 
   Future<void> _onTap(Employee e) async {
-    if (widget.roleId == '5') {
-      final tempId = e.empId != 0 ? e.empId : e.requestId;
-      if (tempId == null) return;
-      final result = await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => EmployeeDetailPage(
-            id: tempId.toString(),
-            source: e.empId != 0 ? 'MASTER' : 'REQUEST',
-            readOnly: true,
-            userRoleId: '5',
-          ),
-        ),
-      );
-      if (result == true && mounted) {
-        _fetchEmployees();
-      }
-      return;
-    }
     late String id, source;
     late bool readOnly;
+
     if (e.adminApprove == 'PENDING') {
-      if (e.requestId == null) {
-        return;
-      }
+      // Has a pending request — show request details, read-only
+      if (e.requestId == null) return;
       id = e.requestId.toString();
       source = 'REQUEST';
       readOnly = true;
     } else if (e.adminApprove == 'REJECTED') {
-      if (e.requestId == null) {
-        return;
-      }
+      // Has a rejected request — show request, allow resubmit
+      if (e.requestId == null) return;
       id = e.requestId.toString();
       source = 'REQUEST';
       readOnly = false;
     } else {
-      if (e.empId == 0) {
-        return;
-      }
+      // Approved / active employee — show master record, allow edit
+      if (e.empId == 0) return;
       id = e.empId.toString();
       source = 'MASTER';
       readOnly = false;
     }
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -952,9 +937,7 @@ class ManageUserScreenState extends State<ManageUserScreen> {
         ),
       ),
     );
-    if (result == true && mounted) {
-      _fetchEmployees();
-    }
+    if (result == true && mounted) _fetchEmployees();
   }
 }
 
@@ -984,6 +967,8 @@ class _EmployeeCardState extends State<_EmployeeCard> {
     super.initState();
     _photoFuture = (widget.employee.empId != 0)
         ? ApiClient.get('/employees/${widget.employee.empId}/photo')
+        : (widget.employee.requestId != null)
+        ? ApiClient.get('/pending-request/${widget.employee.requestId}/photo')
         : Future.value(http.Response('', 404));
   }
 
@@ -1110,7 +1095,11 @@ class _EmployeeCardState extends State<_EmployeeCard> {
   }
 
   Widget _statusBadge(String? status) {
-    if (status == null) return const SizedBox.shrink();
+    // For master employees with no pending request, show nothing (they're normal)
+    if (status == null || status.toUpperCase() == 'APPROVED') {
+      return const SizedBox.shrink();
+    }
+
     Color color;
     switch (status.toUpperCase()) {
       case 'PENDING':
@@ -1122,6 +1111,7 @@ class _EmployeeCardState extends State<_EmployeeCard> {
       default:
         return const SizedBox.shrink();
     }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(
@@ -1139,7 +1129,7 @@ class _EmployeeCardState extends State<_EmployeeCard> {
           ),
           const SizedBox(width: 5),
           Text(
-            status,
+            status.toUpperCase(),
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -1189,7 +1179,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   String gender = 'Male', employmentType = 'Permanent', workType = 'Full Time';
   int? selectedDeptId, selectedRoleId;
   List<Map<String, dynamic>> departments = [], roles = [];
-  List<Map<String, dynamic>> teamLeads = [];
   int? selectedTlId;
   bool _submitting = false;
   Uint8List? _selectedPhotoBytes;
@@ -1202,16 +1191,35 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     _loadDropdowns();
   }
 
+  // In AddEmployeePage / EditPage — when department changes, reload roles
   Future<void> _loadDropdowns() async {
-    final depts = await EmployeeService.fetchDepartments();
-    final rolesList = await EmployeeService.fetchRoles();
-    final tlList = await EmployeeService.fetchTeamLeads(); // ← ADD
-    if (!mounted) return;
+    try {
+      final results = await Future.wait([
+        EmployeeService.fetchDepartments(),
+        EmployeeService.fetchRoles(), // fan-out, now always returns a list
+      ]);
+      if (!mounted) return;
+      setState(() {
+        departments = results[0] as List<Map<String, dynamic>>;
+        roles = results[1] as List<Map<String, dynamic>>;
+      });
+    } catch (e) {
+      // Don't crash the form — just leave lists empty
+      debugPrint('_loadDropdowns error: $e');
+    }
+  }
+
+  // Optional: refresh roles when user picks a department
+  void _onDeptChanged(int? deptId) async {
     setState(() {
-      departments = depts;
-      roles = rolesList;
-      teamLeads = tlList; // ← ADD
+      selectedDeptId = deptId;
+      selectedRoleId = null; // reset role when dept changes
+      roles = [];
     });
+    if (deptId != null) {
+      final deptRoles = await EmployeeService.fetchRoles(deptId: deptId);
+      if (mounted) setState(() => roles = deptRoles);
+    }
   }
 
   @override
@@ -1438,7 +1446,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                           'Department',
                           departments,
                           selectedDeptId,
-                          (v) => setState(() => selectedDeptId = v),
+                          _onDeptChanged, // ← replaces the inline setState
                           padding: EdgeInsets.zero,
                         ),
                         FormDropdownMap(
@@ -1451,14 +1459,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                         sp: sp,
                       ),
                       SizedBox(height: sp),
-                      // ── TL Name ──────────────────────────────────────────────────────
-                      FormDropdownMap(
-                        'Team Lead (TL)',
-                        teamLeads,
-                        selectedTlId,
-                        (v) => setState(() => selectedTlId = v),
-                        padding: EdgeInsets.zero,
-                      ),
+
                       SizedBox(height: sp),
                       // ── DOJ — cannot be in future ──────────────────────────
                       FormDateField(
@@ -1655,6 +1656,8 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     setState(() => _submitting = true);
 
     final body = {
+      'tenant_id': ApiConfig.tenantId, // ← ADD
+      'created_by': ApiConfig.employeeId, // ← ADD
       'first_name': firstNameCtrl.text,
       'mid_name': midNameCtrl.text,
       'last_name': lastNameCtrl.text,
@@ -1686,7 +1689,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     };
 
     try {
-      final res = await ApiClient.post('/employee-pending-request', body);
+      final res = await ApiClient.post('/pending-request', body);
       if (!mounted) return;
 
       final data = jsonDecode(res.body);
@@ -1695,18 +1698,15 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         // ── Upload photo if one was selected ─────────────────────────────────
         if (_selectedPhotoBytes != null) {
           try {
-            // Admin path returns emp_id; non-admin returns request_id.
             final empId = data['emp_id'];
             final requestId = data['request_id'];
 
             late Uri photoUri;
             if (empId != null) {
-              // Admin: direct to employee_master photo endpoint
               photoUri = Uri.parse(
                 '${ApiConfig.baseUrl}/employees/$empId/photo',
               );
             } else if (requestId != null) {
-              // Non-admin: pending-request photo endpoint
               photoUri = Uri.parse(
                 '${ApiConfig.baseUrl}/pending-request/$requestId/photo',
               );
@@ -1715,16 +1715,21 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
             }
 
             final photoReq = http.MultipartRequest('POST', photoUri);
+
+            // ← ADD THESE — auth header was missing, causing the 401
+            photoReq.headers.addAll(ApiConfig.headers);
+
             photoReq.files.add(
               http.MultipartFile.fromBytes(
                 'photo',
                 _selectedPhotoBytes!,
                 filename: 'photo.jpg',
+                contentType: MediaType('image', 'jpeg'),
               ),
             );
             await photoReq.send();
           } catch (_) {
-            // Photo upload failure is non-fatal; employee was already saved.
+            // non-fatal
           }
         }
 
@@ -1804,19 +1809,21 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
     _fetchDetails();
     if (widget.source == 'MASTER') {
       _photoFuture = ApiClient.get('/employees/${widget.id}/photo');
+    } else {
+      // ← ADD THIS — widget.id IS the request_id when source == 'REQUEST'
+      _photoFuture = ApiClient.get('/pending-request/${widget.id}/photo');
     }
   }
 
   Future<void> _fetchDetails() async {
     final path = widget.source == 'MASTER'
         ? '/employees/${widget.id}'
-        : '/admin/request/${widget.id}';
+        : '/pending-request/${widget.id}';
     try {
       final res = await ApiClient.get(path);
       if (!mounted) return;
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        // Handle both {data: {...}} and raw object responses
         final emp = data is Map && data.containsKey('data')
             ? data['data']
             : data;
@@ -1824,18 +1831,18 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
           employeeData = Map<String, dynamic>.from(emp);
           isLoading = false;
         });
-        final eduId = widget.source == 'MASTER'
-            ? emp['emp_id']
-            : emp['request_id'];
-        if (eduId != null) {
-          final eduPath = widget.source == 'MASTER'
-              ? '/employees/$eduId/education'
-              : '/requests/$eduId/education';
-          final er = await ApiClient.get(eduPath);
-          if (er.statusCode == 200 && mounted) {
-            setState(
-              () => employeeData!['education'] = jsonDecode(er.body)['data'],
-            );
+
+        // Only fetch education separately for MASTER
+        // REQUEST already has education embedded in the response (row.education)
+        if (widget.source == 'MASTER') {
+          final eduId = emp['emp_id'];
+          if (eduId != null) {
+            final er = await ApiClient.get('/employees/$eduId/education');
+            if (er.statusCode == 200 && mounted) {
+              setState(
+                () => employeeData!['education'] = jsonDecode(er.body)['data'],
+              );
+            }
           }
         }
       } else {
@@ -1889,7 +1896,7 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
   bool get _isRejected =>
       widget.source == 'REQUEST' &&
       employeeData?['admin_approve'] == 'REJECTED';
-  bool get _canEdit => !widget.readOnly && widget.userRoleId == '2';
+  bool get _canEdit => !widget.readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -2386,13 +2393,7 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
         employeeData!['department_name'],
       ),
       _Tile(Icons.badge_outlined, 'Designation', employeeData!['role_name']),
-      _Tile(
-        Icons.supervisor_account_outlined,
-        'Team Lead',
-        (employeeData!['tl_name']?.toString() ?? '').trim().isNotEmpty
-            ? employeeData!['tl_name']
-            : 'Not assigned',
-      ),
+
       _Tile(
         Icons.calendar_today_outlined,
         'Date of Joining',
@@ -2777,7 +2778,6 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
   String gender = 'Male', employmentType = 'Permanent', workType = 'Full Time';
   int? selectedDeptId, selectedRoleId;
   List<Map<String, dynamic>> departments = [], roles = [];
-  List<Map<String, dynamic>> teamLeads = [];
   int? selectedTlId;
   bool _submitting = false;
   Uint8List? _selectedPhotoBytes;
@@ -2845,16 +2845,35 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
     }
   }
 
+  // In AddEmployeePage / EditPage — when department changes, reload roles
   Future<void> _loadDropdowns() async {
-    final depts = await EmployeeService.fetchDepartments();
-    final rolesList = await EmployeeService.fetchRoles();
-    final tlList = await EmployeeService.fetchTeamLeads();
-    if (!mounted) return;
+    try {
+      final results = await Future.wait([
+        EmployeeService.fetchDepartments(),
+        EmployeeService.fetchRoles(), // fan-out, now always returns a list
+      ]);
+      if (!mounted) return;
+      setState(() {
+        departments = results[0] as List<Map<String, dynamic>>;
+        roles = results[1] as List<Map<String, dynamic>>;
+      });
+    } catch (e) {
+      // Don't crash the form — just leave lists empty
+      debugPrint('_loadDropdowns error: $e');
+    }
+  }
+
+  // Optional: refresh roles when user picks a department
+  void _onDeptChanged(int? deptId) async {
     setState(() {
-      departments = depts;
-      roles = rolesList;
-      teamLeads = tlList;
+      selectedDeptId = deptId;
+      selectedRoleId = null; // reset role when dept changes
+      roles = [];
     });
+    if (deptId != null) {
+      final deptRoles = await EmployeeService.fetchRoles(deptId: deptId);
+      if (mounted) setState(() => roles = deptRoles);
+    }
   }
 
   @override
@@ -3311,6 +3330,8 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
 
     setState(() => _submitting = true);
     final body = {
+      'tenant_id': ApiConfig.tenantId, // ← ADD
+      'updated_by': ApiConfig.employeeId, // ← ADD
       'first_name': firstNameCtrl.text,
       'mid_name': midNameCtrl.text,
       'last_name': lastNameCtrl.text,
@@ -3340,7 +3361,7 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
     };
     try {
       final res = await ApiClient.put(
-        '/admin/resubmit-request/${widget.requestData["request_id"]}',
+        '/pending-request/${widget.requestData["request_id"]}/resubmit',
         body,
       );
       if (!mounted) return;
@@ -3355,11 +3376,13 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
                 '${ApiConfig.baseUrl}/pending-request/$requestId/photo',
               ),
             );
+            photoReq.headers.addAll(ApiConfig.headers); // ← ADD THIS
             photoReq.files.add(
               http.MultipartFile.fromBytes(
                 'photo',
                 _selectedPhotoBytes!,
                 filename: 'photo.jpg',
+                contentType: MediaType('image', 'jpeg'),
               ),
             );
             await photoReq.send();
@@ -3438,7 +3461,6 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
       status = 'Active';
   int? selectedDeptId, selectedRoleId;
   List<Map<String, dynamic>> departments = [], roles = [];
-  List<Map<String, dynamic>> teamLeads = [];
   int? selectedTlId;
   bool _submitting = false, _loadingEdu = true;
   Uint8List? _selectedPhotoBytes;
@@ -3502,16 +3524,36 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
     _loadExistingEducation();
   }
 
+  // In AddEmployeePage / EditPage — when department changes, reload roles
+
   Future<void> _loadDropdowns() async {
-    final depts = await EmployeeService.fetchDepartments();
-    final rolesList = await EmployeeService.fetchRoles();
-    final tlList = await EmployeeService.fetchTeamLeads(); // ← ADD
-    if (!mounted) return;
+    try {
+      final results = await Future.wait([
+        EmployeeService.fetchDepartments(),
+        EmployeeService.fetchRoles(), // fan-out, now always returns a list
+      ]);
+      if (!mounted) return;
+      setState(() {
+        departments = results[0] as List<Map<String, dynamic>>;
+        roles = results[1] as List<Map<String, dynamic>>;
+      });
+    } catch (e) {
+      // Don't crash the form — just leave lists empty
+      debugPrint('_loadDropdowns error: $e');
+    }
+  }
+
+  // Optional: refresh roles when user picks a department
+  void _onDeptChanged(int? deptId) async {
     setState(() {
-      departments = depts;
-      roles = rolesList;
-      teamLeads = tlList; // ← ADD
+      selectedDeptId = deptId;
+      selectedRoleId = null; // reset role when dept changes
+      roles = [];
     });
+    if (deptId != null) {
+      final deptRoles = await EmployeeService.fetchRoles(deptId: deptId);
+      if (mounted) setState(() => roles = deptRoles);
+    }
   }
 
   Future<void> _loadExistingEducation() async {
@@ -3819,13 +3861,6 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
                         sp: sp,
                       ),
                       SizedBox(height: sp),
-                      FormDropdownMap(
-                        'Team Lead (TL)',
-                        teamLeads,
-                        selectedTlId,
-                        (v) => setState(() => selectedTlId = v),
-                        padding: EdgeInsets.zero,
-                      ),
 
                       SizedBox(height: sp),
                       // ── DOJ optional on edit but validated if filled ──────────
@@ -4084,6 +4119,9 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
     setState(() => _submitting = true);
 
     final body = {
+      'request_type': 'UPDATE',
+      'tenant_id': ApiConfig.tenantId, // ← ADD
+      'updated_by': ApiConfig.employeeId, // ← ADD
       'emp_id': widget.employee.empId,
       'first_name': firstNameCtrl.text,
       'mid_name': midNameCtrl.text,
@@ -4116,7 +4154,7 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
     };
 
     try {
-      final res = await ApiClient.post('/employee-edit-request', body);
+      final res = await ApiClient.post('/pending-request', body);
       if (!mounted) return;
 
       final data = jsonDecode(res.body);
@@ -4132,11 +4170,13 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
                 '${ApiConfig.baseUrl}/pending-request/$requestId/photo',
               ),
             );
+            photoReq.headers.addAll(ApiConfig.headers); // ← ADD THIS
             photoReq.files.add(
               http.MultipartFile.fromBytes(
                 'photo',
                 _selectedPhotoBytes!,
                 filename: 'photo.jpg',
+                contentType: MediaType('image', 'jpeg'),
               ),
             );
             final photoRes = await photoReq.send();

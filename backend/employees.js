@@ -5,8 +5,9 @@ const router = express.Router();
 const bcrypt = require("bcryptjs");
 const multer = require("multer");
 const db = require("./config/db");
+const authMiddleware = require("./middleware/auth"); // ← single import
 
-// ── Multer (profile photo — memory storage, 2 MB cap) ────────────────────────
+// ── Multer ────────────────────────────────────────────────────────────────────
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 },
@@ -16,50 +17,20 @@ const upload = multer({
   },
 });
 
-// ── Auth middleware ───────────────────────────────────────────────────────────
-// Expects header:  Authorization: Bearer <session_token>
-//                  X-Login-Id: <login_id>
-// Attaches req.user = { loginId, tenantId, companyId, roleId }
-async function requireAuth(req, res, next) {
-  const token = (req.headers["authorization"] || "")
-    .replace("Bearer ", "")
-    .trim();
-  const loginId = req.headers["x-login-id"];
-
-  if (!token || !loginId) {
-    return res.status(401).json({ success: false, message: "Unauthorised." });
-  }
-
-  try {
-    const [rows] = await db.query(
-      `SELECT login_id, tenant_id, company_id, role_id, status, session_token
-         FROM login_master
-        WHERE login_id = ? AND status = 'Active'
-        LIMIT 1`,
-      [loginId],
-    );
-
-    if (!rows.length || rows[0].session_token !== token) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Session invalid or expired." });
+function requireAuth(req, res, next) {
+  authMiddleware(req, res, () => {
+    if (req.user) {
+      req.user.loginId = req.user.login_id;
+      req.user.tenantId = req.user.tenant_id;
+      req.user.roleId = req.user.role_id;
+      req.user.empId = req.user.emp_id;
+      req.user.companyId = req.user.tenant_id; // company_id fallback
     }
-
-    req.user = {
-      loginId: rows[0].login_id,
-      tenantId: rows[0].tenant_id,
-      companyId: rows[0].company_id,
-      roleId: rows[0].role_id,
-    };
     next();
-  } catch (err) {
-    console.error("[requireAuth]", err);
-    res.status(500).json({ success: false, message: "Server error." });
-  }
+  });
 }
 
-// ── Role guard factory ────────────────────────────────────────────────────────
-// Roles: Admin=1, HR=2, TL=3, Employee=5, AppAdmin=6, Manager=8
+// ── Role guard ────────────────────────────────────────────────────────────────
 function requireRole(...allowedRoles) {
   return (req, res, next) => {
     if (!allowedRoles.includes(req.user.roleId)) {
@@ -73,19 +44,6 @@ function requireRole(...allowedRoles) {
 function nullIfEmpty(v) {
   return v === undefined || v === null || v === "" ? null : v;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/employees
-// Lists all employees for the caller's tenant (across all statuses by default).
-// Query params:
-//   status   — Active | Inactive | Relieved  (optional, no default = all)
-//   dept_id  — filter by department
-//   role_id  — filter by role
-//   tl_id    — filter by TL
-//   search   — partial match on name / email / phone
-//   page     — 1-based (default 1)
-//   limit    — rows per page (default 50, max 200)
-// ─────────────────────────────────────────────────────────────────────────────
 router.get("/", requireAuth, async (req, res) => {
   const { tenantId } = req.user;
   const {
@@ -176,11 +134,6 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/employees/me
-// Returns the profile of the currently logged-in employee.
-// NOTE: Must be defined BEFORE /:emp_id to avoid route collision.
-// ─────────────────────────────────────────────────────────────────────────────
 router.get("/me", requireAuth, async (req, res) => {
   const { loginId, tenantId } = req.user;
 
@@ -231,11 +184,6 @@ router.get("/me", requireAuth, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/employees/stats/summary
-// Tenant-level headcount breakdown — for dashboards.
-// NOTE: Must be defined BEFORE /:emp_id to avoid route collision.
-// ─────────────────────────────────────────────────────────────────────────────
 router.get("/stats/summary", requireAuth, async (req, res) => {
   const { tenantId } = req.user;
 
@@ -286,13 +234,6 @@ router.get("/stats/summary", requireAuth, async (req, res) => {
     res.status(500).json({ success: false, message: "Server error." });
   }
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/employees/face-embeddings/all
-// Returns all employees with face embeddings for client-side recognition.
-// AppAdmin (6) or Admin (1) only.
-// NOTE: Must be defined BEFORE /:emp_id to avoid route collision.
-// ─────────────────────────────────────────────────────────────────────────────
 router.get(
   "/face-embeddings/all",
   requireAuth,
@@ -318,11 +259,6 @@ router.get(
   },
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/employees/by-department/:dept_id
-// Convenience endpoint — employees in one department.
-// NOTE: Must be defined BEFORE /:emp_id to avoid route collision.
-// ─────────────────────────────────────────────────────────────────────────────
 router.get("/by-department/:dept_id", requireAuth, async (req, res) => {
   const { tenantId } = req.user;
   const { dept_id } = req.params;
@@ -346,12 +282,6 @@ router.get("/by-department/:dept_id", requireAuth, async (req, res) => {
     res.status(500).json({ success: false, message: "Server error." });
   }
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/employees/by-tl/:tl_id
-// Team lead's reportees.
-// NOTE: Must be defined BEFORE /:emp_id to avoid route collision.
-// ─────────────────────────────────────────────────────────────────────────────
 router.get("/by-tl/:tl_id", requireAuth, async (req, res) => {
   const { tenantId } = req.user;
   const { tl_id } = req.params;
@@ -378,10 +308,48 @@ router.get("/by-tl/:tl_id", requireAuth, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/employees/:emp_id
-// Returns full employee record (no photo blob — use /photo endpoint).
-// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/employees/team-leads
+router.get("/team-leads", requireAuth, async (req, res) => {
+  const { tenantId } = req.user;
+  try {
+    const [rows] = await db.query(
+      `SELECT DISTINCT e.emp_id AS id,
+              CONCAT(e.first_name, ' ', COALESCE(e.last_name, '')) AS name
+         FROM employee_master e
+        WHERE e.tenant_id = ?
+          AND e.status = 'Active'
+          AND e.emp_id IN (
+            SELECT DISTINCT tl_id
+            FROM employee_master
+            WHERE tl_id IS NOT NULL
+              AND tenant_id = ?
+          )
+        ORDER BY name`,
+      [tenantId, tenantId],
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error("[GET /employees/team-leads]", err);
+    res.status(500).json({ success: false, message: "Server error." });
+  }
+});
+
+// GET /api/employees/:emp_id/education
+router.get("/:emp_id/education", requireAuth, async (req, res) => {
+  const { tenantId } = req.user;
+  const { emp_id } = req.params;
+  try {
+    const [rows] = await db.query(
+      `SELECT * FROM education_details WHERE emp_id = ?`,
+      [emp_id],
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error("[GET /employees/:id/education]", err);
+    res.status(500).json({ success: false, message: "Server error." });
+  }
+});
+
 router.get("/:emp_id", requireAuth, async (req, res) => {
   const { tenantId } = req.user;
   const { emp_id } = req.params;
@@ -425,13 +393,6 @@ router.get("/:emp_id", requireAuth, async (req, res) => {
     res.status(500).json({ success: false, message: "Server error." });
   }
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/employees
-// ADMIN / HR ONLY — Direct insert into employee_master (bypasses approval).
-// Used for bulk imports or admin overrides.
-// For general use, employees should go through /employee-pending-request.
-// ─────────────────────────────────────────────────────────────────────────────
 router.post("/", requireAuth, requireRole(1, 2), async (req, res) => {
   const { tenantId, companyId } = req.user;
 

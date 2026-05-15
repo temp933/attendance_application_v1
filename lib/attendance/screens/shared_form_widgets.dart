@@ -308,8 +308,9 @@ class FormDropdownMap extends StatelessWidget {
   final String label;
   final List<Map<String, dynamic>> items;
   final int? value;
-  final Function(int?) onChanged;
+  final ValueChanged<int?> onChanged;
   final EdgeInsets padding;
+  final bool optional;
 
   const FormDropdownMap(
     this.label,
@@ -318,32 +319,44 @@ class FormDropdownMap extends StatelessWidget {
     this.onChanged, {
     super.key,
     this.padding = const EdgeInsets.only(bottom: 12),
+    this.optional = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Guard: if value isn't in the current items list, force null
+    // (prevents FormatException when items load asynchronously)
+    final ids = items
+        .map((e) => (e['id'] ?? e['role_id'] ?? e['emp_id']) as int?)
+        .toSet();
+    final safeValue = ids.contains(value) ? value : null;
+
     return Padding(
       padding: padding,
       child: DropdownButtonFormField<int>(
-        initialValue: value,
+        initialValue: safeValue, // ← use initialValue, not value
         isExpanded: true,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
+        decoration: _dec(label), // ← _dec() is defined in this file
+        hint: Text(
+          items.isEmpty ? 'Loading…' : 'Select $label',
+          style: const TextStyle(
+            color: _kTextLight,
+            fontSize: 13,
+          ), // ← _kTextLight
         ),
-        items: items
-            .map<DropdownMenuItem<int>>(
-              (e) => DropdownMenuItem<int>(
-                value: int.parse(e['id'].toString()),
-                child: Text(
-                  e['name'].toString(),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            )
-            .toList(),
+        items: items.map((e) {
+          final id = (e['id'] ?? e['role_id'] ?? e['emp_id']) as int?;
+          final name = (e['name'] ?? e['role_name'] ?? e['label'] ?? '')
+              .toString();
+          return DropdownMenuItem<int>(
+            value: id,
+            child: Text(name, overflow: TextOverflow.ellipsis),
+          );
+        }).toList(),
+        validator: optional
+            ? null
+            : (v) => v == null ? 'Please select $label' : null,
         onChanged: onChanged,
-        validator: (v) => v == null ? '$label is required' : null,
       ),
     );
   }
