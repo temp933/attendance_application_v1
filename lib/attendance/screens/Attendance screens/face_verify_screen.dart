@@ -5,7 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../providers/api_config.dart';
+// import '../../providers/api_config.dart';
 
 /// Result returned after face verification attempt
 class FaceVerifyResult {
@@ -19,13 +19,6 @@ class FaceVerifyResult {
   });
 }
 
-/// Full-screen face verification flow.
-/// Usage:
-///   final result = await Navigator.push<FaceVerifyResult>(
-///     context,
-///     MaterialPageRoute(builder: (_) => FaceVerifyScreen(employeeId: empId)),
-///   );
-///   if (result != null && result.match) { /* proceed */ }
 class FaceVerifyScreen extends StatefulWidget {
   final int employeeId;
   const FaceVerifyScreen({super.key, required this.employeeId});
@@ -108,32 +101,28 @@ class _FaceVerifyScreenState extends State<FaceVerifyScreen>
     });
 
     try {
-      // Flash effect
       final xFile = await _controller!.takePicture();
       final bytes = await File(xFile.path).readAsBytes();
 
-      // POST to /attendance/verify-face
+      // ✅ Point directly to Python face service on port 8000
       final request =
           http.MultipartRequest(
               'POST',
-              Uri.parse('${ApiConfig.baseUrl}/attendance/verify-face'),
+              Uri.parse('http://192.168.1.12:8000/compare'), // ← port 8000
             )
-            ..headers.addAll(ApiConfig.headers)
-            ..fields['employee_id'] = widget.employeeId.toString()
+            ..fields['emp_id'] = widget.employeeId
+                .toString() // ← Python expects emp_id
             ..files.add(
               http.MultipartFile.fromBytes(
-                'photo',
+                'file', // ← Python expects field name 'file'
                 bytes,
                 filename: 'selfie.jpg',
-                contentType: MediaType(
-                  'image',
-                  'jpeg',
-                ), // ✅ explicit content type
+                contentType: MediaType('image', 'jpeg'),
               ),
             );
 
       final streamed = await request.send().timeout(
-        const Duration(seconds: 20),
+        const Duration(seconds: 30),
       );
       final body = await streamed.stream.bytesToString();
       final json = jsonDecode(body) as Map<String, dynamic>;
@@ -147,7 +136,6 @@ class _FaceVerifyScreenState extends State<FaceVerifyScreen>
       );
 
       if (result.match) {
-        // Success — brief success overlay then pop
         setState(() => _verifying = false);
         await _showResult(result);
         if (mounted) Navigator.pop(context, result);

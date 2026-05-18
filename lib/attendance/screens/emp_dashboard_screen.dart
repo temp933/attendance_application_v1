@@ -4,7 +4,9 @@ import '../services/attendance_state.dart';
 import '../services/site_cache.dart';
 import 'package:flutter/material.dart';
 import 'emp_home_screen.dart';
-import 'emp_attendance_screen.dart';
+import './Attendance screens/normal_in_out.dart';
+import './Attendance screens/attendance_gps.dart';
+import './Attendance screens/face_gps_attendance.dart';
 import 'emp_leave_screen.dart';
 import 'emp_profile_screen.dart';
 import 'login_screen.dart';
@@ -58,16 +60,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     startSessionGuard();
   }
 
-
   // ── Pages ──────────────────────────────────────────────────────────────────
   List<Widget> get pages => [
     EmployeeHomeScreen(empId: widget.empId, role: widget.role), // 0
-    AttendanceScreen(employeeId: widget.empId), // 1
-    LeaveScreen(employeeId: widget.empId.toString()), // 2
-    // TasksScreen(), // 3
-    EmployeeAssignmentsScreen(), // 4
-    // TravelOnsiteScreen(), // 5
-    // ExpenseScreen(), // 6
+    NormalAttendanceScreen(), // 1
+    GpsAttendanceScreen(), // 2
+    FaceGpsAttendanceScreen(employeeId: widget.empId),
+    LeaveScreen(employeeId: widget.empId.toString()), // 3
+    // TasksScreen(), // 4
+    EmployeeAssignmentsScreen(), // 5
+    // TravelOnsiteScreen(), // 6
+    // ExpenseScreen(), // 7
     // ReportsScreen(), // 7
     EmployeeProfileScreen(employeeId: widget.empId.toString()), // 8
     // const Center(
@@ -82,6 +85,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   final List<String> titles = [
     'Dashboard',
     'Attendance',
+    'GPS Attendance',
+    'Face Attendance',
     'Leave Management',
     // 'My Tasks',
     'Site',
@@ -103,6 +108,16 @@ class _DashboardScreenState extends State<DashboardScreen>
       icon: Icon(Icons.fingerprint_outlined),
       selectedIcon: Icon(Icons.fingerprint),
       label: Text('Attendance'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.gps_fixed_outlined),
+      selectedIcon: Icon(Icons.gps_fixed),
+      label: Text('GPS Attendance'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.people_alt_outlined),
+      selectedIcon: Icon(Icons.people),
+      label: Text('Face Attendance'),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.event_note_outlined),

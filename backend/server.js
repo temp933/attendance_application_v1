@@ -626,8 +626,8 @@ app.use("/api/employees", authMiddleware, employeeRoutes);
 const pendingRequestRoutes = require("./employee_pending_request");
 app.use("/api/pending-request", authMiddleware, pendingRequestRoutes);
 
-const approvalRouter = require('./admin_approval');
-app.use('/api/admin', approvalRouter);
+const approvalRouter = require("./admin_approval");
+app.use("/api/admin", approvalRouter);
 
 const holidayRoutes = require("./holiday_routes");
 app.use("/api/holidays", holidayRoutes);
@@ -638,13 +638,23 @@ app.use("/api/app-admin/system-modules", systemModulesRoutes);
 const appAdminLogin = require("./app_admin_login");
 app.use("/api/auth/app-admin", appAdminLogin);
 
-// const userManagementRouter = require("./user_management_router");
-// app.use("/api", userManagementRouter);
-
 const ManageOrganizationRouter = require("./app_admin_org_router");
 app.use("/api/app-admin", ManageOrganizationRouter);
+
 const plansRoutes = require("./plans");
 app.use("/api/plans", plansRoutes);
+
+const normalInOutRouter = require("./Attendance/normal_in_out");
+app.use("/api/attendance", normalInOutRouter);
+
+const attendanceGpsRoutes = require("./Attendance/attendance_gps");
+app.use("/api/gps", attendanceGpsRoutes);
+
+const attendanceGpsFaceRoutes = require("./Attendance/attendance_gps_face");
+app.use("/api/face", attendanceGpsFaceRoutes);
+
+const faceEmbRouter = require("./admin_face_approval");
+app.use("/api/admin", faceEmbRouter);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // START SERVER

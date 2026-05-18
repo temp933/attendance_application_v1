@@ -21,6 +21,10 @@ import '../services/attendance_state.dart';
 import '../services/api_service.dart';
 import '../services/site_cache.dart';
 import '../providers/api_config.dart';
+import './Attendance screens/normal_attendance_management_screen.dart';
+import './Attendance screens/gps_attendance_management_screen.dart';
+import './Attendance screens/face_gps_attendance_management_screen.dart';
+import 'admin_face_approval.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final int initialIndex;
@@ -85,12 +89,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         employeeId: widget.employeeId,
         onNavigate: (index) => setState(() => selectedIndex = index),
       ), // 0
-      AttendanceScreen(employeeId: int.parse(widget.employeeId)), // 1
-      AdminHrAttendanceScreen(loginId: widget.loginId), // 2
+
+      NormalAttendanceManagementScreen(
+        tenantId: widget.tenantId,
+        authToken:
+            ApiConfig.headers['Authorization']?.replaceFirst('Bearer ', '') ??
+            '',
+      ), // 2
+      GpsAttendanceManagementScreen(
+        tenantId: widget.tenantId,
+        authToken:
+            ApiConfig.headers['Authorization']?.replaceFirst('Bearer ', '') ??
+            '',
+      ),
+      FaceGpsAttendanceManagementScreen(
+        tenantId: widget.tenantId,
+        authToken:
+            ApiConfig.headers['Authorization']?.replaceFirst('Bearer ', '') ??
+            '',
+      ),
       LeaveApprovalScreen(loginId: widget.loginId), // 3
       AdminDepartmentsScreen(tenantId: widget.tenantId), // 4
       ManageUserScreen(roleId: widget.roleId, tenantId: widget.tenantId), // 5
       AdminApprovalPage(),
+      AdminFaceApprovalPage(),
       AdminProfileScreen(employeeId: widget.employeeId), // 6
       // 7
     ]);
@@ -102,12 +124,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   // ── Titles ─────────────────────────────────────────────────────────────────
   final List<String> titles = [
     'Dashboard',
-    'Attendance',
-    'Manage Attendance',
+    'Normal Attendance',
+    'GPS Attendance',
+    'Face & GPS Attendance',
     'Leave Management',
     'Departments',
     'Manage Users',
     'Approvals',
+    'Face Approval',
     'Profile',
   ];
 
@@ -118,16 +142,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       selectedIcon: Icon(Icons.dashboard),
       label: Text('Dashboard'),
     ),
+
     NavigationRailDestination(
-      icon: Icon(Icons.fingerprint_outlined),
-      selectedIcon: Icon(Icons.fingerprint),
-      label: Text('Attendance'),
+      icon: Icon(Icons.access_time_outlined),
+      selectedIcon: Icon(Icons.access_time),
+      label: Text('Normal Attendance'),
     ),
     NavigationRailDestination(
-      icon: Icon(Icons.fact_check_outlined),
-      selectedIcon: Icon(Icons.fact_check),
-      label: Text('Manage Attendance'),
+      icon: Icon(Icons.location_on_outlined),
+      selectedIcon: Icon(Icons.location_on),
+      label: Text('GPS Attendance'),
     ),
+    NavigationRailDestination(
+      icon: Icon(Icons.face_outlined),
+      selectedIcon: Icon(Icons.face),
+      label: Text('Face & GPS Attendance'),
+    ),
+
     NavigationRailDestination(
       icon: Icon(Icons.event_busy_outlined),
       selectedIcon: Icon(Icons.event_busy),
@@ -147,6 +178,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       icon: Icon(Icons.check_circle_outline),
       selectedIcon: Icon(Icons.check_circle),
       label: Text('Approvals'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.face_outlined),
+      selectedIcon: Icon(Icons.face),
+      label: Text('Face Approval'),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.person),

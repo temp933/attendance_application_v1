@@ -23,7 +23,7 @@ def get_db():
         host=os.getenv("DB_HOST", "localhost"),
         user=os.getenv("DB_USER", "root"),
         password=os.getenv("DB_PASS", "2026"),
-        database=os.getenv("DB_NAME", "kavidhan")
+        database=os.getenv("DB_NAME", "global_app")
     )
 
 # ─── LOAD IMAGE ─────────────────────────────────────
