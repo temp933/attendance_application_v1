@@ -656,6 +656,9 @@ app.use("/api/face", attendanceGpsFaceRoutes);
 const faceEmbRouter = require("./admin_face_approval");
 app.use("/api/admin", faceEmbRouter);
 
+const leaveRouter = require("./leave");
+app.use("/api/leave", leaveRouter);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // START SERVER
 // ─────────────────────────────────────────────────────────────────────────────

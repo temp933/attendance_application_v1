@@ -108,7 +108,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ApiConfig.headers['Authorization']?.replaceFirst('Bearer ', '') ??
             '',
       ),
-      LeaveApprovalScreen(loginId: widget.loginId), // 3
+      // LeaveApprovalScreen(loginId: widget.loginId), // 3
       AdminDepartmentsScreen(tenantId: widget.tenantId), // 4
       ManageUserScreen(roleId: widget.roleId, tenantId: widget.tenantId), // 5
       AdminApprovalPage(),

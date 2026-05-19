@@ -67,11 +67,11 @@ class _LeaveScreenState extends State<LeaveScreen>
     });
     try {
       final results = await Future.wait([
-        ApiClient.get('/employees/${widget.employeeId}/leaves'),
+        ApiClient.get('/leave/employees/${widget.employeeId}/leaves'),
         ApiClient.get(
-          '/employees/${widget.employeeId}/leave-balance?year=${DateTime.now().year}',
+          '/leave/employees/${widget.employeeId}/leave-balance?year=${DateTime.now().year}',
         ),
-        ApiClient.get('/employees/${widget.employeeId}/compoff-eligible'),
+        ApiClient.get('/leave/employees/${widget.employeeId}/compoff-eligible'),
       ]);
 
       final leavesRes = results[0];
@@ -256,14 +256,17 @@ class _LeaveScreenState extends State<LeaveScreen>
   }
 
   int get _approvedDays => leaves
-      .where((e) => e.status == 'Approved')
+      .where((e) => e.finalStatus == 'Approved')
       .fold<int>(0, (sum, e) => sum + (e.numberOfDays ?? 0));
 
   int get _remainingDays =>
       (_totalAllowed - _approvedDays).clamp(0, _totalAllowed);
 
   int get _pendingCount => leaves
-      .where((e) => e.status == 'Pending_TL' || e.status == 'Pending_Manager')
+      .where(
+        (e) =>
+            e.finalStatus == 'Approved' || e.finalStatus == 'Pending_Manager',
+      )
       .length;
 
   @override
@@ -330,10 +333,10 @@ class _LeaveScreenState extends State<LeaveScreen>
               child: _LeaveCard(
                 leave: leaves[i],
                 resolvePerson: _resolvePerson,
-                onEdit: leaves[i].status == 'Pending_TL'
+                onEdit: leaves[i].finalStatus == 'Pending_TL'
                     ? () => _openEdit(leaves[i])
                     : null,
-                onCancel: leaves[i].status == 'Pending_TL'
+                onCancel: leaves[i].finalStatus == 'Pending_TL'
                     ? (r) => cancelLeave(leaves[i].leaveId!, r)
                     : null,
               ),
@@ -351,10 +354,10 @@ class _LeaveScreenState extends State<LeaveScreen>
         (i) => _LeaveCard(
           leave: leaves[i],
           resolvePerson: _resolvePerson,
-          onEdit: leaves[i].status == 'Pending_TL'
+          onEdit: leaves[i].finalStatus == 'Pending_TL'
               ? () => _openEdit(leaves[i])
               : null,
-          onCancel: leaves[i].status == 'Pending_TL'
+          onCancel: leaves[i].finalStatus == 'Pending_TL'
               ? (r) => cancelLeave(leaves[i].leaveId!, r)
               : null,
         ),
@@ -782,7 +785,7 @@ class _LeaveCardState extends State<_LeaveCard> {
   @override
   Widget build(BuildContext context) {
     final leave = widget.leave;
-    final status = leave.status as String? ?? 'Pending_TL';
+    final status = leave.finalStatus;
     final cfg =
         _statusCfg[status] ??
         {
@@ -954,92 +957,105 @@ class _LeaveCardState extends State<_LeaveCard> {
   }
 
   Widget _buildDetails(LeaveModel leave, Color statusColor) {
-    final status = leave.status;
-    final hasTLAction = leave.recommendedBy != null;
-    final hasManagerAction =
-        leave.approvedBy != null &&
-        leave.status != 'Not_Recommended_By_TL' &&
-        leave.status != 'Rejected_By_TL';
-    final hasRejection = (leave.rejectionReason ?? '').toString().isNotEmpty;
-    final hasCancelNote = (leave.cancelReason ?? '').toString().isNotEmpty;
-    final tlNotRecommended = status == 'Not_Recommended_By_TL';
+    final status = leave.finalStatus;
+
+    LeaveTrailEntry? tlAction;
+    LeaveTrailEntry? managerAction;
+
+    try {
+      tlAction = leave.trail.firstWhere(
+        (e) =>
+            e.action.toLowerCase() == 'recommended' ||
+            e.action.toLowerCase() == 'rejected',
+      );
+    } catch (_) {}
+
+    try {
+      managerAction = leave.trail.firstWhere(
+        (e) =>
+            e.action.toLowerCase() == 'approved' ||
+            e.action.toLowerCase() == 'rejected',
+      );
+    } catch (_) {}
 
     return Column(
       children: [
         Divider(height: 1, thickness: 1, color: Colors.grey.shade100),
+
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+
             children: [
               _infoBlock(
                 icon: Icons.today_rounded,
                 iconColor: _primary,
                 title: 'Duration',
+
                 content:
-                    '${leave.numberOfDays} day${leave.numberOfDays == 1 ? '' : 's'}'
+                    '${leave.effectiveDays} day${leave.effectiveDays == 1 ? '' : 's'}'
                     '  ·  ${_fmtDate(leave.fromDate)}  →  ${_fmtDate(leave.toDate)}',
               ),
+
               const SizedBox(height: 10),
+
               _infoBlock(
                 icon: Icons.person_outline_rounded,
                 iconColor: _primary,
                 title: 'Employee Reason',
                 content: leave.reason ?? '-',
               ),
-              const SizedBox(height: 10),
-              if (hasTLAction ||
-                  status == 'Rejected_By_TL' ||
-                  tlNotRecommended) ...[
+
+              // ───────────────── TL Action ─────────────────
+              if (tlAction != null) ...[
+                const SizedBox(height: 10),
+
                 _actionBlock(
                   icon: Icons.supervisor_account_rounded,
+
                   title: 'Team Lead Review',
-                  person: hasTLAction
-                      ? widget.resolvePerson(leave.recommendedBy)
-                      : 'Team Lead',
-                  timestamp: _fmtDateTime(leave.recommendedAt),
-                  statusLabel: tlNotRecommended
-                      ? 'Not Recommended'
-                      : status == 'Rejected_By_TL'
-                      ? 'Rejected'
-                      : 'Recommended',
-                  statusColor: tlNotRecommended
-                      ? _orange
-                      : status == 'Rejected_By_TL'
-                      ? _red
-                      : _accent,
-                  remark:
-                      (tlNotRecommended || status == 'Rejected_By_TL') &&
-                          hasRejection
-                      ? leave.rejectionReason
-                      : null,
+
+                  person: tlAction.approverName,
+
+                  timestamp: _fmtDateTime(tlAction.actionAt),
+
+                  statusLabel: tlAction.action,
+
+                  statusColor: tlAction.action.toLowerCase() == 'recommended'
+                      ? _accent
+                      : _red,
+
+                  remark: tlAction.comments,
                 ),
-                const SizedBox(height: 10),
               ],
-              if (hasManagerAction) ...[
+
+              // ───────────────── Manager Action ─────────────────
+              if (managerAction != null) ...[
+                const SizedBox(height: 10),
+
                 _actionBlock(
                   icon: Icons.admin_panel_settings_rounded,
+
                   title: 'Manager / Admin Action',
-                  person: widget.resolvePerson(leave.approvedBy),
-                  timestamp: null,
-                  statusLabel: status == 'Approved' ? 'Approved' : 'Rejected',
-                  statusColor: status == 'Approved' ? _accent : _red,
-                  remark: status == 'Rejected_By_Manager' && hasRejection
-                      ? leave.rejectionReason
-                      : null,
+
+                  person: managerAction.approverName,
+
+                  timestamp: _fmtDateTime(managerAction.actionAt),
+
+                  statusLabel: managerAction.action,
+
+                  statusColor: managerAction.action.toLowerCase() == 'approved'
+                      ? _accent
+                      : _red,
+
+                  remark: managerAction.comments,
                 ),
-                const SizedBox(height: 10),
               ],
-              if (hasCancelNote) ...[
-                _infoBlock(
-                  icon: Icons.block_rounded,
-                  iconColor: _textLight,
-                  title: 'Cancellation Reason',
-                  content: leave.cancelReason!,
-                  contentColor: _textMid,
-                ),
-                const SizedBox(height: 10),
-              ],
+
+              const SizedBox(height: 10),
+
               Row(
                 children: [
                   Expanded(
@@ -1048,6 +1064,7 @@ class _LeaveCardState extends State<_LeaveCard> {
                       _fmtDateTime(leave.createdAt),
                     ),
                   ),
+
                   Expanded(
                     child: _miniDetail(
                       'Last Updated',
@@ -1056,12 +1073,18 @@ class _LeaveCardState extends State<_LeaveCard> {
                   ),
                 ],
               ),
+
+              // ───────────────── Buttons ─────────────────
               if (widget.onEdit != null || widget.onCancel != null) ...[
                 const SizedBox(height: 12),
+
                 Divider(height: 1, color: Colors.grey.shade100),
+
                 const SizedBox(height: 10),
+
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
+
                   children: [
                     if (widget.onEdit != null)
                       _actionBtn(
@@ -1070,8 +1093,10 @@ class _LeaveCardState extends State<_LeaveCard> {
                         color: _primary,
                         onTap: widget.onEdit!,
                       ),
+
                     if (widget.onEdit != null && widget.onCancel != null)
                       const SizedBox(width: 8),
+
                     if (widget.onCancel != null)
                       _actionBtn(
                         label: 'Cancel Leave',
@@ -1082,6 +1107,7 @@ class _LeaveCardState extends State<_LeaveCard> {
                   ],
                 ),
               ],
+
               const SizedBox(height: 6),
             ],
           ),

@@ -72,7 +72,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen>
     ), // 0
     AttendanceScreen(employeeId: int.parse(widget.employeeId)), // 1
     AdminHrAttendanceScreen(loginId: widget.loginId), // 2
-    LeaveApprovalScreen(loginId: widget.loginId), // 3
+    // LeaveApprovalScreen(loginId: widget.loginId), // 3
     MGLeaveScreen(employeeId: widget.employeeId), // 4
     // ManageUserScreen(roleId: widget.roleId), // 10
     EmployeeAssignmentsScreen(), //5

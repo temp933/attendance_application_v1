@@ -102,6 +102,12 @@ class AuthService {
       'sessionToken',
       sessionToken,
     ); // ApiConfig reads this key
+
+    if (userType == 'app_admin') {
+      await prefs.setBool('is_app_admin', true);
+    } else {
+      await prefs.remove('is_app_admin');
+    }
     ApiConfig.setToken(sessionToken); // set in memory immediately
     ApiConfig.tenantId = tenantId;
     ApiConfig.employeeId = empId;

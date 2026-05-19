@@ -5,7 +5,7 @@ import '../providers/api_client.dart';
 class LeaveService {
   // ── Employee leaves ────────────────────────────────────────────────────────
   Future<List<LeaveModel>> getEmployeeLeaves(int empId) async {
-    final response = await ApiClient.get('/employees/$empId/leaves');
+    final response = await ApiClient.get('/leave/employees/$empId/leaves');
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
       if (decoded['success'] == true) {
@@ -18,7 +18,7 @@ class LeaveService {
 
   Future<List<LeaveModel>> getPendingTLLeaves(int loginId) async {
     final response = await ApiClient.get(
-      '/leaves/pending-tl?login_id=$loginId',
+      '/leave/leaves/pending-tl?login_id=$loginId',
     );
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
@@ -31,7 +31,7 @@ class LeaveService {
   }
 
   Future<List<LeaveModel>> getPendingManagerLeaves() async {
-    final response = await ApiClient.get('/leaves/pending-manager');
+    final response = await ApiClient.get('/leave/leaves/pending-manager');
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
       if (decoded['success'] == true) {
@@ -45,7 +45,7 @@ class LeaveService {
   Future<List<LeaveModel>> getPendingHRLeaves() => getPendingManagerLeaves();
 
   Future<List<LeaveModel>> getAllPendingLeaves() async {
-    final response = await ApiClient.get('/leaves/all-pending');
+    final response = await ApiClient.get('/leave/leaves/all-pending');
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
       if (decoded['success'] == true) {
@@ -64,7 +64,10 @@ class LeaveService {
   }) async {
     final body = <String, dynamic>{'action': action, 'login_id': loginId};
     if (rejectionReason != null) body['rejection_reason'] = rejectionReason;
-    final response = await ApiClient.put('/leave/$leaveId/tl-action', body);
+    final response = await ApiClient.put(
+      '/leave/leave/$leaveId/tl-action',
+      body,
+    );
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
       return decoded['success'] == true;
@@ -81,7 +84,7 @@ class LeaveService {
     final body = <String, dynamic>{'status': status, 'login_id': loginId};
     if (rejectionReason != null) body['rejection_reason'] = rejectionReason;
     final response = await ApiClient.put(
-      '/leave/$leaveId/manager-action',
+      '/leave/leave/$leaveId/manager-action',
       body,
     );
     if (response.statusCode == 200) {
@@ -92,7 +95,7 @@ class LeaveService {
   }
 
   Future<List<LeaveModel>> getAllLeaveHistory(int empId) async {
-    final response = await ApiClient.get('/leave-history?emp_id=$empId');
+    final response = await ApiClient.get('/leave/leave-history?emp_id=$empId');
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
       if (decoded['success'] == true) {
@@ -107,7 +110,7 @@ class LeaveService {
   }
 
   Future<List<LeaveModel>> getAllLeavesHistory() async {
-    final response = await ApiClient.get('/leaves/all-history');
+    final response = await ApiClient.get('/leave/leaves/all-history');
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
       if (decoded['success'] == true) {
@@ -120,7 +123,7 @@ class LeaveService {
 
   Future<List<LeaveModel>> getTLLeavesHistory(int loginId) async {
     final response = await ApiClient.get(
-      '/leaves/tl-history?login_id=$loginId',
+      '/leave/leaves/tl-history?login_id=$loginId',
     );
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
@@ -138,7 +141,9 @@ class LeaveService {
     int? year,
   }) async {
     final y = year ?? DateTime.now().year;
-    final res = await ApiClient.get('/employees/$empId/leave-balance?year=$y');
+    final res = await ApiClient.get(
+      '/leave/employees/$empId/leave-balance?year=$y',
+    );
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
       if (data['success'] == true) {
@@ -150,7 +155,7 @@ class LeaveService {
 
   // ── Comp-off eligibility ───────────────────────────────────────────────────
   Future<Map<String, dynamic>> getCompoffEligibility(int empId) async {
-    final res = await ApiClient.get('/employees/$empId/compoff-eligible');
+    final res = await ApiClient.get('/leave/employees/$empId/compoff-eligible');
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
       if (data['success'] == true) {
@@ -165,7 +170,7 @@ class LeaveService {
 
   // ── Working days preview ───────────────────────────────────────────────────
   Future<int?> getWorkingDays(String from, String to) async {
-    final res = await ApiClient.get('/working-days?from=$from&to=$to');
+    final res = await ApiClient.get('/leave/working-days?from=$from&to=$to');
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
       if (data['success'] == true) return data['working_days'] as int?;
@@ -193,13 +198,16 @@ class LeaveService {
     if (isHalfDay && halfDayPeriod != null) {
       body['half_day_period'] = halfDayPeriod;
     }
-    final res = await ApiClient.post('/employees/$empId/apply-leave', body);
+    final res = await ApiClient.post(
+      '/leave/employees/$empId/apply-leave',
+      body,
+    );
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
   // ── Regularization ─────────────────────────────────────────────────────────
   Future<List<dynamic>> getMyRegularizations(int empId) async {
-    final res = await ApiClient.get('/regularization?emp_id=$empId');
+    final res = await ApiClient.get('/leave/regularization?emp_id=$empId');
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
       if (data['success'] == true) return data['data'] as List;
@@ -221,13 +229,13 @@ class LeaveService {
     };
     if (expectedIn != null) body['expected_in'] = expectedIn;
     if (expectedOut != null) body['expected_out'] = expectedOut;
-    final res = await ApiClient.post('/regularization', body);
+    final res = await ApiClient.post('/leave/regularization', body);
     final data = jsonDecode(res.body);
     return data['success'] == true;
   }
 
   Future<bool> cancelRegularization(int regId, int empId) async {
-    final res = await ApiClient.put('/regularization/$regId/cancel', {
+    final res = await ApiClient.put('/leave/regularization/$regId/cancel', {
       'emp_id': empId,
     });
     final data = jsonDecode(res.body);
@@ -236,7 +244,7 @@ class LeaveService {
 
   Future<List<dynamic>> getPendingRegularizationsTL(int loginId) async {
     final res = await ApiClient.get(
-      '/regularization/pending-tl?login_id=$loginId',
+      '/leave/regularization/pending-tl?login_id=$loginId',
     );
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
@@ -253,13 +261,16 @@ class LeaveService {
   }) async {
     final body = <String, dynamic>{'action': action, 'login_id': loginId};
     if (remark != null) body['remark'] = remark;
-    final res = await ApiClient.put('/regularization/$regId/tl-action', body);
+    final res = await ApiClient.put(
+      '/leave/regularization/$regId/tl-action',
+      body,
+    );
     final data = jsonDecode(res.body);
     return data['success'] == true;
   }
 
   Future<List<dynamic>> getPendingRegularizationsManager() async {
-    final res = await ApiClient.get('/regularization/pending-manager');
+    final res = await ApiClient.get('/leave/regularization/pending-manager');
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
       if (data['success'] == true) return data['data'] as List;
@@ -276,7 +287,7 @@ class LeaveService {
     final body = <String, dynamic>{'action': action, 'login_id': loginId};
     if (remark != null) body['remark'] = remark;
     final res = await ApiClient.put(
-      '/regularization/$regId/manager-action',
+      '/leave/regularization/$regId/manager-action',
       body,
     );
     final data = jsonDecode(res.body);
@@ -285,7 +296,7 @@ class LeaveService {
 
   // ── Comp-off ───────────────────────────────────────────────────────────────
   Future<Map<String, dynamic>?> getCompoffBalance(int empId) async {
-    final res = await ApiClient.get('/employees/$empId/compoff-balance');
+    final res = await ApiClient.get('/leave/employees/$empId/compoff-balance');
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
       if (data['success'] == true) return data as Map<String, dynamic>;
@@ -294,7 +305,7 @@ class LeaveService {
   }
 
   Future<List<dynamic>> getMyCompoffEarned(int empId) async {
-    final res = await ApiClient.get('/compoff/earn?emp_id=$empId');
+    final res = await ApiClient.get('/leave/compoff/earn?emp_id=$empId');
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
       if (data['success'] == true) return data['data'] as List;
@@ -314,13 +325,13 @@ class LeaveService {
       'reason': reason,
     };
     if (workedHours != null) body['worked_hours'] = workedHours;
-    final res = await ApiClient.post('/compoff/earn', body);
+    final res = await ApiClient.post('/leave/compoff/earn', body);
     final data = jsonDecode(res.body);
     return data['success'] == true;
   }
 
   Future<bool> cancelCompoffEarn(int compoffId, int empId) async {
-    final res = await ApiClient.put('/compoff/earn/$compoffId/cancel', {
+    final res = await ApiClient.put('/leave/compoff/earn/$compoffId/cancel', {
       'emp_id': empId,
     });
     final data = jsonDecode(res.body);
@@ -328,7 +339,7 @@ class LeaveService {
   }
 
   Future<List<dynamic>> getMyCompoffAvailed(int empId) async {
-    final res = await ApiClient.get('/compoff/avail?emp_id=$empId');
+    final res = await ApiClient.get('/leave/compoff/avail?emp_id=$empId');
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
       if (data['success'] == true) return data['data'] as List;
@@ -348,13 +359,13 @@ class LeaveService {
       'days_used': daysUsed,
     };
     if (reason != null) body['reason'] = reason;
-    final res = await ApiClient.post('/compoff/avail', body);
+    final res = await ApiClient.post('/leave/compoff/avail', body);
     final data = jsonDecode(res.body);
     return data['success'] == true;
   }
 
   Future<bool> cancelCompoffAvail(int availId, int empId) async {
-    final res = await ApiClient.put('/compoff/avail/$availId/cancel', {
+    final res = await ApiClient.put('/leave/compoff/avail/$availId/cancel', {
       'emp_id': empId,
     });
     final data = jsonDecode(res.body);

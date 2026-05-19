@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../services/auth_service.dart';
-import '../services/biometric_service.dart';
 import 'change_password_screen.dart';
 import 'emp_dashboard_screen.dart';
 import 'admin_dashboard.dart';
@@ -54,23 +53,12 @@ class _LoginScreenState extends State<LoginScreen>
         setState(() => _activeTab = _tabController.index);
       }
     });
-    _checkBio();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
-  }
-
-  Future<void> _checkBio() async {
-    final available = await BiometricService.isAvailable();
-    final enabled = await BiometricService.isBioEnabled();
-    if (mounted)
-      setState(() {
-        _bioAvailable = available;
-        _bioEnabled = enabled;
-      });
   }
 
   void _switchTab(int index) {
@@ -413,23 +401,26 @@ class _SignInTabState extends State<_SignInTab> {
         if (!mounted) return;
         FocusScope.of(context).unfocus();
 
-        // ── Save session so validateSession() knows this is App Admin ──
+        // ✅ Correct keys matching backend response
         await AuthService.saveSession(
-          loginId: ((body['loginId'] as num?)?.toInt() ?? 0).toString(),
-          empId: ((body['empId'] as num?)?.toInt() ?? 0).toString(),
-          role: ((body['roleId'] as num?)?.toInt() ?? 6).toString(),
+          loginId: (body['adminId'] as num?)?.toInt().toString() ?? '0',
+          empId: '0',
+          role: '6',
           userType: body['userType'] as String? ?? 'app_admin',
-          username: 'App_Admin',
-          sessionToken: body['sessionToken'] as String? ?? '',
-          tenantId: body['tenantId'] as String? ?? 'global',
+          username: body['username'] as String? ?? 'App_Admin',
+          sessionToken:
+              body['token'] as String? ?? '', // ← 'token' not 'sessionToken'
+          tenantId: 'global', // ← hardcoded, not in response
         );
 
         widget.onNavigate(
-          loginId: (body['loginId'] as num?)?.toInt() ?? 0,
-          empId: (body['empId'] as num?)?.toInt() ?? 0,
-          roleId: (body['roleId'] as num?)?.toInt() ?? 6,
+          loginId:
+              (body['adminId'] as num?)?.toInt() ??
+              0, // ← 'adminId' not 'loginId'
+          empId: 0,
+          roleId: 6,
           userType: body['userType'] as String? ?? 'app_admin',
-          tenantId: body['tenantId'] as String? ?? 'global',
+          tenantId: 'global',
         );
       } else {
         setState(
@@ -540,44 +531,6 @@ class _SignInTabState extends State<_SignInTab> {
       setState(() => _error = e.message);
     } catch (_) {
       setState(() => _error = 'Unexpected error. Please try again.');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _loginWithBio() async {
-    final loginId = await BiometricService.getBioLoginId();
-    if (loginId == null) return;
-    final verified = await BiometricService.authenticate();
-    if (!verified || !mounted) return;
-    setState(() => _loading = true);
-    try {
-      final session = await AuthService.getSession();
-      if (session != null) {
-        // ── Restore ApiConfig from saved session ──────────────────────
-        ApiConfig.setToken(session['sessionToken'] ?? '');
-        ApiConfig.tenantId = session['tenantId'] ?? '';
-        ApiConfig.employeeId = session['empId'] ?? ''; // ← ADD THIS
-        // ─────────────────────────────────────────────────────────────
-        widget.onNavigate(
-          loginId: int.parse(session['loginId']!),
-          empId: int.parse(session['empId']!),
-          roleId: int.parse(session['role']!),
-          userType: session['userType'] ?? 'employee',
-          tenantId: session['tenantId'] ?? '',
-        );
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Session expired. Please sign in.'),
-              backgroundColor: _errorRed,
-            ),
-          );
-        }
-        await BiometricService.disableBio();
-        widget.onBioDisabled();
-      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -815,34 +768,6 @@ class _SignInTabState extends State<_SignInTab> {
                 icon: Icons.verified_rounded,
               ),
 
-            if (widget.bioAvailable && widget.bioEnabled) ...[
-              const SizedBox(height: 14),
-              const _AppOrDivider(),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: _loading ? null : _loginWithBio,
-                icon: const Icon(
-                  Icons.fingerprint_rounded,
-                  size: 22,
-                  color: _primary,
-                ),
-                label: const Text(
-                  'Sign In with Biometrics',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: _primary,
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: _primary.withOpacity(0.4)),
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ],
             const SizedBox(height: 8),
           ],
         ),
