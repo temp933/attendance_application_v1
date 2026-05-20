@@ -66,7 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     NormalAttendanceScreen(), // 1
     GpsAttendanceScreen(), // 2
     FaceGpsAttendanceScreen(employeeId: widget.empId),
-    LeaveScreen(employeeId: widget.empId.toString()), // 3
+    LeaveScreen(), // 3
     // TasksScreen(), // 4
     EmployeeAssignmentsScreen(), // 5
     // TravelOnsiteScreen(), // 6

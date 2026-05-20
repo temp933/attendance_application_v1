@@ -25,6 +25,7 @@ import './Attendance screens/normal_attendance_management_screen.dart';
 import './Attendance screens/gps_attendance_management_screen.dart';
 import './Attendance screens/face_gps_attendance_management_screen.dart';
 import 'admin_face_approval.dart';
+import 'leave_policy_management.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final int initialIndex;
@@ -108,13 +109,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ApiConfig.headers['Authorization']?.replaceFirst('Bearer ', '') ??
             '',
       ),
-      // LeaveApprovalScreen(loginId: widget.loginId), // 3
+
       AdminDepartmentsScreen(tenantId: widget.tenantId), // 4
       ManageUserScreen(roleId: widget.roleId, tenantId: widget.tenantId), // 5
       AdminApprovalPage(),
       AdminFaceApprovalPage(),
       AdminProfileScreen(employeeId: widget.employeeId), // 6
-      // 7
+
+      LeavePolicyManagementScreen(), // 7
+      LeaveApprovalScreen(), // 8
     ]);
     print(
       'DEBUG AdminDepartmentsScreen receiving tenantId: "${widget.tenantId}"',
@@ -127,12 +130,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     'Normal Attendance',
     'GPS Attendance',
     'Face & GPS Attendance',
-    'Leave Management',
     'Departments',
     'Manage Users',
     'Approvals',
     'Face Approval',
     'Profile',
+    'Leave Policy Management',
+    'Leave Management',
   ];
 
   // ── Rail items ─────────────────────────────────────────────────────────────
@@ -160,11 +164,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     ),
 
     NavigationRailDestination(
-      icon: Icon(Icons.event_busy_outlined),
-      selectedIcon: Icon(Icons.event_busy),
-      label: Text('Leave Management'),
-    ),
-    NavigationRailDestination(
       icon: Icon(Icons.apartment_outlined),
       selectedIcon: Icon(Icons.apartment),
       label: Text('Departments'),
@@ -188,6 +187,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       icon: Icon(Icons.person),
       selectedIcon: Icon(Icons.person),
       label: Text('Profile'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.policy_outlined),
+      selectedIcon: Icon(Icons.policy),
+      label: Text('Leave Policy'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.leave_bags_at_home_outlined),
+      selectedIcon: Icon(Icons.leave_bags_at_home),
+      label: Text('Leave Management'),
     ),
   ];
 

@@ -5,7 +5,7 @@ import '../providers/api_client.dart';
 class LeaveService {
   // ── Employee leaves ────────────────────────────────────────────────────────
   Future<List<LeaveModel>> getEmployeeLeaves(int empId) async {
-    final response = await ApiClient.get('/leave/employees/$empId/leaves');
+    final response = await ApiClient.get('/leave/$empId/leaves');
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
       if (decoded['success'] == true) {
@@ -110,7 +110,7 @@ class LeaveService {
   }
 
   Future<List<LeaveModel>> getAllLeavesHistory() async {
-    final response = await ApiClient.get('/leave/leaves/all-history');
+    final response = await ApiClient.get('/leave/all-history');
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
       if (decoded['success'] == true) {

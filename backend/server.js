@@ -657,8 +657,16 @@ const faceEmbRouter = require("./admin_face_approval");
 app.use("/api/admin", faceEmbRouter);
 
 const leaveRouter = require("./leave");
-app.use("/api/leave", leaveRouter);
+app.use("/api/leave", authMiddleware, leaveRouter);
 
+// In server.js — temporary stubs for leave status summary and dashboard data
+app.get("/api/leave-status-summary", (req, res) => {
+  res.json({ ok: true, data: [] });
+});
+
+app.get("/api/dashboard", (req, res) => {
+  res.json({ ok: true, data: {} });
+});
 // ─────────────────────────────────────────────────────────────────────────────
 // START SERVER
 // ─────────────────────────────────────────────────────────────────────────────

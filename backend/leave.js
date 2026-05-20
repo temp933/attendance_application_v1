@@ -1,659 +1,1054 @@
 "use strict";
 
+/**
+ * leave.js  —  Leave Policy + Apply/Approve/Reject/Cancel Module (Enterprise HRMS)
+ *
+ * Mount in app.js:
+ *   const leaveRouter = require('./leave');
+ *   app.use('/api/leave', authMiddleware, leaveRouter);
+ *
+ * Leave Policy routes   → /api/leave/policy/...
+ * Employee Leave routes → /api/leave/...
+ */
+
 const express = require("express");
+const db = require("./config/db");
 const router = express.Router();
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Shared Helpers ────────────────────────────────────────────────────────────
 
-const MODULE_NAME = "LEAVE";
-const VALID_TYPES = ["Paid", "Casual", "Sick", "Comp-Off"];
-const VALID_PERIODS = ["AM", "PM"];
-const STATUS_PENDING = "Pending";
-const STATUS_APPROVED = "Approved";
-const STATUS_REJECTED = "Rejected";
+const getTenantId = (req) =>
+  req.user?.tenant_id || req.user?.tenantId || req.headers["x-tenant-id"] || "";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const send = (res, status, ok, message, data = {}) =>
+  res.status(status).json({ ok, message, ...data });
 
-/**
- * Uniform success response
- */
-const ok = (res, data = {}, message = "Success", statusCode = 200) =>
-  res.status(statusCode).json({ success: true, message, data });
-
-/**
- * Uniform error response
- */
-const fail = (
-  res,
-  message = "An error occurred",
-  statusCode = 400,
-  error = null,
-) => {
-  const payload = { success: false, message };
-  if (process.env.NODE_ENV !== "production" && error) {
-    payload.debug = error.message ?? String(error);
+function calcDays(startDate, endDate, isHalfDay) {
+  if (isHalfDay) return 0.5;
+  let count = 0;
+  const cur = new Date(startDate);
+  const end = new Date(endDate);
+  while (cur <= end) {
+    if (cur.getDay() !== 0) count++;
+    cur.setDate(cur.getDate() + 1);
   }
-  return res.status(statusCode).json(payload);
-};
+  return count;
+}
 
 /**
- * Wrap async route handlers — surfaces unhandled promise rejections as 500s
+ * Resolve the actual emp_id for an approver_type.
+ * NOTE: All queries use emp_id (not employee_id) to match the DB schema.
  */
-const asyncHandler = (fn) => (req, res, next) =>
-  Promise.resolve(fn(req, res, next)).catch((err) => {
-    console.error("[LeaveManagement]", err);
-    return fail(res, "Internal server error", 500, err);
-  });
+async function resolveApprover(
+  conn,
+  tenantId,
+  empId,
+  approverType,
+  specificId,
+) {
+  switch (approverType) {
+    case "REPORTING_MANAGER": {
+      const [[emp]] = await conn.execute(
+        `SELECT reporting_to_employee_id FROM employee_master
+         WHERE emp_id = ? AND tenant_id = ? LIMIT 1`,
+        [empId, tenantId],
+      );
+      return emp?.reporting_to_employee_id ?? null;
+    }
+    case "DEPARTMENT_HEAD": {
+      return null; // Future: resolve via department_id
+    }
+    case "HR": {
+      const [[hr]] = await conn.execute(
+        `SELECT em.emp_id FROM employee_master em
+         JOIN role_master rm ON em.role_id = rm.role_id
+         WHERE em.tenant_id = ? AND UPPER(rm.role_name) LIKE '%HR%'
+         ORDER BY em.emp_id ASC LIMIT 1`,
+        [tenantId],
+      );
+      return hr?.emp_id ?? null; // ← was hr?.employee_id (bug)
+    }
+    case "ADMIN": {
+      const [[admin]] = await conn.execute(
+        `SELECT em.emp_id FROM employee_master em
+         JOIN role_master rm ON em.role_id = rm.role_id
+         WHERE em.tenant_id = ? AND UPPER(rm.role_name) LIKE '%ADMIN%'
+         ORDER BY em.emp_id ASC LIMIT 1`,
+        [tenantId],
+      );
+      return admin?.emp_id ?? null; // ← was admin?.employee_id (bug)
+    }
+    case "SPECIFIC_EMPLOYEE":
+      return specificId ?? null;
+    default:
+      return null;
+  }
+}
 
-/**
- * Run a callback inside a mysql2 transaction on the given connection.
- * Commits on success, rolls back on error, always releases connection.
- */
-const withTransaction = async (db, callback) => {
-  const conn = await db.promise().getConnection();
-  await conn.beginTransaction();
+const VALID_APPROVER_TYPES = [
+  "REPORTING_MANAGER",
+  "DEPARTMENT_HEAD",
+  "HR",
+  "ADMIN",
+  "SPECIFIC_EMPLOYEE",
+];
+
+function validateApprovalFlow(approval_flow) {
+  if (!Array.isArray(approval_flow) || approval_flow.length === 0)
+    return "approval_flow array is mandatory and must not be empty";
+  for (let i = 0; i < approval_flow.length; i++) {
+    const step = approval_flow[i];
+    if (!VALID_APPROVER_TYPES.includes(step.approver_type))
+      return `Invalid approver_type at level ${i + 1}`;
+    if (
+      step.approver_type === "SPECIFIC_EMPLOYEE" &&
+      !step.approver_employee_id
+    )
+      return `approver_employee_id required for SPECIFIC_EMPLOYEE at level ${i + 1}`;
+    const expectedLevel = i + 1;
+    if (step.approval_level && Number(step.approval_level) !== expectedLevel)
+      return `Approval levels must be sequential. Expected ${expectedLevel} at index ${i}`;
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LEAVE POLICY ROUTES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── 1. Create Leave Policy   POST /api/leave/policy/create ───────────────────
+
+router.post("/policy/create", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const { leave_name, max_days, is_paid, requires_approval, approval_flow } =
+    req.body;
+
+  if (!leave_name || typeof leave_name !== "string" || !leave_name.trim())
+    return send(res, 400, false, "leave_name is required");
+  if (!max_days || isNaN(Number(max_days)) || Number(max_days) <= 0)
+    return send(res, 400, false, "max_days must be a positive number");
+
+  const flowError = validateApprovalFlow(approval_flow);
+  if (flowError) return send(res, 400, false, flowError);
+
+  const conn = await db.getConnection();
   try {
-    const result = await callback(conn);
+    await conn.beginTransaction();
+
+    const [ltResult] = await conn.execute(
+      `INSERT INTO leave_type_master
+         (tenant_id, leave_name, max_days, is_paid, requires_approval, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+      [
+        tenant_id,
+        leave_name.trim(),
+        Number(max_days),
+        is_paid ? 1 : 0,
+        requires_approval ? 1 : 0,
+      ],
+    );
+    const leave_type_id = ltResult.insertId;
+
+    for (let i = 0; i < approval_flow.length; i++) {
+      const step = approval_flow[i];
+      await conn.execute(
+        `INSERT INTO leave_policy_flow
+           (tenant_id, leave_type_id, approval_level, approver_type, approver_employee_id, is_mandatory, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          tenant_id,
+          leave_type_id,
+          i + 1,
+          step.approver_type,
+          step.approver_type === "SPECIFIC_EMPLOYEE"
+            ? step.approver_employee_id || null
+            : null,
+          step.is_mandatory ? 1 : 0,
+        ],
+      );
+    }
+
     await conn.commit();
-    return result;
+    return send(res, 201, true, "Leave policy created successfully", {
+      leave_type_id,
+    });
   } catch (err) {
     await conn.rollback();
-    throw err;
+    console.error("[leave/policy/create]", err);
+    return send(res, 500, false, "Internal server error");
   } finally {
     conn.release();
   }
-};
+});
 
-/**
- * Fetch a single employee row (only what we need).
- * Returns null when not found.
- */
-const getEmployee = async (db, emp_id, tenant_id) => {
-  const [rows] = await db.promise().query(
-    `SELECT emp_id, tenant_id, first_name, last_name, reporting_to_employee_id
-       FROM employee_master
-      WHERE emp_id = ? AND tenant_id = ?
-      LIMIT 1`,
-    [emp_id, tenant_id],
-  );
-  return rows[0] ?? null;
-};
+// ─── 2. List Leave Policies   GET /api/leave/policy/list ─────────────────────
 
-/**
- * Insert a row into approval_trail.
- * Accepts an open connection (inside a transaction) OR the pool itself.
- */
-const insertTrail = async (
-  executor,
-  {
-    tenant_id,
-    record_id,
-    approval_level,
-    approver_employee_id,
-    action,
-    comments,
-  },
-) => {
-  const sql = `
-    INSERT INTO approval_trail
-      (tenant_id, module_name, record_id, approval_level, approver_employee_id, action, comments, action_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-  `;
-  await executor.query(sql, [
-    tenant_id,
-    MODULE_NAME,
-    record_id,
-    approval_level,
-    approver_employee_id,
-    action,
-    comments ?? null,
-  ]);
-};
+router.get("/policy/list", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. APPLY LEAVE
-//    POST /apply-leave
-// ─────────────────────────────────────────────────────────────────────────────
-/**
- * @route   POST /apply-leave
- * @desc    Authenticated employee submits a new leave request.
- *          The system auto-resolves the first approver from reporting_to_employee_id.
- * @access  Authenticated employee
- * @body    {
- *            leave_type, leave_start_date, leave_end_date,
- *            number_of_days, reason,
- *            is_half_day (bool, optional),
- *            half_day_period ('AM'|'PM', required when is_half_day = true)
- *          }
- */
-router.post(
-  "/apply-leave",
-  asyncHandler(async (req, res) => {
-    const { emp_id, tenant_id } = req.user;
-
-    // ── Validate body ──────────────────────────────────────────────────────
-    const {
-      leave_type,
-      leave_start_date,
-      leave_end_date,
-      number_of_days,
-      reason,
-      is_half_day = false,
-      half_day_period,
-    } = req.body;
-
-    if (!leave_type || !VALID_TYPES.includes(leave_type)) {
-      return fail(
-        res,
-        `Invalid leave_type. Must be one of: ${VALID_TYPES.join(", ")}`,
-      );
-    }
-    if (!leave_start_date || !leave_end_date) {
-      return fail(res, "leave_start_date and leave_end_date are required");
-    }
-    if (
-      !number_of_days ||
-      isNaN(Number(number_of_days)) ||
-      Number(number_of_days) <= 0
-    ) {
-      return fail(res, "number_of_days must be a positive number");
-    }
-    if (!reason || String(reason).trim().length === 0) {
-      return fail(res, "reason is required");
-    }
-    if (
-      is_half_day &&
-      (!half_day_period || !VALID_PERIODS.includes(half_day_period))
-    ) {
-      return fail(
-        res,
-        `half_day_period must be 'AM' or 'PM' when is_half_day is true`,
-      );
-    }
-
-    const db = req.app.locals.db;
-
-    // ── Fetch employee + reporting manager ──────────────────────────────────
-    const employee = await getEmployee(db, emp_id, tenant_id);
-    if (!employee) {
-      return fail(res, "Employee not found", 404);
-    }
-    if (!employee.reporting_to_employee_id) {
-      return fail(
-        res,
-        "No reporting manager configured for this employee. Please contact HR.",
-        422,
-      );
-    }
-
-    // ── Confirm the reporting manager actually exists in this tenant ─────────
-    const manager = await getEmployee(
-      db,
-      employee.reporting_to_employee_id,
-      tenant_id,
+  try {
+    const [rows] = await db.execute(
+      `SELECT
+         lt.leave_type_id, lt.leave_name, lt.max_days, lt.is_paid,
+         lt.requires_approval, lt.created_at, lt.updated_at,
+         COUNT(lpf.policy_flow_id) AS total_approval_levels
+       FROM leave_type_master lt
+       LEFT JOIN leave_policy_flow lpf
+         ON lt.leave_type_id = lpf.leave_type_id AND lpf.tenant_id = lt.tenant_id
+       WHERE lt.tenant_id = ?
+       GROUP BY lt.leave_type_id, lt.leave_name, lt.max_days,
+                lt.is_paid, lt.requires_approval, lt.created_at, lt.updated_at
+       ORDER BY lt.created_at DESC`,
+      [tenant_id],
     );
-    if (!manager) {
-      return fail(res, "Reporting manager not found. Please contact HR.", 422);
+    return send(res, 200, true, "Leave policies fetched", { data: rows });
+  } catch (err) {
+    console.error("[leave/policy/list]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
+
+// ─── 3. Get Single Leave Policy   GET /api/leave/policy/:leave_type_id ────────
+
+router.get("/policy/:leave_type_id", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  const { leave_type_id } = req.params;
+
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+  if (!leave_type_id || isNaN(Number(leave_type_id)))
+    return send(res, 400, false, "Invalid leave_type_id");
+
+  try {
+    const [[leaveType]] = await db.execute(
+      `SELECT * FROM leave_type_master WHERE leave_type_id = ? AND tenant_id = ?`,
+      [leave_type_id, tenant_id],
+    );
+    if (!leaveType) return send(res, 404, false, "Leave policy not found");
+
+    const [approvalFlow] = await db.execute(
+      `SELECT * FROM leave_policy_flow
+       WHERE leave_type_id = ? AND tenant_id = ? ORDER BY approval_level ASC`,
+      [leave_type_id, tenant_id],
+    );
+    return send(res, 200, true, "Leave policy fetched", {
+      data: { ...leaveType, approval_flow: approvalFlow },
+    });
+  } catch (err) {
+    console.error("[leave/policy/:id]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
+
+// ─── 4. Update Leave Policy   PUT /api/leave/policy/update/:leave_type_id ─────
+
+router.put("/policy/update/:leave_type_id", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  const { leave_type_id } = req.params;
+  const { leave_name, max_days, is_paid, requires_approval, approval_flow } =
+    req.body;
+
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+  if (!leave_type_id || isNaN(Number(leave_type_id)))
+    return send(res, 400, false, "Invalid leave_type_id");
+  if (!leave_name || typeof leave_name !== "string" || !leave_name.trim())
+    return send(res, 400, false, "leave_name is required");
+  if (!max_days || isNaN(Number(max_days)) || Number(max_days) <= 0)
+    return send(res, 400, false, "max_days must be a positive number");
+
+  const flowError = validateApprovalFlow(approval_flow);
+  if (flowError) return send(res, 400, false, flowError);
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[existing]] = await conn.execute(
+      `SELECT leave_type_id FROM leave_type_master WHERE leave_type_id = ? AND tenant_id = ?`,
+      [leave_type_id, tenant_id],
+    );
+    if (!existing) {
+      await conn.rollback();
+      return send(res, 404, false, "Leave policy not found");
     }
 
-    // ── Insert inside a transaction ─────────────────────────────────────────
-    const leaveId = await withTransaction(db, async (conn) => {
-      // Insert leave_master
-      const insertLeaveSql = `
-        INSERT INTO leave_master (
-          tenant_id, emp_id, leave_type,
-          leave_start_date, leave_end_date,
-          is_half_day, half_day_period, number_of_days,
-          reason, current_approval_level,
-          current_approver_employee_id, final_status,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NOW(), NOW())
-      `;
-      const [result] = await conn.query(insertLeaveSql, [
+    await conn.execute(
+      `UPDATE leave_type_master
+       SET leave_name = ?, max_days = ?, is_paid = ?, requires_approval = ?, updated_at = NOW()
+       WHERE leave_type_id = ? AND tenant_id = ?`,
+      [
+        leave_name.trim(),
+        Number(max_days),
+        is_paid ? 1 : 0,
+        requires_approval ? 1 : 0,
+        leave_type_id,
+        tenant_id,
+      ],
+    );
+    await conn.execute(
+      `DELETE FROM leave_policy_flow WHERE leave_type_id = ? AND tenant_id = ?`,
+      [leave_type_id, tenant_id],
+    );
+    for (let i = 0; i < approval_flow.length; i++) {
+      const step = approval_flow[i];
+      await conn.execute(
+        `INSERT INTO leave_policy_flow
+           (tenant_id, leave_type_id, approval_level, approver_type, approver_employee_id, is_mandatory, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          tenant_id,
+          leave_type_id,
+          i + 1,
+          step.approver_type,
+          step.approver_type === "SPECIFIC_EMPLOYEE"
+            ? step.approver_employee_id || null
+            : null,
+          step.is_mandatory ? 1 : 0,
+        ],
+      );
+    }
+
+    await conn.commit();
+    return send(res, 200, true, "Leave policy updated successfully");
+  } catch (err) {
+    await conn.rollback();
+    console.error("[leave/policy/update]", err);
+    return send(res, 500, false, "Internal server error");
+  } finally {
+    conn.release();
+  }
+});
+
+// ─── 5. Delete Leave Policy   DELETE /api/leave/policy/delete/:leave_type_id ──
+
+router.delete("/policy/delete/:leave_type_id", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  const { leave_type_id } = req.params;
+
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+  if (!leave_type_id || isNaN(Number(leave_type_id)))
+    return send(res, 400, false, "Invalid leave_type_id");
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[existing]] = await conn.execute(
+      `SELECT leave_type_id FROM leave_type_master WHERE leave_type_id = ? AND tenant_id = ?`,
+      [leave_type_id, tenant_id],
+    );
+    if (!existing) {
+      await conn.rollback();
+      return send(res, 404, false, "Leave policy not found");
+    }
+
+    await conn.execute(
+      `DELETE FROM leave_policy_flow WHERE leave_type_id = ? AND tenant_id = ?`,
+      [leave_type_id, tenant_id],
+    );
+    await conn.execute(
+      `DELETE FROM leave_type_master WHERE leave_type_id = ? AND tenant_id = ?`,
+      [leave_type_id, tenant_id],
+    );
+
+    await conn.commit();
+    return send(res, 200, true, "Leave policy deleted successfully");
+  } catch (err) {
+    await conn.rollback();
+    console.error("[leave/policy/delete]", err);
+    return send(res, 500, false, "Internal server error");
+  } finally {
+    conn.release();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EMPLOYEE LEAVE ROUTES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── 6. Apply Leave   POST /api/leave/apply ───────────────────────────────────
+
+router.post("/apply", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const emp_id = req.user?.employee_id || req.user?.emp_id;
+  if (!emp_id)
+    return send(res, 401, false, "Unauthorized: employee not identified");
+
+  const {
+    leave_type_id,
+    leave_start_date,
+    leave_end_date,
+    is_half_day = false,
+    half_day_period = null,
+    reason,
+  } = req.body;
+
+  if (!leave_type_id) return send(res, 400, false, "leave_type_id is required");
+  if (!leave_start_date)
+    return send(res, 400, false, "leave_start_date is required");
+  if (!leave_end_date)
+    return send(res, 400, false, "leave_end_date is required");
+  if (!reason || !reason.trim())
+    return send(res, 400, false, "reason is required");
+
+  const startDt = new Date(leave_start_date);
+  const endDt = new Date(leave_end_date);
+  if (isNaN(startDt) || isNaN(endDt))
+    return send(res, 400, false, "Invalid date format. Use YYYY-MM-DD");
+  if (startDt > endDt)
+    return send(res, 400, false, "leave_start_date must be <= leave_end_date");
+
+  if (is_half_day) {
+    const sameDay =
+      leave_start_date === leave_end_date ||
+      startDt.toDateString() === endDt.toDateString();
+    if (!sameDay)
+      return send(
+        res,
+        400,
+        false,
+        "Half day is allowed only for a single date",
+      );
+    if (!["AM", "PM"].includes(half_day_period))
+      return send(
+        res,
+        400,
+        false,
+        "half_day_period must be AM or PM for half day",
+      );
+  }
+
+  const number_of_days = calcDays(startDt, endDt, is_half_day);
+  if (number_of_days === 0)
+    return send(
+      res,
+      400,
+      false,
+      "Selected date range contains no working days",
+    );
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Verify employee belongs to tenant (uses emp_id)
+    const [[empRow]] = await conn.execute(
+      `SELECT emp_id FROM employee_master WHERE emp_id = ? AND tenant_id = ? LIMIT 1`,
+      [emp_id, tenant_id],
+    );
+    if (!empRow) {
+      await conn.rollback();
+      return send(res, 403, false, "Employee does not belong to this tenant");
+    }
+
+    const [[policy]] = await conn.execute(
+      `SELECT leave_type_id, requires_approval FROM leave_type_master
+       WHERE leave_type_id = ? AND tenant_id = ? LIMIT 1`,
+      [leave_type_id, tenant_id],
+    );
+    if (!policy) {
+      await conn.rollback();
+      return send(res, 404, false, "Leave policy not found for this tenant");
+    }
+
+    const [[overlap]] = await conn.execute(
+      `SELECT leave_id FROM leave_master
+       WHERE tenant_id = ? AND emp_id = ?
+         AND final_status NOT IN ('Rejected','Cancelled')
+         AND leave_start_date <= ? AND leave_end_date >= ?
+       LIMIT 1`,
+      [tenant_id, emp_id, leave_end_date, leave_start_date],
+    );
+    if (overlap) {
+      await conn.rollback();
+      return send(
+        res,
+        409,
+        false,
+        "Overlapping leave already exists for the selected dates",
+      );
+    }
+
+    const [flowRows] = await conn.execute(
+      `SELECT * FROM leave_policy_flow
+       WHERE leave_type_id = ? AND tenant_id = ? ORDER BY approval_level ASC`,
+      [leave_type_id, tenant_id],
+    );
+
+    const [insertResult] = await conn.execute(
+      `INSERT INTO leave_master
+         (tenant_id, emp_id, leave_type_id, leave_start_date, leave_end_date,
+          is_half_day, half_day_period, status, reason, number_of_days,
+          current_approval_level, final_status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, 'Pending', NOW(), NOW())`,
+      [
         tenant_id,
         emp_id,
-        leave_type,
+        leave_type_id,
         leave_start_date,
         leave_end_date,
         is_half_day ? 1 : 0,
         is_half_day ? half_day_period : null,
-        Number(number_of_days),
         reason.trim(),
-        employee.reporting_to_employee_id,
-        STATUS_PENDING,
-      ]);
-
-      const newLeaveId = result.insertId;
-
-      // Insert first approval_trail entry
-      await insertTrail(conn, {
-        tenant_id,
-        record_id: newLeaveId,
-        approval_level: 0, // 0 = submitted by employee
-        approver_employee_id: emp_id,
-        action: "Submitted",
-        comments: reason.trim(),
-      });
-
-      return newLeaveId;
-    });
-
-    return ok(
-      res,
-      { leave_id: leaveId },
-      "Leave request submitted successfully",
-      201,
+        number_of_days,
+        flowRows.length > 0 ? 1 : 0,
+      ],
     );
-  }),
-);
+    const leave_id = insertResult.insertId;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. APPROVER INBOX
-//    GET /approver-inbox
-// ─────────────────────────────────────────────────────────────────────────────
-/**
- * @route   GET /approver-inbox
- * @desc    Returns all pending leave requests assigned to the logged-in approver.
- * @access  Any employee who is a reporting manager
- */
-router.get(
-  "/approver-inbox",
-  asyncHandler(async (req, res) => {
-    const { emp_id, tenant_id } = req.user;
-    const db = req.app.locals.db;
-
-    const sql = `
-      SELECT
-        lm.leave_id,
-        lm.emp_id,
-        CONCAT(e.first_name, ' ', e.last_name)  AS employee_name,
-        lm.leave_type,
-        lm.leave_start_date,
-        lm.leave_end_date,
-        lm.is_half_day,
-        lm.half_day_period,
-        lm.number_of_days,
-        lm.reason,
-        lm.final_status,
-        lm.current_approval_level,
-        lm.created_at
-      FROM leave_master lm
-      JOIN employee_master e
-        ON e.emp_id = lm.emp_id AND e.tenant_id = lm.tenant_id
-      WHERE lm.tenant_id                  = ?
-        AND lm.current_approver_employee_id = ?
-        AND lm.final_status               = ?
-      ORDER BY lm.created_at ASC
-    `;
-
-    const [rows] = await db
-      .promise()
-      .query(sql, [tenant_id, emp_id, STATUS_PENDING]);
-
-    return ok(res, rows, `${rows.length} pending leave(s) found`);
-  }),
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. APPROVE LEAVE
-//    POST /approve-leave/:leaveId
-// ─────────────────────────────────────────────────────────────────────────────
-/**
- * @route   POST /approve-leave/:leaveId
- * @desc    Current approver approves a leave.
- *          If the approver has their own reporting manager, the request is
- *          forwarded (multi-level). Otherwise the leave is finally approved.
- * @access  Assigned approver only
- * @body    { comments (optional) }
- */
-router.post(
-  "/approve-leave/:leaveId",
-  asyncHandler(async (req, res) => {
-    const { emp_id, tenant_id } = req.user;
-    const leaveId = Number(req.params.leaveId);
-    const comments = req.body.comments ?? null;
-    const db = req.app.locals.db;
-
-    if (!leaveId || isNaN(leaveId)) {
-      return fail(res, "Invalid leaveId");
-    }
-
-    // ── Load leave record ──────────────────────────────────────────────────
-    const [leaveRows] = await db
-      .promise()
-      .query(
-        `SELECT * FROM leave_master WHERE leave_id = ? AND tenant_id = ? LIMIT 1`,
-        [leaveId, tenant_id],
-      );
-    const leave = leaveRows[0];
-
-    if (!leave) {
-      return fail(res, "Leave request not found", 404);
-    }
-    if (leave.final_status !== STATUS_PENDING) {
-      return fail(res, `Leave is already ${leave.final_status}`, 422);
-    }
-    if (leave.current_approver_employee_id !== emp_id) {
-      return fail(res, "You are not the current approver for this leave", 403);
-    }
-
-    // ── Determine next approver ────────────────────────────────────────────
-    //    The current approver's own reporting_to_employee_id becomes the next approver.
-    const currentApprover = await getEmployee(db, emp_id, tenant_id);
-    const nextApproverId = currentApprover?.reporting_to_employee_id ?? null;
-
-    // Verify the next approver exists within the same tenant (guard against
-    // cross-tenant IDs or orphaned references)
-    let nextApprover = null;
-    if (nextApproverId) {
-      nextApprover = await getEmployee(db, nextApproverId, tenant_id);
-    }
-
-    await withTransaction(db, async (conn) => {
-      if (nextApprover) {
-        // ── Forward to next level ──────────────────────────────────────────
-        await conn.query(
-          `UPDATE leave_master
-              SET current_approval_level        = current_approval_level + 1,
-                  current_approver_employee_id  = ?,
-                  updated_at                    = NOW()
-            WHERE leave_id = ? AND tenant_id = ?`,
-          [nextApproverId, leaveId, tenant_id],
-        );
-
-        await insertTrail(conn, {
-          tenant_id,
-          record_id: leaveId,
-          approval_level: leave.current_approval_level,
-          approver_employee_id: emp_id,
-          action: "Approved — Forwarded",
-          comments,
-        });
-      } else {
-        // ── Final approval ─────────────────────────────────────────────────
-        await conn.query(
-          `UPDATE leave_master
-              SET final_status                  = ?,
-                  current_approver_employee_id  = NULL,
-                  updated_at                    = NOW()
-            WHERE leave_id = ? AND tenant_id = ?`,
-          [STATUS_APPROVED, leaveId, tenant_id],
-        );
-
-        await insertTrail(conn, {
-          tenant_id,
-          record_id: leaveId,
-          approval_level: leave.current_approval_level,
-          approver_employee_id: emp_id,
-          action: STATUS_APPROVED,
-          comments,
-        });
-      }
-    });
-
-    const message = nextApprover
-      ? "Leave approved and forwarded to next approver"
-      : "Leave finally approved";
-
-    return ok(res, { leave_id: leaveId, forwarded: !!nextApprover }, message);
-  }),
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. REJECT LEAVE
-//    POST /reject-leave/:leaveId
-// ─────────────────────────────────────────────────────────────────────────────
-/**
- * @route   POST /reject-leave/:leaveId
- * @desc    Current approver rejects a leave request. Rejection is terminal —
- *          no further forwarding occurs.
- * @access  Assigned approver only
- * @body    { comments (required) }
- */
-
-// router.get(
-//   "/employees/:empId/leaves",
-//   asyncHandler(async (req, res) => {
-//     const db = req.app.locals.db;
-
-//     const sql = `
-//       SELECT
-//         leave_id,
-//         emp_id,
-//         leave_type,
-//         DATE_FORMAT(leave_start_date, '%Y-%m-%d') AS leave_start_date,
-//         DATE_FORMAT(leave_end_date, '%Y-%m-%d')   AS leave_end_date,
-//         number_of_days,
-//         recommended_by,
-//         DATE_FORMAT(recommended_at, '%Y-%m-%d %H:%i:%s') AS recommended_at,
-//         approved_by,
-//         final_status,
-//         reason,
-//         cancel_reason,
-//         rejection_reason,
-//         DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
-//         DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
-//       FROM leave_master
-//       WHERE emp_id = ?
-//       ORDER BY leave_start_date DESC
-//     `;
-
-//     const [rows] = await db.promise().query(sql, [req.params.empId]);
-
-//     return ok(res, rows, "Leave history fetched successfully");
-//   }),
-// );
-router.post(
-  "/reject-leave/:leaveId",
-  asyncHandler(async (req, res) => {
-    const { emp_id, tenant_id } = req.user;
-    const leaveId = Number(req.params.leaveId);
-    const comments = req.body.comments;
-    const db = req.app.locals.db;
-
-    if (!leaveId || isNaN(leaveId)) {
-      return fail(res, "Invalid leaveId");
-    }
-    if (!comments || String(comments).trim().length === 0) {
-      return fail(res, "A rejection reason (comments) is required");
-    }
-
-    // ── Load leave ─────────────────────────────────────────────────────────
-    const [leaveRows] = await db
-      .promise()
-      .query(
-        `SELECT * FROM leave_master WHERE leave_id = ? AND tenant_id = ? LIMIT 1`,
-        [leaveId, tenant_id],
-      );
-    const leave = leaveRows[0];
-
-    if (!leave) {
-      return fail(res, "Leave request not found", 404);
-    }
-    if (leave.final_status !== STATUS_PENDING) {
-      return fail(res, `Leave is already ${leave.final_status}`, 422);
-    }
-    if (leave.current_approver_employee_id !== emp_id) {
-      return fail(res, "You are not the current approver for this leave", 403);
-    }
-
-    await withTransaction(db, async (conn) => {
-      // Reject — clear approver, mark final
-      await conn.query(
+    // Auto-approve if no approval flow
+    if (!policy.requires_approval || flowRows.length === 0) {
+      await conn.execute(
         `UPDATE leave_master
-            SET final_status                  = ?,
-                current_approver_employee_id  = NULL,
-                updated_at                    = NOW()
-          WHERE leave_id = ? AND tenant_id = ?`,
-        [STATUS_REJECTED, leaveId, tenant_id],
+         SET status = 'Approved', final_status = 'Approved',
+             current_approver_employee_id = NULL, updated_at = NOW()
+         WHERE leave_id = ? AND tenant_id = ?`,
+        [leave_id, tenant_id],
       );
-
-      await insertTrail(conn, {
-        tenant_id,
-        record_id: leaveId,
-        approval_level: leave.current_approval_level,
-        approver_employee_id: emp_id,
-        action: STATUS_REJECTED,
-        comments: String(comments).trim(),
+      await conn.commit();
+      return send(res, 201, true, "Leave applied and auto-approved", {
+        leave_id,
       });
-    });
-
-    return ok(res, { leave_id: leaveId }, "Leave request rejected");
-  }),
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. MY LEAVES (Employee Leave History)
-//    GET /my-leaves
-// ─────────────────────────────────────────────────────────────────────────────
-/**
- * @route   GET /my-leaves
- * @desc    Returns the full leave history for the authenticated employee.
- *          Accepts optional query params: status, year
- * @access  Authenticated employee
- * @query   status (optional) — filter by final_status
- *          year   (optional) — filter by calendar year (default: current year)
- */
-router.get(
-  "/my-leaves",
-  asyncHandler(async (req, res) => {
-    const { emp_id, tenant_id } = req.user;
-    const db = req.app.locals.db;
-    const year = req.query.year ? Number(req.query.year) : null;
-    const status = req.query.status ? String(req.query.status) : null;
-
-    const conditions = ["lm.emp_id = ?", "lm.tenant_id = ?"];
-    const params = [emp_id, tenant_id];
-
-    if (year) {
-      conditions.push("YEAR(lm.leave_start_date) = ?");
-      params.push(year);
-    }
-    if (status) {
-      conditions.push("lm.final_status = ?");
-      params.push(status);
     }
 
-    const sql = `
-      SELECT
-        lm.leave_id,
-        lm.leave_type,
-        lm.leave_start_date,
-        lm.leave_end_date,
-        lm.is_half_day,
-        lm.half_day_period,
-        lm.number_of_days,
-        lm.reason,
-        lm.final_status,
-        lm.current_approval_level,
-        lm.current_approver_employee_id,
-        CONCAT(mgr.first_name, ' ', mgr.last_name) AS current_approver_name,
-        lm.created_at,
-        lm.updated_at
-      FROM leave_master lm
-      LEFT JOIN employee_master mgr
-        ON mgr.emp_id    = lm.current_approver_employee_id
-       AND mgr.tenant_id = lm.tenant_id
-      WHERE ${conditions.join(" AND ")}
-      ORDER BY lm.created_at DESC
-    `;
+    let firstApproverEmpId = null;
 
-    const [rows] = await db.promise().query(sql, params);
+    for (const step of flowRows) {
+      const approverEmpId = await resolveApprover(
+        conn,
+        tenant_id,
+        emp_id,
+        step.approver_type,
+        step.approver_employee_id,
+      );
 
-    return ok(res, rows, `${rows.length} leave record(s) found`);
-  }),
-);
+      if (!approverEmpId && !step.is_mandatory) continue;
+      if (!approverEmpId && step.is_mandatory) {
+        await conn.rollback();
+        return send(
+          res,
+          422,
+          false,
+          `Could not resolve mandatory approver for level ${step.approval_level} (${step.approver_type})`,
+        );
+      }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. APPROVAL TRAIL
-//    GET /leave-trail/:leaveId
-// ─────────────────────────────────────────────────────────────────────────────
-/**
- * @route   GET /leave-trail/:leaveId
- * @desc    Returns the complete approval trail for a specific leave.
- *          Both the requesting employee and any involved approver may view it.
- * @access  Authenticated (owner or any approver in the chain)
- */
-router.get(
-  "/leave-trail/:leaveId",
-  asyncHandler(async (req, res) => {
-    const { emp_id, tenant_id } = req.user;
-    const leaveId = Number(req.params.leaveId);
-    const db = req.app.locals.db;
+      await conn.execute(
+        `INSERT INTO leave_approval_flow
+           (tenant_id, leave_id, approval_level, approver_employee_id, action, created_at)
+         VALUES (?, ?, ?, ?, 'Pending', NOW())`,
+        [tenant_id, leave_id, step.approval_level, approverEmpId],
+      );
 
-    if (!leaveId || isNaN(leaveId)) {
-      return fail(res, "Invalid leaveId");
+      if (step.approval_level === 1) firstApproverEmpId = approverEmpId;
     }
 
-    // ── Verify leave exists and belongs to this tenant ─────────────────────
-    const [leaveRows] = await db.promise().query(
-      `SELECT leave_id, emp_id, final_status, leave_type
-         FROM leave_master
-        WHERE leave_id = ? AND tenant_id = ? LIMIT 1`,
-      [leaveId, tenant_id],
-    );
-    const leave = leaveRows[0];
-
-    if (!leave) {
-      return fail(res, "Leave request not found", 404);
-    }
-
-    // ── Access guard — only the owner or trail participants may view ────────
-    const [trailParticipants] = await db.promise().query(
-      `SELECT DISTINCT approver_employee_id
-         FROM approval_trail
-        WHERE record_id = ? AND module_name = ? AND tenant_id = ?`,
-      [leaveId, MODULE_NAME, tenant_id],
-    );
-
-    const participantIds = trailParticipants.map((r) => r.approver_employee_id);
-    const isOwner = leave.emp_id === emp_id;
-    const isParticipant = participantIds.includes(emp_id);
-
-    if (!isOwner && !isParticipant) {
-      return fail(
-        res,
-        "Access denied. You are not associated with this leave request",
-        403,
+    if (firstApproverEmpId) {
+      await conn.execute(
+        `UPDATE leave_master
+         SET current_approver_employee_id = ?, current_approval_level = 1, updated_at = NOW()
+         WHERE leave_id = ? AND tenant_id = ?`,
+        [firstApproverEmpId, leave_id, tenant_id],
       );
     }
 
-    // ── Fetch trail with actor names ───────────────────────────────────────
-    const sql = `
-      SELECT
-        at.trail_id,
-        at.approval_level,
-        at.approver_employee_id,
-        CONCAT(e.first_name, ' ', e.last_name) AS approver_name,
-        at.action,
-        at.comments,
-        at.action_at
-      FROM approval_trail at
-      JOIN employee_master e
-        ON e.emp_id    = at.approver_employee_id
-       AND e.tenant_id = at.tenant_id
-      WHERE at.record_id    = ?
-        AND at.module_name  = ?
-        AND at.tenant_id    = ?
-      ORDER BY at.action_at ASC, at.approval_level ASC
-    `;
+    await conn.commit();
+    return send(res, 201, true, "Leave applied successfully", {
+      leave_id,
+      number_of_days,
+      first_approver_employee_id: firstApproverEmpId,
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("[leave/apply]", err);
+    return send(res, 500, false, "Internal server error");
+  } finally {
+    conn.release();
+  }
+});
 
-    const [trail] = await db
-      .promise()
-      .query(sql, [leaveId, MODULE_NAME, tenant_id]);
+// ─── 7. My Leave List   GET /api/leave/my-leaves ─────────────────────────────
 
-    return ok(
-      res,
-      {
-        leave_id: leave.leave_id,
-        leave_type: leave.leave_type,
-        final_status: leave.final_status,
-        trail,
-      },
-      "Approval trail fetched successfully",
+router.get("/my-leaves", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const emp_id = req.user?.employee_id || req.user?.emp_id;
+  if (!emp_id)
+    return send(res, 401, false, "Unauthorized: employee not identified");
+
+  const { status, leave_type_id, year } = req.query;
+  const params = [tenant_id, emp_id];
+  let extraWhere = "";
+
+  if (status) {
+    extraWhere += " AND lm.final_status = ?";
+    params.push(status);
+  }
+  if (leave_type_id) {
+    extraWhere += " AND lm.leave_type_id = ?";
+    params.push(leave_type_id);
+  }
+  if (year) {
+    extraWhere += " AND YEAR(lm.leave_start_date) = ?";
+    params.push(year);
+  }
+
+  try {
+    const [rows] = await db.execute(
+      `SELECT
+         lm.leave_id, lm.leave_type_id, lt.leave_name,
+         lm.leave_start_date, lm.leave_end_date,
+         lm.is_half_day, lm.half_day_period, lm.number_of_days,
+         lm.reason, lm.status, lm.final_status,
+         lm.current_approval_level, lm.current_approver_employee_id,
+         CONCAT(ce.first_name, ' ', ce.last_name) AS current_approver_name,
+         lm.created_at, lm.updated_at,
+         lm.cancel_reason, lm.last_action_at, lm.last_action_remarks
+       FROM leave_master lm
+       LEFT JOIN leave_type_master lt
+         ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
+       LEFT JOIN employee_master ce
+         ON lm.current_approver_employee_id = ce.emp_id AND ce.tenant_id = lm.tenant_id
+       WHERE lm.tenant_id = ? AND lm.emp_id = ?
+       ${extraWhere}
+       ORDER BY lm.created_at DESC`,
+      params,
     );
-  }),
-);
+    return send(res, 200, true, "Leave list fetched", { data: rows });
+  } catch (err) {
+    console.error("[leave/my-leaves]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
 
-// ─── Export ───────────────────────────────────────────────────────────────────
+// ─── 8. Leave Details   GET /api/leave/details/:leave_id ─────────────────────
+
+router.get("/details/:leave_id", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const { leave_id } = req.params;
+  if (!leave_id || isNaN(Number(leave_id)))
+    return send(res, 400, false, "Invalid leave_id");
+
+  try {
+    const [[leave]] = await db.execute(
+      `SELECT
+         lm.*,
+         lt.leave_name,
+         CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
+         e.department_id,
+         CONCAT(ca.first_name, ' ', ca.last_name) AS current_approver_name
+       FROM leave_master lm
+       LEFT JOIN leave_type_master lt
+         ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
+       LEFT JOIN employee_master e
+         ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
+       LEFT JOIN employee_master ca
+         ON lm.current_approver_employee_id = ca.emp_id AND ca.tenant_id = lm.tenant_id
+       WHERE lm.leave_id = ? AND lm.tenant_id = ?
+       LIMIT 1`,
+      [leave_id, tenant_id],
+    );
+    if (!leave) return send(res, 404, false, "Leave not found");
+
+    const [timeline] = await db.execute(
+      `SELECT
+         af.flow_id, af.approval_level, af.approver_employee_id,
+         CONCAT(e.first_name, ' ', e.last_name) AS approver_name,
+         af.action, af.action_at, af.remarks, af.created_at
+       FROM leave_approval_flow af
+       LEFT JOIN employee_master e
+         ON af.approver_employee_id = e.emp_id AND e.tenant_id = af.tenant_id
+       WHERE af.leave_id = ? AND af.tenant_id = ?
+       ORDER BY af.approval_level ASC`,
+      [leave_id, tenant_id],
+    );
+    return send(res, 200, true, "Leave details fetched", {
+      data: { ...leave, approval_timeline: timeline },
+    });
+  } catch (err) {
+    console.error("[leave/details]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
+
+// ─── 9. Pending Approvals   GET /api/leave/pending-approvals ─────────────────
+
+router.get("/pending-approvals", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const approver_emp_id = req.user?.employee_id || req.user?.emp_id;
+  if (!approver_emp_id)
+    return send(res, 401, false, "Unauthorized: employee not identified");
+
+  try {
+    const [rows] = await db.execute(
+      `SELECT
+         lm.leave_id, lm.emp_id,
+         CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
+         e.department_id, lm.leave_type_id, lt.leave_name,
+         lm.leave_start_date, lm.leave_end_date,
+         lm.is_half_day, lm.half_day_period, lm.number_of_days,
+         lm.reason, lm.status, lm.final_status,
+         lm.current_approval_level, lm.created_at
+       FROM leave_master lm
+       LEFT JOIN employee_master e
+         ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
+       LEFT JOIN leave_type_master lt
+         ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
+       WHERE lm.tenant_id = ?
+         AND lm.current_approver_employee_id = ?
+         AND lm.final_status = 'Pending'
+       ORDER BY lm.created_at ASC`,
+      [tenant_id, approver_emp_id],
+    );
+    return send(res, 200, true, "Pending approvals fetched", { data: rows });
+  } catch (err) {
+    console.error("[leave/pending-approvals]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
+
+// ─── 10. Approve Leave   POST /api/leave/approve/:leave_id ───────────────────
+
+router.post("/approve/:leave_id", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const approver_emp_id = req.user?.employee_id || req.user?.emp_id;
+  if (!approver_emp_id)
+    return send(res, 401, false, "Unauthorized: employee not identified");
+
+  const { leave_id } = req.params;
+  if (!leave_id || isNaN(Number(leave_id)))
+    return send(res, 400, false, "Invalid leave_id");
+
+  const { remarks = "" } = req.body;
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[leave]] = await conn.execute(
+      `SELECT * FROM leave_master
+       WHERE leave_id = ? AND tenant_id = ? AND final_status = 'Pending'
+         AND current_approver_employee_id = ?
+       LIMIT 1`,
+      [leave_id, tenant_id, approver_emp_id],
+    );
+    if (!leave) {
+      await conn.rollback();
+      return send(
+        res,
+        404,
+        false,
+        "Leave not found or not pending your approval",
+      );
+    }
+
+    const currentLevel = leave.current_approval_level;
+
+    await conn.execute(
+      `UPDATE leave_approval_flow
+       SET action = 'Approved', action_at = NOW(), remarks = ?
+       WHERE leave_id = ? AND tenant_id = ? AND approval_level = ?`,
+      [remarks, leave_id, tenant_id, currentLevel],
+    );
+
+    const [[nextFlow]] = await conn.execute(
+      `SELECT * FROM leave_approval_flow
+       WHERE leave_id = ? AND tenant_id = ? AND approval_level = ? LIMIT 1`,
+      [leave_id, tenant_id, currentLevel + 1],
+    );
+
+    if (nextFlow) {
+      await conn.execute(
+        `UPDATE leave_master
+         SET current_approval_level = ?, current_approver_employee_id = ?,
+             last_action_by = ?, last_action_at = NOW(), last_action_remarks = ?, updated_at = NOW()
+         WHERE leave_id = ? AND tenant_id = ?`,
+        [
+          currentLevel + 1,
+          nextFlow.approver_employee_id,
+          approver_emp_id,
+          remarks,
+          leave_id,
+          tenant_id,
+        ],
+      );
+    } else {
+      await conn.execute(
+        `UPDATE leave_master
+         SET status = 'Approved', final_status = 'Approved',
+             current_approver_employee_id = NULL,
+             last_action_by = ?, last_action_at = NOW(), last_action_remarks = ?, updated_at = NOW()
+         WHERE leave_id = ? AND tenant_id = ?`,
+        [approver_emp_id, remarks, leave_id, tenant_id],
+      );
+    }
+
+    await conn.commit();
+    return send(
+      res,
+      200,
+      true,
+      nextFlow ? "Forwarded to next approver" : "Leave approved successfully",
+    );
+  } catch (err) {
+    await conn.rollback();
+    console.error("[leave/approve]", err);
+    return send(res, 500, false, "Internal server error");
+  } finally {
+    conn.release();
+  }
+});
+
+// ─── 11. Reject Leave   POST /api/leave/reject/:leave_id ─────────────────────
+
+router.post("/reject/:leave_id", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const approver_emp_id = req.user?.employee_id || req.user?.emp_id;
+  if (!approver_emp_id)
+    return send(res, 401, false, "Unauthorized: employee not identified");
+
+  const { leave_id } = req.params;
+  if (!leave_id || isNaN(Number(leave_id)))
+    return send(res, 400, false, "Invalid leave_id");
+
+  const { remarks } = req.body;
+  if (!remarks || !remarks.trim())
+    return send(res, 400, false, "Rejection remarks are mandatory");
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[leave]] = await conn.execute(
+      `SELECT * FROM leave_master
+       WHERE leave_id = ? AND tenant_id = ? AND final_status = 'Pending'
+         AND current_approver_employee_id = ?
+       LIMIT 1`,
+      [leave_id, tenant_id, approver_emp_id],
+    );
+    if (!leave) {
+      await conn.rollback();
+      return send(
+        res,
+        404,
+        false,
+        "Leave not found or not pending your approval",
+      );
+    }
+
+    const currentLevel = leave.current_approval_level;
+
+    await conn.execute(
+      `UPDATE leave_approval_flow
+       SET action = 'Rejected', action_at = NOW(), remarks = ?
+       WHERE leave_id = ? AND tenant_id = ? AND approval_level = ?`,
+      [remarks.trim(), leave_id, tenant_id, currentLevel],
+    );
+    await conn.execute(
+      `UPDATE leave_master
+       SET status = 'Rejected', final_status = 'Rejected',
+           current_approver_employee_id = NULL,
+           last_action_by = ?, last_action_at = NOW(), last_action_remarks = ?, updated_at = NOW()
+       WHERE leave_id = ? AND tenant_id = ?`,
+      [approver_emp_id, remarks.trim(), leave_id, tenant_id],
+    );
+
+    await conn.commit();
+    return send(res, 200, true, "Leave rejected");
+  } catch (err) {
+    await conn.rollback();
+    console.error("[leave/reject]", err);
+    return send(res, 500, false, "Internal server error");
+  } finally {
+    conn.release();
+  }
+});
+
+// ─── 12. Cancel Leave   POST /api/leave/cancel/:leave_id ─────────────────────
+
+router.post("/cancel/:leave_id", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const emp_id = req.user?.employee_id || req.user?.emp_id;
+  if (!emp_id)
+    return send(res, 401, false, "Unauthorized: employee not identified");
+
+  const { leave_id } = req.params;
+  if (!leave_id || isNaN(Number(leave_id)))
+    return send(res, 400, false, "Invalid leave_id");
+
+  const { cancel_reason } = req.body;
+  if (!cancel_reason || !cancel_reason.trim())
+    return send(res, 400, false, "cancel_reason is required");
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[leave]] = await conn.execute(
+      `SELECT * FROM leave_master
+       WHERE leave_id = ? AND tenant_id = ? AND emp_id = ? LIMIT 1`,
+      [leave_id, tenant_id, emp_id],
+    );
+    if (!leave) {
+      await conn.rollback();
+      return send(res, 404, false, "Leave not found");
+    }
+
+    if (leave.final_status === "Cancelled")
+      return send(res, 409, false, "Leave is already cancelled");
+    if (leave.final_status === "Rejected")
+      return send(res, 409, false, "Rejected leave cannot be cancelled");
+    if (leave.final_status === "Approved") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (new Date(leave.leave_start_date) < today) {
+        await conn.rollback();
+        return send(
+          res,
+          409,
+          false,
+          "Cannot cancel an approved leave that has already started or passed",
+        );
+      }
+    }
+
+    await conn.execute(
+      `UPDATE leave_master
+       SET final_status = 'Cancelled', status = 'Cancelled', cancel_reason = ?, updated_at = NOW()
+       WHERE leave_id = ? AND tenant_id = ?`,
+      [cancel_reason.trim(), leave_id, tenant_id],
+    );
+
+    await conn.commit();
+    return send(res, 200, true, "Leave cancelled successfully");
+  } catch (err) {
+    await conn.rollback();
+    console.error("[leave/cancel]", err);
+    return send(res, 500, false, "Internal server error");
+  } finally {
+    conn.release();
+  }
+});
+
+router.get("/all-history", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const {
+    status,
+    leave_type_id,
+    emp_id,
+    year,
+    search,
+    sort = "desc",
+  } = req.query;
+
+  const params = [tenant_id];
+  let extraWhere = "";
+
+  if (status) {
+    extraWhere += " AND lm.final_status = ?";
+    params.push(status);
+  }
+  if (leave_type_id) {
+    extraWhere += " AND lm.leave_type_id = ?";
+    params.push(leave_type_id);
+  }
+  if (emp_id) {
+    extraWhere += " AND lm.emp_id = ?";
+    params.push(emp_id);
+  }
+  if (year) {
+    extraWhere += " AND YEAR(lm.leave_start_date) = ?";
+    params.push(year);
+  }
+  if (search) {
+    extraWhere +=
+      " AND (CONCAT(e.first_name, ' ', e.last_name) LIKE ? OR lm.emp_id LIKE ?)";
+    params.push(`%${search}%`, `%${search}%`);
+  }
+
+  const sortDir = sort === "asc" ? "ASC" : "DESC";
+
+  try {
+    const [rows] = await db.execute(
+      `SELECT
+         lm.leave_id,
+         lm.emp_id,
+         CONCAT(e.first_name, ' ', e.last_name)         AS employee_name,
+         e.department_id,
+         d.department_name,
+         lm.leave_type_id,
+         lt.leave_name,
+         lm.leave_start_date,
+         lm.leave_end_date,
+         lm.is_half_day,
+         lm.half_day_period,
+         lm.number_of_days,
+         lm.reason,
+         lm.status,
+         lm.final_status,
+         lm.current_approval_level,
+         CONCAT(ca.first_name, ' ', ca.last_name)       AS current_approver_name,
+         lm.last_action_by,
+         CONCAT(la.first_name, ' ', la.last_name)       AS last_action_by_name,
+         lm.last_action_at,
+         lm.last_action_remarks,
+         lm.cancel_reason,
+         lm.created_at,
+         lm.updated_at
+       FROM leave_master lm
+       LEFT JOIN employee_master e
+         ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
+       LEFT JOIN department_master d
+         ON e.department_id = d.department_id AND d.tenant_id = lm.tenant_id
+       LEFT JOIN leave_type_master lt
+         ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
+       LEFT JOIN employee_master ca
+         ON lm.current_approver_employee_id = ca.emp_id AND ca.tenant_id = lm.tenant_id
+       LEFT JOIN employee_master la
+         ON lm.last_action_by = la.emp_id AND la.tenant_id = lm.tenant_id
+       WHERE lm.tenant_id = ?
+       ${extraWhere}
+       ORDER BY lm.created_at ${sortDir}`,
+      params,
+    );
+
+    return send(res, 200, true, "All leaves fetched", {
+      total: rows.length,
+      data: rows,
+    });
+  } catch (err) {
+    console.error("[leave/all-leaves]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
 module.exports = router;
