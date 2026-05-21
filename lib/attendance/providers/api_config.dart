@@ -58,7 +58,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiConfig {
-  static const String baseUrl = 'http://192.168.1.12:5000/api';
+  static const String baseUrl = 'http://192.168.1.20:5000/api';
 
   // ── Single source of truth for all SharedPreferences keys ─────────
   static const _kToken = 'session_token';
@@ -101,7 +101,17 @@ class ApiConfig {
         prefs.getString(_kEmployeeId) ?? // 'employeeId'
         prefs.getString('empId') ??
         '';
+
+    loginId = prefs.getString(_kLoginId) ?? '';
+    role = prefs.getString(_kRole) ?? '';
+    userType = prefs.getString(_kUserType) ?? '';
+    username = prefs.getString(_kUsername) ?? '';
   }
+
+  static String loginId = '';
+  static String role = '';
+  static String userType = '';
+  static String username = '';
 
   /// Persist session to disk AND set in memory immediately.
   static Future<void> saveSession({
@@ -117,7 +127,10 @@ class ApiConfig {
     _token = sessionToken;
     ApiConfig.tenantId = tenantId;
     ApiConfig.employeeId = empId;
-
+    ApiConfig.loginId = loginId;
+    ApiConfig.role = role;
+    ApiConfig.userType = userType;
+    ApiConfig.username = username;
     // Persist to disk for next app launch
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kToken, sessionToken);
@@ -160,7 +173,13 @@ class ApiConfig {
     _token = '';
     tenantId = '';
     employeeId = '';
+    loginId = '';
+    role = '';
+    userType = '';
+    username = '';
+
     final prefs = await SharedPreferences.getInstance();
+
     await prefs.remove(_kToken);
     await prefs.remove(_kTenantId);
     await prefs.remove(_kEmployeeId);

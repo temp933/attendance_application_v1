@@ -200,6 +200,18 @@ class ApiClient {
     );
   }
 
+  static Future<http.Response> patch(
+    String path, {
+    String? body,
+    Map<String, String>? headers,
+  }) async {
+    return http.patch(
+      Uri.parse('${ApiConfig.baseUrl}$path'),
+      headers: {...ApiConfig.headers, ...?headers},
+      body: body,
+    );
+  }
+
   /// Sends a multipart/form-data POST request.
   ///
   /// [path]       — API path, e.g. '/face_emb_vector'

@@ -50,7 +50,7 @@ async function resolveApprover(
     case "REPORTING_MANAGER": {
       const [[emp]] = await conn.execute(
         `SELECT reporting_to_employee_id FROM employee_master
-         WHERE emp_id = ? AND tenant_id = ? LIMIT 1`,
+          WHERE emp_id = ? AND tenant_id = ? LIMIT 1`,
         [empId, tenantId],
       );
       return emp?.reporting_to_employee_id ?? null;
@@ -61,9 +61,9 @@ async function resolveApprover(
     case "HR": {
       const [[hr]] = await conn.execute(
         `SELECT em.emp_id FROM employee_master em
-         JOIN role_master rm ON em.role_id = rm.role_id
-         WHERE em.tenant_id = ? AND UPPER(rm.role_name) LIKE '%HR%'
-         ORDER BY em.emp_id ASC LIMIT 1`,
+          JOIN role_master rm ON em.role_id = rm.role_id
+          WHERE em.tenant_id = ? AND UPPER(rm.role_name) LIKE '%HR%'
+          ORDER BY em.emp_id ASC LIMIT 1`,
         [tenantId],
       );
       return hr?.emp_id ?? null; // ← was hr?.employee_id (bug)
@@ -71,9 +71,9 @@ async function resolveApprover(
     case "ADMIN": {
       const [[admin]] = await conn.execute(
         `SELECT em.emp_id FROM employee_master em
-         JOIN role_master rm ON em.role_id = rm.role_id
-         WHERE em.tenant_id = ? AND UPPER(rm.role_name) LIKE '%ADMIN%'
-         ORDER BY em.emp_id ASC LIMIT 1`,
+          JOIN role_master rm ON em.role_id = rm.role_id
+          WHERE em.tenant_id = ? AND UPPER(rm.role_name) LIKE '%ADMIN%'
+          ORDER BY em.emp_id ASC LIMIT 1`,
         [tenantId],
       );
       return admin?.emp_id ?? null; // ← was admin?.employee_id (bug)
@@ -140,8 +140,8 @@ router.post("/policy/create", async (req, res) => {
 
     const [ltResult] = await conn.execute(
       `INSERT INTO leave_type_master
-         (tenant_id, leave_name, max_days, is_paid, requires_approval, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+          (tenant_id, leave_name, max_days, is_paid, requires_approval, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
       [
         tenant_id,
         leave_name.trim(),
@@ -156,8 +156,8 @@ router.post("/policy/create", async (req, res) => {
       const step = approval_flow[i];
       await conn.execute(
         `INSERT INTO leave_policy_flow
-           (tenant_id, leave_type_id, approval_level, approver_type, approver_employee_id, is_mandatory, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            (tenant_id, leave_type_id, approval_level, approver_type, approver_employee_id, is_mandatory, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
         [
           tenant_id,
           leave_type_id,
@@ -194,16 +194,16 @@ router.get("/policy/list", async (req, res) => {
   try {
     const [rows] = await db.execute(
       `SELECT
-         lt.leave_type_id, lt.leave_name, lt.max_days, lt.is_paid,
-         lt.requires_approval, lt.created_at, lt.updated_at,
-         COUNT(lpf.policy_flow_id) AS total_approval_levels
-       FROM leave_type_master lt
-       LEFT JOIN leave_policy_flow lpf
-         ON lt.leave_type_id = lpf.leave_type_id AND lpf.tenant_id = lt.tenant_id
-       WHERE lt.tenant_id = ?
-       GROUP BY lt.leave_type_id, lt.leave_name, lt.max_days,
-                lt.is_paid, lt.requires_approval, lt.created_at, lt.updated_at
-       ORDER BY lt.created_at DESC`,
+          lt.leave_type_id, lt.leave_code, lt.leave_name, lt.max_days, lt.is_paid,
+          lt.requires_approval, lt.created_at, lt.updated_at,
+          COUNT(lpf.policy_flow_id) AS total_approval_levels
+        FROM leave_type_master lt
+        LEFT JOIN leave_policy_flow lpf
+          ON lt.leave_type_id = lpf.leave_type_id AND lpf.tenant_id = lt.tenant_id
+        WHERE lt.tenant_id = ?
+        GROUP BY lt.leave_type_id, lt.leave_name, lt.max_days,
+                  lt.is_paid, lt.requires_approval, lt.created_at, lt.updated_at
+        ORDER BY lt.created_at DESC`,
       [tenant_id],
     );
     return send(res, 200, true, "Leave policies fetched", { data: rows });
@@ -233,7 +233,7 @@ router.get("/policy/:leave_type_id", async (req, res) => {
 
     const [approvalFlow] = await db.execute(
       `SELECT * FROM leave_policy_flow
-       WHERE leave_type_id = ? AND tenant_id = ? ORDER BY approval_level ASC`,
+        WHERE leave_type_id = ? AND tenant_id = ? ORDER BY approval_level ASC`,
       [leave_type_id, tenant_id],
     );
     return send(res, 200, true, "Leave policy fetched", {
@@ -280,8 +280,8 @@ router.put("/policy/update/:leave_type_id", async (req, res) => {
 
     await conn.execute(
       `UPDATE leave_type_master
-       SET leave_name = ?, max_days = ?, is_paid = ?, requires_approval = ?, updated_at = NOW()
-       WHERE leave_type_id = ? AND tenant_id = ?`,
+        SET leave_name = ?, max_days = ?, is_paid = ?, requires_approval = ?, updated_at = NOW()
+        WHERE leave_type_id = ? AND tenant_id = ?`,
       [
         leave_name.trim(),
         Number(max_days),
@@ -299,8 +299,8 @@ router.put("/policy/update/:leave_type_id", async (req, res) => {
       const step = approval_flow[i];
       await conn.execute(
         `INSERT INTO leave_policy_flow
-           (tenant_id, leave_type_id, approval_level, approver_type, approver_employee_id, is_mandatory, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            (tenant_id, leave_type_id, approval_level, approver_type, approver_employee_id, is_mandatory, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
         [
           tenant_id,
           leave_type_id,
@@ -452,21 +452,42 @@ router.post("/apply", async (req, res) => {
     }
 
     const [[policy]] = await conn.execute(
-      `SELECT leave_type_id, requires_approval FROM leave_type_master
-       WHERE leave_type_id = ? AND tenant_id = ? LIMIT 1`,
+      `SELECT leave_type_id, leave_code, requires_approval FROM leave_type_master
+    WHERE leave_type_id = ? AND tenant_id = ? AND is_active = 1 LIMIT 1`,
       [leave_type_id, tenant_id],
     );
     if (!policy) {
       await conn.rollback();
       return send(res, 404, false, "Leave policy not found for this tenant");
     }
+    const isCompOff = (policy.leave_code ?? "").toUpperCase() === "COMP_OFF";
+
+    // If comp-off, check balance
+    if (isCompOff) {
+      const empIdInt = parseInt(emp_id, 10);
+      const [[bal]] = await conn.execute(
+        `SELECT COUNT(*) AS available FROM comp_off
+   WHERE tenant_id = ? AND employee_id = ?
+     AND status = 'earned' AND expiry_date >= CURDATE()`,
+        [tenant_id, empIdInt],
+      );
+      if (number_of_days > (bal?.available ?? 0)) {
+        await conn.rollback();
+        return send(
+          res,
+          422,
+          false,
+          `Insufficient comp-off balance. Available: ${bal?.available ?? 0}`,
+        );
+      }
+    }
 
     const [[overlap]] = await conn.execute(
       `SELECT leave_id FROM leave_master
-       WHERE tenant_id = ? AND emp_id = ?
-         AND final_status NOT IN ('Rejected','Cancelled')
-         AND leave_start_date <= ? AND leave_end_date >= ?
-       LIMIT 1`,
+        WHERE tenant_id = ? AND emp_id = ?
+          AND final_status NOT IN ('Rejected','Cancelled')
+          AND leave_start_date <= ? AND leave_end_date >= ?
+        LIMIT 1`,
       [tenant_id, emp_id, leave_end_date, leave_start_date],
     );
     if (overlap) {
@@ -481,16 +502,16 @@ router.post("/apply", async (req, res) => {
 
     const [flowRows] = await conn.execute(
       `SELECT * FROM leave_policy_flow
-       WHERE leave_type_id = ? AND tenant_id = ? ORDER BY approval_level ASC`,
+        WHERE leave_type_id = ? AND tenant_id = ? ORDER BY approval_level ASC`,
       [leave_type_id, tenant_id],
     );
 
     const [insertResult] = await conn.execute(
       `INSERT INTO leave_master
-         (tenant_id, emp_id, leave_type_id, leave_start_date, leave_end_date,
-          is_half_day, half_day_period, status, reason, number_of_days,
-          current_approval_level, final_status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, 'Pending', NOW(), NOW())`,
+          (tenant_id, emp_id, leave_type_id, leave_start_date, leave_end_date,
+            is_half_day, half_day_period, status, reason, number_of_days,
+            current_approval_level, final_status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, 'Pending', NOW(), NOW())`,
       [
         tenant_id,
         emp_id,
@@ -507,18 +528,46 @@ router.post("/apply", async (req, res) => {
     const leave_id = insertResult.insertId;
 
     // Auto-approve if no approval flow
-    if (!policy.requires_approval || flowRows.length === 0) {
+    if (!policy.requires_approval || flowRows.length === 0 || isCompOff) {
       await conn.execute(
         `UPDATE leave_master
-         SET status = 'Approved', final_status = 'Approved',
-             current_approver_employee_id = NULL, updated_at = NOW()
-         WHERE leave_id = ? AND tenant_id = ?`,
+      SET status = 'Approved', final_status = 'Approved',
+          current_approver_employee_id = NULL, updated_at = NOW()
+      WHERE leave_id = ? AND tenant_id = ?`,
         [leave_id, tenant_id],
       );
+
+      // If comp-off: mark earned records as used
+      if (isCompOff) {
+        const daysToUse = parseInt(Math.ceil(number_of_days), 10);
+        const empIdInt = parseInt(emp_id, 10);
+
+        // Use hardcoded LIMIT in query to avoid prepared statement type issue
+        const [earnedRows] = await conn.query(
+          `SELECT id FROM comp_off
+     WHERE tenant_id = ? AND employee_id = ?
+       AND status = 'earned' AND expiry_date >= CURDATE()
+     ORDER BY expiry_date ASC
+     LIMIT ${daysToUse}`,
+          [tenant_id, empIdInt],
+        );
+        for (const row of earnedRows) {
+          await conn.execute(
+            `UPDATE comp_off SET status = 'used', leave_id = ? WHERE id = ?`,
+            [leave_id, row.id],
+          );
+        }
+      }
       await conn.commit();
-      return send(res, 201, true, "Leave applied and auto-approved", {
-        leave_id,
-      });
+      return send(
+        res,
+        201,
+        true,
+        isCompOff
+          ? "Comp-off leave applied successfully"
+          : "Leave applied and auto-approved",
+        { leave_id },
+      );
     }
 
     let firstApproverEmpId = null;
@@ -545,8 +594,8 @@ router.post("/apply", async (req, res) => {
 
       await conn.execute(
         `INSERT INTO leave_approval_flow
-           (tenant_id, leave_id, approval_level, approver_employee_id, action, created_at)
-         VALUES (?, ?, ?, ?, 'Pending', NOW())`,
+            (tenant_id, leave_id, approval_level, approver_employee_id, action, created_at)
+          VALUES (?, ?, ?, ?, 'Pending', NOW())`,
         [tenant_id, leave_id, step.approval_level, approverEmpId],
       );
 
@@ -556,8 +605,8 @@ router.post("/apply", async (req, res) => {
     if (firstApproverEmpId) {
       await conn.execute(
         `UPDATE leave_master
-         SET current_approver_employee_id = ?, current_approval_level = 1, updated_at = NOW()
-         WHERE leave_id = ? AND tenant_id = ?`,
+          SET current_approver_employee_id = ?, current_approval_level = 1, updated_at = NOW()
+          WHERE leave_id = ? AND tenant_id = ?`,
         [firstApproverEmpId, leave_id, tenant_id],
       );
     }
@@ -608,22 +657,22 @@ router.get("/my-leaves", async (req, res) => {
   try {
     const [rows] = await db.execute(
       `SELECT
-         lm.leave_id, lm.leave_type_id, lt.leave_name,
-         lm.leave_start_date, lm.leave_end_date,
-         lm.is_half_day, lm.half_day_period, lm.number_of_days,
-         lm.reason, lm.status, lm.final_status,
-         lm.current_approval_level, lm.current_approver_employee_id,
-         CONCAT(ce.first_name, ' ', ce.last_name) AS current_approver_name,
-         lm.created_at, lm.updated_at,
-         lm.cancel_reason, lm.last_action_at, lm.last_action_remarks
-       FROM leave_master lm
-       LEFT JOIN leave_type_master lt
-         ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
-       LEFT JOIN employee_master ce
-         ON lm.current_approver_employee_id = ce.emp_id AND ce.tenant_id = lm.tenant_id
-       WHERE lm.tenant_id = ? AND lm.emp_id = ?
-       ${extraWhere}
-       ORDER BY lm.created_at DESC`,
+          lm.leave_id, lm.leave_type_id, lt.leave_name,
+          lm.leave_start_date, lm.leave_end_date,
+          lm.is_half_day, lm.half_day_period, lm.number_of_days,
+          lm.reason, lm.status, lm.final_status,
+          lm.current_approval_level, lm.current_approver_employee_id,
+          CONCAT(ce.first_name, ' ', ce.last_name) AS current_approver_name,
+          lm.created_at, lm.updated_at,
+          lm.cancel_reason, lm.last_action_at, lm.last_action_remarks
+        FROM leave_master lm
+        LEFT JOIN leave_type_master lt
+          ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
+        LEFT JOIN employee_master ce
+          ON lm.current_approver_employee_id = ce.emp_id AND ce.tenant_id = lm.tenant_id
+        WHERE lm.tenant_id = ? AND lm.emp_id = ?
+        ${extraWhere}
+        ORDER BY lm.created_at DESC`,
       params,
     );
     return send(res, 200, true, "Leave list fetched", { data: rows });
@@ -647,34 +696,34 @@ router.get("/details/:leave_id", async (req, res) => {
   try {
     const [[leave]] = await db.execute(
       `SELECT
-         lm.*,
-         lt.leave_name,
-         CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
-         e.department_id,
-         CONCAT(ca.first_name, ' ', ca.last_name) AS current_approver_name
-       FROM leave_master lm
-       LEFT JOIN leave_type_master lt
-         ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
-       LEFT JOIN employee_master e
-         ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
-       LEFT JOIN employee_master ca
-         ON lm.current_approver_employee_id = ca.emp_id AND ca.tenant_id = lm.tenant_id
-       WHERE lm.leave_id = ? AND lm.tenant_id = ?
-       LIMIT 1`,
+          lm.*,
+          lt.leave_name,
+          CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
+          e.department_id,
+          CONCAT(ca.first_name, ' ', ca.last_name) AS current_approver_name
+        FROM leave_master lm
+        LEFT JOIN leave_type_master lt
+          ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
+        LEFT JOIN employee_master e
+          ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
+        LEFT JOIN employee_master ca
+          ON lm.current_approver_employee_id = ca.emp_id AND ca.tenant_id = lm.tenant_id
+        WHERE lm.leave_id = ? AND lm.tenant_id = ?
+        LIMIT 1`,
       [leave_id, tenant_id],
     );
     if (!leave) return send(res, 404, false, "Leave not found");
 
     const [timeline] = await db.execute(
       `SELECT
-         af.flow_id, af.approval_level, af.approver_employee_id,
-         CONCAT(e.first_name, ' ', e.last_name) AS approver_name,
-         af.action, af.action_at, af.remarks, af.created_at
-       FROM leave_approval_flow af
-       LEFT JOIN employee_master e
-         ON af.approver_employee_id = e.emp_id AND e.tenant_id = af.tenant_id
-       WHERE af.leave_id = ? AND af.tenant_id = ?
-       ORDER BY af.approval_level ASC`,
+          af.flow_id, af.approval_level, af.approver_employee_id,
+          CONCAT(e.first_name, ' ', e.last_name) AS approver_name,
+          af.action, af.action_at, af.remarks, af.created_at
+        FROM leave_approval_flow af
+        LEFT JOIN employee_master e
+          ON af.approver_employee_id = e.emp_id AND e.tenant_id = af.tenant_id
+        WHERE af.leave_id = ? AND af.tenant_id = ?
+        ORDER BY af.approval_level ASC`,
       [leave_id, tenant_id],
     );
     return send(res, 200, true, "Leave details fetched", {
@@ -700,22 +749,22 @@ router.get("/pending-approvals", async (req, res) => {
   try {
     const [rows] = await db.execute(
       `SELECT
-         lm.leave_id, lm.emp_id,
-         CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
-         e.department_id, lm.leave_type_id, lt.leave_name,
-         lm.leave_start_date, lm.leave_end_date,
-         lm.is_half_day, lm.half_day_period, lm.number_of_days,
-         lm.reason, lm.status, lm.final_status,
-         lm.current_approval_level, lm.created_at
-       FROM leave_master lm
-       LEFT JOIN employee_master e
-         ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
-       LEFT JOIN leave_type_master lt
-         ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
-       WHERE lm.tenant_id = ?
-         AND lm.current_approver_employee_id = ?
-         AND lm.final_status = 'Pending'
-       ORDER BY lm.created_at ASC`,
+          lm.leave_id, lm.emp_id,
+          CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
+          e.department_id, lm.leave_type_id, lt.leave_name,
+          lm.leave_start_date, lm.leave_end_date,
+          lm.is_half_day, lm.half_day_period, lm.number_of_days,
+          lm.reason, lm.status, lm.final_status,
+          lm.current_approval_level, lm.created_at
+        FROM leave_master lm
+        LEFT JOIN employee_master e
+          ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
+        LEFT JOIN leave_type_master lt
+          ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
+        WHERE lm.tenant_id = ?
+          AND lm.current_approver_employee_id = ?
+          AND lm.final_status = 'Pending'
+        ORDER BY lm.created_at ASC`,
       [tenant_id, approver_emp_id],
     );
     return send(res, 200, true, "Pending approvals fetched", { data: rows });
@@ -748,9 +797,9 @@ router.post("/approve/:leave_id", async (req, res) => {
 
     const [[leave]] = await conn.execute(
       `SELECT * FROM leave_master
-       WHERE leave_id = ? AND tenant_id = ? AND final_status = 'Pending'
-         AND current_approver_employee_id = ?
-       LIMIT 1`,
+        WHERE leave_id = ? AND tenant_id = ? AND final_status = 'Pending'
+          AND current_approver_employee_id = ?
+        LIMIT 1`,
       [leave_id, tenant_id, approver_emp_id],
     );
     if (!leave) {
@@ -767,23 +816,23 @@ router.post("/approve/:leave_id", async (req, res) => {
 
     await conn.execute(
       `UPDATE leave_approval_flow
-       SET action = 'Approved', action_at = NOW(), remarks = ?
-       WHERE leave_id = ? AND tenant_id = ? AND approval_level = ?`,
+        SET action = 'Approved', action_at = NOW(), remarks = ?
+        WHERE leave_id = ? AND tenant_id = ? AND approval_level = ?`,
       [remarks, leave_id, tenant_id, currentLevel],
     );
 
     const [[nextFlow]] = await conn.execute(
       `SELECT * FROM leave_approval_flow
-       WHERE leave_id = ? AND tenant_id = ? AND approval_level = ? LIMIT 1`,
+        WHERE leave_id = ? AND tenant_id = ? AND approval_level = ? LIMIT 1`,
       [leave_id, tenant_id, currentLevel + 1],
     );
 
     if (nextFlow) {
       await conn.execute(
         `UPDATE leave_master
-         SET current_approval_level = ?, current_approver_employee_id = ?,
-             last_action_by = ?, last_action_at = NOW(), last_action_remarks = ?, updated_at = NOW()
-         WHERE leave_id = ? AND tenant_id = ?`,
+          SET current_approval_level = ?, current_approver_employee_id = ?,
+              last_action_by = ?, last_action_at = NOW(), last_action_remarks = ?, updated_at = NOW()
+          WHERE leave_id = ? AND tenant_id = ?`,
         [
           currentLevel + 1,
           nextFlow.approver_employee_id,
@@ -796,10 +845,10 @@ router.post("/approve/:leave_id", async (req, res) => {
     } else {
       await conn.execute(
         `UPDATE leave_master
-         SET status = 'Approved', final_status = 'Approved',
-             current_approver_employee_id = NULL,
-             last_action_by = ?, last_action_at = NOW(), last_action_remarks = ?, updated_at = NOW()
-         WHERE leave_id = ? AND tenant_id = ?`,
+          SET status = 'Approved', final_status = 'Approved',
+              current_approver_employee_id = NULL,
+              last_action_by = ?, last_action_at = NOW(), last_action_remarks = ?, updated_at = NOW()
+          WHERE leave_id = ? AND tenant_id = ?`,
         [approver_emp_id, remarks, leave_id, tenant_id],
       );
     }
@@ -845,9 +894,9 @@ router.post("/reject/:leave_id", async (req, res) => {
 
     const [[leave]] = await conn.execute(
       `SELECT * FROM leave_master
-       WHERE leave_id = ? AND tenant_id = ? AND final_status = 'Pending'
-         AND current_approver_employee_id = ?
-       LIMIT 1`,
+        WHERE leave_id = ? AND tenant_id = ? AND final_status = 'Pending'
+          AND current_approver_employee_id = ?
+        LIMIT 1`,
       [leave_id, tenant_id, approver_emp_id],
     );
     if (!leave) {
@@ -864,16 +913,16 @@ router.post("/reject/:leave_id", async (req, res) => {
 
     await conn.execute(
       `UPDATE leave_approval_flow
-       SET action = 'Rejected', action_at = NOW(), remarks = ?
-       WHERE leave_id = ? AND tenant_id = ? AND approval_level = ?`,
+        SET action = 'Rejected', action_at = NOW(), remarks = ?
+        WHERE leave_id = ? AND tenant_id = ? AND approval_level = ?`,
       [remarks.trim(), leave_id, tenant_id, currentLevel],
     );
     await conn.execute(
       `UPDATE leave_master
-       SET status = 'Rejected', final_status = 'Rejected',
-           current_approver_employee_id = NULL,
-           last_action_by = ?, last_action_at = NOW(), last_action_remarks = ?, updated_at = NOW()
-       WHERE leave_id = ? AND tenant_id = ?`,
+        SET status = 'Rejected', final_status = 'Rejected',
+            current_approver_employee_id = NULL,
+            last_action_by = ?, last_action_at = NOW(), last_action_remarks = ?, updated_at = NOW()
+        WHERE leave_id = ? AND tenant_id = ?`,
       [approver_emp_id, remarks.trim(), leave_id, tenant_id],
     );
 
@@ -913,7 +962,7 @@ router.post("/cancel/:leave_id", async (req, res) => {
 
     const [[leave]] = await conn.execute(
       `SELECT * FROM leave_master
-       WHERE leave_id = ? AND tenant_id = ? AND emp_id = ? LIMIT 1`,
+        WHERE leave_id = ? AND tenant_id = ? AND emp_id = ? LIMIT 1`,
       [leave_id, tenant_id, emp_id],
     );
     if (!leave) {
@@ -941,8 +990,8 @@ router.post("/cancel/:leave_id", async (req, res) => {
 
     await conn.execute(
       `UPDATE leave_master
-       SET final_status = 'Cancelled', status = 'Cancelled', cancel_reason = ?, updated_at = NOW()
-       WHERE leave_id = ? AND tenant_id = ?`,
+        SET final_status = 'Cancelled', status = 'Cancelled', cancel_reason = ?, updated_at = NOW()
+        WHERE leave_id = ? AND tenant_id = ?`,
       [cancel_reason.trim(), leave_id, tenant_id],
     );
 
@@ -957,6 +1006,39 @@ router.post("/cancel/:leave_id", async (req, res) => {
   }
 });
 
+// ─── 13. Available Comp-offs for Leave Apply   GET /api/leave/available-compoffs ──
+
+router.get("/available-compoffs", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const emp_id = req.user?.employee_id || req.user?.emp_id;
+  if (!emp_id)
+    return send(res, 401, false, "Unauthorized: employee not identified");
+
+  try {
+    const [rows] = await db.execute(
+      `SELECT
+          id,
+          DATE_FORMAT(earned_date, '%Y-%m-%d') AS earned_date,
+          DATE_FORMAT(expiry_date, '%Y-%m-%d') AS expiry_date,
+          status,
+          remarks
+       FROM comp_off
+       WHERE tenant_id   = ?
+         AND employee_id = ?
+         AND status      = 'earned'
+         AND expiry_date >= CURDATE()
+       ORDER BY expiry_date ASC`,
+      [tenant_id, emp_id],
+    );
+    return send(res, 200, true, "Available comp-offs fetched", { data: rows });
+  } catch (err) {
+    console.error("[leave/available-compoffs]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
 router.get("/all-history", async (req, res) => {
   const tenant_id = getTenantId(req);
   if (!tenant_id)
@@ -1001,44 +1083,44 @@ router.get("/all-history", async (req, res) => {
   try {
     const [rows] = await db.execute(
       `SELECT
-         lm.leave_id,
-         lm.emp_id,
-         CONCAT(e.first_name, ' ', e.last_name)         AS employee_name,
-         e.department_id,
-         d.department_name,
-         lm.leave_type_id,
-         lt.leave_name,
-         lm.leave_start_date,
-         lm.leave_end_date,
-         lm.is_half_day,
-         lm.half_day_period,
-         lm.number_of_days,
-         lm.reason,
-         lm.status,
-         lm.final_status,
-         lm.current_approval_level,
-         CONCAT(ca.first_name, ' ', ca.last_name)       AS current_approver_name,
-         lm.last_action_by,
-         CONCAT(la.first_name, ' ', la.last_name)       AS last_action_by_name,
-         lm.last_action_at,
-         lm.last_action_remarks,
-         lm.cancel_reason,
-         lm.created_at,
-         lm.updated_at
-       FROM leave_master lm
-       LEFT JOIN employee_master e
-         ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
-       LEFT JOIN department_master d
-         ON e.department_id = d.department_id AND d.tenant_id = lm.tenant_id
-       LEFT JOIN leave_type_master lt
-         ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
-       LEFT JOIN employee_master ca
-         ON lm.current_approver_employee_id = ca.emp_id AND ca.tenant_id = lm.tenant_id
-       LEFT JOIN employee_master la
-         ON lm.last_action_by = la.emp_id AND la.tenant_id = lm.tenant_id
-       WHERE lm.tenant_id = ?
-       ${extraWhere}
-       ORDER BY lm.created_at ${sortDir}`,
+          lm.leave_id,
+          lm.emp_id,
+          CONCAT(e.first_name, ' ', e.last_name)         AS employee_name,
+          e.department_id,
+          d.department_name,
+          lm.leave_type_id,
+          lt.leave_name,
+          lm.leave_start_date,
+          lm.leave_end_date,
+          lm.is_half_day,
+          lm.half_day_period,
+          lm.number_of_days,
+          lm.reason,
+          lm.status,
+          lm.final_status,
+          lm.current_approval_level,
+          CONCAT(ca.first_name, ' ', ca.last_name)       AS current_approver_name,
+          lm.last_action_by,
+          CONCAT(la.first_name, ' ', la.last_name)       AS last_action_by_name,
+          lm.last_action_at,
+          lm.last_action_remarks,
+          lm.cancel_reason,
+          lm.created_at,
+          lm.updated_at
+        FROM leave_master lm
+        LEFT JOIN employee_master e
+          ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
+        LEFT JOIN department_master d
+          ON e.department_id = d.department_id AND d.tenant_id = lm.tenant_id
+        LEFT JOIN leave_type_master lt
+          ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
+        LEFT JOIN employee_master ca
+          ON lm.current_approver_employee_id = ca.emp_id AND ca.tenant_id = lm.tenant_id
+        LEFT JOIN employee_master la
+          ON lm.last_action_by = la.emp_id AND la.tenant_id = lm.tenant_id
+        WHERE lm.tenant_id = ?
+        ${extraWhere}
+        ORDER BY lm.created_at ${sortDir}`,
       params,
     );
 

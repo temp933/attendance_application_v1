@@ -659,6 +659,12 @@ app.use("/api/admin", faceEmbRouter);
 const leaveRouter = require("./leave");
 app.use("/api/leave", authMiddleware, leaveRouter);
 
+const compOffRoutes = require("./Attendance/comp-off");
+app.use("/api/comp-off", compOffRoutes);
+
+const reportRouter = require('./Attendance/normal_attendance_report_routes');
+app.use('/api', authMiddleware, reportRouter);
+
 // In server.js — temporary stubs for leave status summary and dashboard data
 app.get("/api/leave-status-summary", (req, res) => {
   res.json({ ok: true, data: [] });

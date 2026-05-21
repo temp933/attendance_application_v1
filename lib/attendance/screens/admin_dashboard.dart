@@ -26,6 +26,7 @@ import './Attendance screens/gps_attendance_management_screen.dart';
 import './Attendance screens/face_gps_attendance_management_screen.dart';
 import 'admin_face_approval.dart';
 import 'leave_policy_management.dart';
+import 'admin_attendance_report.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final int initialIndex;
@@ -110,6 +111,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             '',
       ),
 
+AdminAttendanceReportScreen(),
       AdminDepartmentsScreen(tenantId: widget.tenantId), // 4
       ManageUserScreen(roleId: widget.roleId, tenantId: widget.tenantId), // 5
       AdminApprovalPage(),
@@ -130,6 +132,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     'Normal Attendance',
     'GPS Attendance',
     'Face & GPS Attendance',
+    'Reports',
     'Departments',
     'Manage Users',
     'Approvals',
@@ -162,7 +165,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       selectedIcon: Icon(Icons.face),
       label: Text('Face & GPS Attendance'),
     ),
-
+ NavigationRailDestination(
+      icon: Icon(Icons.report_outlined),
+      selectedIcon: Icon(Icons.report),
+      label: Text('Reports'),
+    ),
     NavigationRailDestination(
       icon: Icon(Icons.apartment_outlined),
       selectedIcon: Icon(Icons.apartment),

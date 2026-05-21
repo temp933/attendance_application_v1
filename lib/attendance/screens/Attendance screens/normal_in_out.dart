@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../providers/api_config.dart';
 import '../../services/normal_attendance_service.dart';
+import 'normal_att_history.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Models
@@ -383,38 +384,72 @@ class _NormalAttendanceScreenState extends State<NormalAttendanceScreen>
             ),
           ],
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.access_time_rounded,
-                size: 15,
-                color: Color(0xFF5C6BC0),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                DateFormat('hh:mm:ss a').format(_now),
-                style: const TextStyle(
-                  fontFeatures: [FontFeature.tabularFigures()],
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A2E),
+        Row(
+          children: [
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => AttendanceHistoryScreen()),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.history_rounded,
+                  size: 20,
+                  color: Color(0xFF5C6BC0),
                 ),
               ),
-            ],
-          ),
+            ),
+
+            const SizedBox(width: 10),
+
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.access_time_rounded,
+                    size: 15,
+                    color: Color(0xFF5C6BC0),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    DateFormat('hh:mm:ss a').format(_now),
+                    style: const TextStyle(
+                      fontFeatures: [FontFeature.tabularFigures()],
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
     );

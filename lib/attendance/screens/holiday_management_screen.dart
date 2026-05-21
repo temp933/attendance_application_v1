@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/api_client.dart';
-
+import '../providers/api_config.dart';
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const Color _primary = Color(0xFF1A56DB);
 const Color _accent = Color(0xFF0E9F6E);
@@ -145,8 +145,7 @@ class HolidayService {
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 class HolidayManagementScreen extends StatefulWidget {
-  final int loginId;
-  const HolidayManagementScreen({super.key, required this.loginId});
+  const HolidayManagementScreen({super.key,});
 
   @override
   State<HolidayManagementScreen> createState() =>
@@ -1074,7 +1073,7 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
                           ? null
                           : descCtrl.text.trim(),
                       isRecurring: isRecurring,
-                      loginId: widget.loginId,
+                      loginId: int.tryParse(ApiConfig.loginId) ?? 0,
                     );
                     _snack('Holiday added');
                   }
@@ -1230,7 +1229,7 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
               onPressed: () async {
                 Navigator.pop(ctx);
                 try {
-                  final res = await _svc.bulkImport(importYear, widget.loginId);
+                  final res = await _svc.bulkImport(importYear, int.tryParse(ApiConfig.loginId) ?? 0);
                   _snack(
                     res['message'] ??
                         (res['success'] == true
