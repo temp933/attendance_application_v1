@@ -4,6 +4,8 @@ import '../../providers/api_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'attendance_policy_screen.dart';
+import 'admin_force_close_screen.dart';
+
 // ── Design Tokens ─────────────────────────────────────────────────────────────
 const Color _primary = Color(0xFF1A56DB);
 const Color _accent = Color(0xFF0E9F6E);
@@ -427,6 +429,35 @@ class _NormalAttendanceManagementScreenState
                 tooltip: 'Change date',
                 icon: const Icon(Icons.edit_calendar_rounded, color: _primary),
                 onPressed: _pickDate,
+              ),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    tooltip: 'Force close open sessions',
+                    icon: const Icon(Icons.lock_open_rounded, color: _red),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AdminForceCloseScreen(loginId: 57),
+                      ),
+                    ).then((_) => _loadData()), // refresh list on return
+                  ),
+                  // Badge — only show when there are active sessions
+                  if ((_stats?.activeNow ?? 0) > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: _red,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
               ),
               IconButton(
                 tooltip: 'Policy settings',

@@ -1,64 +1,7 @@
-// // class ApiConfig {
-// //   static const String baseUrl =
-// //       "https://unrivaled-headset-unmanaged.ngrok-free.dev";
-
-// //   static const Map<String, String> headers = {
-// //     'Content-Type': 'application/json',
-// //     'ngrok-skip-browser-warning': 'true',
-// //   };
-// // // }
-// // class ApiConfig {
-// //   static const String baseUrl = 'http://192.168.29.104:5000/api';
-
-// //   static Map<String, String> get headers => {
-// //     'Content-Type': 'application/json',
-// //     'ngrok-skip-browser-warning': 'true',
-// //   };
-// // // }
-// // class ApiConfig {
-// //   // static const String baseUrl = 'http://192.168.29.104:5000/api';
-// //   static const String baseUrl = 'http://192.168.1.12:5000/api';
-
-// //   /// Set this once at app startup (e.g. after login) so every request
-// //   /// automatically carries the correct tenant header.
-// //   static String tenantId = '';
-
-// //   static Map<String, String> get headers => {
-// //     'Content-Type': 'application/json',
-// //     'ngrok-skip-browser-warning': 'true',
-// //     if (tenantId.isNotEmpty) 'x-tenant-id': tenantId,
-// //   };
-// // }
-
-// import 'package:shared_preferences/shared_preferences.dart';
-
-// class ApiConfig {
-//   static const String baseUrl = 'http://192.168.1.12:5000/api';
-//   static String tenantId = '';
-//   static String employeeId = '';
-//   static String _token = '';
-
-//   static void setToken(String token) => _token = token;
-
-//   static Map<String, String> get headers => {
-//     'Content-Type': 'application/json',
-//     'ngrok-skip-browser-warning': 'true',
-//     if (tenantId.isNotEmpty) 'x-tenant-id': tenantId,
-//     if (employeeId.isNotEmpty) 'x-employee-id': employeeId,
-//     if (_token.isNotEmpty) 'Authorization': 'Bearer $_token',
-//   };
-
-//   static Future<void> loadFromPrefs() async {
-//     final prefs = await SharedPreferences.getInstance();
-//     _token = prefs.getString('session_token') ?? '';
-//     tenantId = prefs.getString('tenantId') ?? '';
-//     employeeId = prefs.getString('employeeId') ?? ''; // ← ADD THIS
-//   }
-// }
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiConfig {
-  static const String baseUrl = 'http://192.168.1.20:5000/api';
+  static const String baseUrl = 'http://192.168.1.8:5000/api';
 
   // ── Single source of truth for all SharedPreferences keys ─────────
   static const _kToken = 'session_token';
