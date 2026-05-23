@@ -1,54 +1,83 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'responsive_utils.dart';
 import '../providers/api_client.dart';
-import '../providers/api_config.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MODEL
 // ─────────────────────────────────────────────────────────────────────────────
 class SessionUser {
   final int loginId;
-  final int? empId;
+  final String? empId;
   final String username;
   final String fullName;
   final String roleName;
+  final String departmentName;
+  final int roleId;
   final bool isLoggedIn;
+  final String accountStatus; // 'Active' | 'Inactive'
+  final bool isAccountLocked; // admin-locked (status = Inactive)
   final String? sessionDevice;
   final DateTime? lastLoginAt;
+  final DateTime? sessionExpiresAt;
+  final int failedAttempts;
+  final bool isLocked; // brute-force lock (locked_until)
+  final DateTime? lockedUntil;
 
-  SessionUser({
+  const SessionUser({
     required this.loginId,
     this.empId,
     required this.username,
     required this.fullName,
     required this.roleName,
+    this.departmentName = 'No Department',
+    required this.roleId,
     required this.isLoggedIn,
+    this.accountStatus = 'Active',
+    this.isAccountLocked = false,
     this.sessionDevice,
     this.lastLoginAt,
+    this.sessionExpiresAt,
+    this.failedAttempts = 0,
+    this.isLocked = false,
+    this.lockedUntil,
   });
 
   factory SessionUser.fromJson(Map<String, dynamic> j) => SessionUser(
-    loginId: j['loginId'] ?? 0,
-    empId: j['empId'],
-    username: j['username'] ?? '',
-    fullName: j['fullName'] ?? j['username'] ?? '',
-    roleName: j['roleName'] ?? '-',
+    loginId: (j['loginId'] as num?)?.toInt() ?? 0,
+    empId: j['empId']?.toString(),
+    username: j['username'] as String? ?? '',
+    fullName: (j['fullName'] as String?)?.trim().isNotEmpty == true
+        ? j['fullName'] as String
+        : j['username'] as String? ?? '',
+    roleName: j['roleName'] as String? ?? 'Employee',
+    departmentName: j['departmentName'] as String? ?? 'No Department',
+    roleId: (j['roleId'] as num?)?.toInt() ?? 4,
     isLoggedIn: j['isLoggedIn'] == true,
-    sessionDevice: j['sessionDevice'],
+    accountStatus: j['accountStatus'] as String? ?? 'Active',
+    isAccountLocked: j['isAccountLocked'] == true,
+    sessionDevice: j['sessionDevice'] as String?,
     lastLoginAt: j['lastLoginAt'] != null
-        ? DateTime.tryParse(j['lastLoginAt'].toString())
+        ? DateTime.tryParse(j['lastLoginAt'] as String)
+        : null,
+    sessionExpiresAt: j['sessionExpiresAt'] != null
+        ? DateTime.tryParse(j['sessionExpiresAt'] as String)
+        : null,
+    failedAttempts: (j['failedAttempts'] as num?)?.toInt() ?? 0,
+    isLocked: j['isLocked'] == true,
+    lockedUntil: j['lockedUntil'] != null
+        ? DateTime.tryParse(j['lockedUntil'] as String)
         : null,
   );
 
   String get initials {
-    final parts = fullName.trim().split(' ');
-    if (parts.length >= 2) {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2)
       return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-    }
     return fullName.isNotEmpty ? fullName[0].toUpperCase() : '?';
   }
+
+  /// True if the account is locked by any means
+  bool get anyLocked => isAccountLocked || isLocked;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,36 +87,54 @@ class _SessionService {
   static Future<List<SessionUser>> fetchAll() async {
     final res = await ApiClient.get('/admin/sessions');
     if (res.statusCode == 200) {
-      final body = jsonDecode(res.body);
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
       if (body['success'] == true) {
         return (body['data'] as List)
-            .map((e) => SessionUser.fromJson(e))
+            .map((e) => SessionUser.fromJson(e as Map<String, dynamic>))
             .toList();
       }
     }
     throw Exception('Failed to fetch sessions');
   }
 
-  static Future<void> forceLogout(int loginId, {int? empId}) async {
-    // Backend now handles attendance + session close in one call
+  static Future<void> forceLogout(int loginId) async {
     final res = await ApiClient.post(
       '/admin/sessions/$loginId/force-logout',
       {},
     );
-    final body = jsonDecode(res.body);
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode != 200 || body['success'] != true) {
       throw Exception(body['message'] ?? 'Force logout failed');
     }
   }
 
-  static Future<void> forceLogoutAll(int empId) async {
+  static Future<void> unlock(int loginId) async {
+    final res = await ApiClient.post('/admin/sessions/$loginId/unlock', {});
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode != 200 || body['success'] != true) {
+      throw Exception(body['message'] ?? 'Unlock failed');
+    }
+  }
+
+  static Future<void> lockAccount(int loginId) async {
     final res = await ApiClient.post(
-      '/admin/sessions/force-logout-all/$empId',
+      '/admin/sessions/$loginId/lock-account',
       {},
     );
-    final body = jsonDecode(res.body);
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode != 200 || body['success'] != true) {
-      throw Exception(body['message'] ?? 'Force logout all failed');
+      throw Exception(body['message'] ?? 'Lock failed');
+    }
+  }
+
+  static Future<void> unlockAccount(int loginId) async {
+    final res = await ApiClient.post(
+      '/admin/sessions/$loginId/unlock-account',
+      {},
+    );
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode != 200 || body['success'] != true) {
+      throw Exception(body['message'] ?? 'Unlock account failed');
     }
   }
 }
@@ -106,1111 +153,978 @@ class AdminSessionManagementScreen extends StatefulWidget {
 class _AdminSessionManagementScreenState
     extends State<AdminSessionManagementScreen>
     with SingleTickerProviderStateMixin {
-  // ── Design Tokens — copied exactly from EmployeeProfileScreen ───────────────
-  static const Color _primary = Color(0xFF1A56DB);
-  static const Color _accent = Color(0xFF0E9F6E);
-  static const Color _purple = Color(0xFF7C3AED);
-  static const Color _amber = Color(0xFFF59E0B);
-  static const Color _red = Color(0xFFEF4444);
-  static const Color _surface = Color(0xFFF0F4FF);
-  static const Color _card = Colors.white;
-  static const Color _textDark = Color(0xFF0F172A);
-  static const Color _textMid = Color(0xFF64748B);
-  static const Color _textLight = Color(0xFF94A3B8);
-  static const Color _border = Color(0xFFE2E8F0);
+  // ── Design tokens ────────────────────────────────────────────────────────────
+  static const _bg = Color(0xFFF8F9FC);
+  static const _card = Colors.white;
+  static const _primary = Color(0xFF2563EB);
+  static const _primaryLight = Color(0xFFEFF6FF);
+  static const _success = Color(0xFF16A34A);
+  static const _successLight = Color(0xFFF0FDF4);
+  static const _danger = Color(0xFFDC2626);
+  static const _dangerLight = Color(0xFFFEF2F2);
+  static const _warning = Color(0xFFD97706);
+  static const _purple = Color(0xFF7C3AED);
+  static const _purpleLight = Color(0xFFF5F3FF);
+  static const _slate = Color(0xFF64748B);
+  static const _border = Color(0xFFE2E8F0);
+  static const _textDark = Color(0xFF0F172A);
+  static const _textMid = Color(0xFF475569);
 
-  List<SessionUser> _allSessions = [];
-  bool _isLoading = true;
-  bool _actionLoading = false;
-  String? _errorMessage;
-  String _searchQuery = '';
-  String _filterStatus = 'All';
+  List<SessionUser> _all = [];
+  bool _loading = true;
+  bool _busy = false;
+  String? _error;
+  String _search = '';
+  String _filter = 'all'; // all | active | inactive | locked
 
-  late AnimationController _animCtrl;
-  late Animation<double> _fadeAnim;
+  late AnimationController _shimmerCtrl;
 
   @override
   void initState() {
     super.initState();
-    _animCtrl = AnimationController(
+    _shimmerCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
-    _loadSessions();
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+    _load();
   }
 
   @override
   void dispose() {
-    _animCtrl.dispose();
+    _shimmerCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _loadSessions() async {
+  // ── Data ──────────────────────────────────────────────────────────────────
+  Future<void> _load() async {
     setState(() {
-      _isLoading = true;
-      _errorMessage = null;
+      _loading = true;
+      _error = null;
     });
     try {
       final sessions = await _SessionService.fetchAll();
-      setState(() {
-        _allSessions = sessions;
-        _isLoading = false;
-      });
-      _animCtrl.forward(from: 0);
+      if (mounted) setState(() => _all = sessions);
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Unable to load sessions. Check your connection.';
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  // ── Filtering ────────────────────────────────────────────────────────────────
-  List<SessionUser> get _filtered {
-    return _allSessions.where((s) {
-      final q = _searchQuery.toLowerCase();
-      final matchSearch =
-          q.isEmpty ||
-          s.fullName.toLowerCase().contains(q) ||
-          s.username.toLowerCase().contains(q) ||
-          s.roleName.toLowerCase().contains(q) ||
-          (s.sessionDevice?.toLowerCase().contains(q) ?? false);
-      final matchFilter = switch (_filterStatus) {
-        'LoggedIn' => s.isLoggedIn,
-        'LoggedOut' => !s.isLoggedIn,
-        _ => true,
-      };
-      return matchSearch && matchFilter;
-    }).toList();
-  }
+  List<SessionUser> get _filtered => _all.where((s) {
+    final q = _search.toLowerCase();
+    final matchSearch =
+        q.isEmpty ||
+        s.fullName.toLowerCase().contains(q) ||
+        s.username.toLowerCase().contains(q) ||
+        s.roleName.toLowerCase().contains(q) ||
+        (s.sessionDevice?.toLowerCase().contains(q) ?? false);
+    final matchFilter = switch (_filter) {
+      'active' => s.isLoggedIn,
+      'inactive' => !s.isLoggedIn && !s.anyLocked,
+      'locked' => s.anyLocked,
+      _ => true,
+    };
+    return matchSearch && matchFilter;
+  }).toList();
 
-  int get _activeCount => _allSessions.where((s) => s.isLoggedIn).length;
-  int get _idleCount => _allSessions.where((s) => !s.isLoggedIn).length;
+  int get _activeCount => _all.where((s) => s.isLoggedIn).length;
+  int get _lockedCount => _all.where((s) => s.anyLocked).length;
+  int get _inactiveCount =>
+      _all.where((s) => !s.isLoggedIn && !s.anyLocked).length;
 
-  // ── Actions ───────────────────────────────────────────────────────────────────
-  Future<void> _handleForceLogout(SessionUser user) async {
-    final ok = await _confirmDialog(
+  // ── Actions ────────────────────────────────────────────────────────────────
+  Future<void> _doForceLogout(SessionUser u) async {
+    final ok = await _confirm(
       title: 'Force Logout',
-      message:
-          'This will immediately log out "${user.fullName}" from their current device and end their active attendance session.\n\nThey can log in again from any device.',
-      confirmLabel: 'Force Logout',
-      confirmColor: _red,
+      body:
+          'Log out "${u.fullName}" immediately?\n\nTheir active attendance session will also be closed.',
+      confirmText: 'Force Logout',
+      confirmColor: _danger,
     );
     if (!ok) return;
-    setState(() => _actionLoading = true);
+    await _run(() => _SessionService.forceLogout(u.loginId));
+    _snack('${u.fullName} logged out successfully.', _danger);
+  }
+
+  Future<void> _doUnlockBruteForce(SessionUser u) async {
+    await _run(() => _SessionService.unlock(u.loginId));
+    _snack('Brute-force lock cleared for ${u.fullName}.', _success);
+  }
+
+  Future<void> _doLockAccount(SessionUser u) async {
+    final ok = await _confirm(
+      title: 'Lock Account',
+      body:
+          'Lock "${u.fullName}"\'s account?\n\nThey will be immediately logged out and will not be able to log in until unlocked.',
+      confirmText: 'Lock Account',
+      confirmColor: _danger,
+    );
+    if (!ok) return;
+    await _run(() => _SessionService.lockAccount(u.loginId));
+    _snack('${u.fullName}\'s account has been locked.', _danger);
+  }
+
+  Future<void> _doUnlockAccount(SessionUser u) async {
+    final ok = await _confirm(
+      title: 'Unlock Account',
+      body:
+          'Re-enable "${u.fullName}"\'s account?\n\nThey will be able to log in again.',
+      confirmText: 'Unlock Account',
+      confirmColor: _success,
+    );
+    if (!ok) return;
+    await _run(() => _SessionService.unlockAccount(u.loginId));
+    _snack('${u.fullName}\'s account has been unlocked.', _success);
+  }
+
+  Future<void> _run(Future<void> Function() fn) async {
+    setState(() => _busy = true);
     try {
-      await _SessionService.forceLogout(user.loginId, empId: user.empId);
-      _snack('${user.fullName} has been logged out and session ended.', _red);
-      await _loadSessions();
+      await fn();
+      await _load();
     } catch (e) {
-      _snack('Error: $e', _red);
+      _snack('Error: $e', _danger);
     } finally {
-      setState(() => _actionLoading = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _handleForceLogoutAll(SessionUser user) async {
-    if (user.empId == null) {
-      _snack('Employee ID not found for this user', _amber);
-      return;
-    }
-    final ok = await _confirmDialog(
-      title: 'Revoke All Sessions',
-      message:
-          'Force logout "${user.fullName}" from ALL devices?\n\nThey can log in again from any device.',
-      confirmLabel: 'Revoke All',
-      confirmColor: const Color(0xFFEA580C),
-    );
-    if (!ok) return;
-    setState(() => _actionLoading = true);
-    try {
-      await _SessionService.forceLogoutAll(user.empId!);
-      _snack(
-        'All sessions for ${user.fullName} cleared.',
-        const Color(0xFFEA580C),
-      );
-      await _loadSessions();
-    } catch (e) {
-      _snack('Error: $e', _red);
-    } finally {
-      setState(() => _actionLoading = false);
-    }
-  }
-
-  Future<bool> _confirmDialog({
+  Future<bool> _confirm({
     required String title,
-    required String message,
-    required String confirmLabel,
+    required String body,
+    required String confirmText,
     required Color confirmColor,
-  }) async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                color: _textDark,
-              ),
-            ),
-            content: Text(
-              message,
-              style: const TextStyle(color: _textMid, height: 1.5),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel', style: TextStyle(color: _textMid)),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: confirmColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(confirmLabel),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
+  }) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (ctx) => _ConfirmDialog(
+          title: title,
+          body: body,
+          confirmText: confirmText,
+          confirmColor: confirmColor,
+        ),
+      ) ??
+      false;
 
   void _snack(String msg, Color color) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
+        content: Row(
+          children: [
+            const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.white,
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(msg, style: const TextStyle(fontSize: 13))),
+          ],
+        ),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 4),
       ),
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────────
   String _timeAgo(DateTime? dt) {
     if (dt == null) return 'Never';
     final diff = DateTime.now().difference(dt);
-    if (diff.inDays > 0) return '${diff.inDays}d ago';
-    if (diff.inHours > 0) return '${diff.inHours}h ago';
-    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+    if (diff.inDays >= 1) return '${diff.inDays}d ago';
+    if (diff.inHours >= 1) return '${diff.inHours}h ago';
+    if (diff.inMinutes >= 1) return '${diff.inMinutes}m ago';
     return 'Just now';
   }
 
-  Color _roleColor(String role) {
-    switch (role.toLowerCase()) {
-      case 'admin':
-        return _red;
-      case 'hr':
-        return _primary;
-      case 'tl':
-      case 'team lead':
-      case 'teamlead':
-        return _purple;
-      default:
-        return _accent;
-    }
+  String _formatLockTime(DateTime dt) {
+    final diff = dt.difference(DateTime.now());
+    if (diff.isNegative) return 'Expired';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m remaining';
+    return '${diff.inHours}h ${diff.inMinutes % 60}m remaining';
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // BUILD
-  // ─────────────────────────────────────────────────────────────────────────────
+  ({Color bg, Color fg, IconData icon}) _roleStyle(int roleId) =>
+      switch (roleId) {
+        1 => (
+          bg: _dangerLight,
+          fg: _danger,
+          icon: Icons.admin_panel_settings_rounded,
+        ),
+        2 => (bg: _primaryLight, fg: _primary, icon: Icons.people_alt_rounded),
+        3 => (bg: _purpleLight, fg: _purple, icon: Icons.group_rounded),
+        _ => (
+          bg: const Color(0xFFF1F5F9),
+          fg: _slate,
+          icon: Icons.person_rounded,
+        ),
+      };
+
+  // ── Build ──────────────────────────────────────────────────────────────────
   @override
-  Widget build(BuildContext context) {
-    final r = Responsive.of(context);
-    return Scaffold(
-      backgroundColor: _surface,
-      extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: _primary))
-          : _errorMessage != null
-          ? _buildError(r)
-          : FadeTransition(
-              opacity: _fadeAnim,
-              child: Stack(
-                children: [
-                  RefreshIndicator(
-                    onRefresh: _loadSessions,
-                    color: _primary,
-                    child: CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: SizedBox(
-                            height:
-                                MediaQuery.of(context).padding.top +
-                                kToolbarHeight +
-                                8,
-                          ),
-                        ),
-                        SliverPadding(
-                          padding: EdgeInsets.fromLTRB(r.hPad, 0, r.hPad, 32),
-                          sliver: SliverToBoxAdapter(
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: r.contentMaxWidth,
-                                ),
-                                child: _buildBody(r),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_actionLoading)
-                    Container(
-                      color: Colors.black26,
-                      child: const Center(
-                        child: CircularProgressIndicator(color: _primary),
-                      ),
-                    ),
-                ],
-              ),
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: _bg,
+    appBar: _buildAppBar(),
+    body: Stack(
+      children: [
+        _buildBody(),
+        if (_busy)
+          Container(
+            color: Colors.black.withValues(alpha: 0.18),
+            child: const Center(
+              child: CircularProgressIndicator(color: _primary),
             ),
-    );
-  }
+          ),
+      ],
+    ),
+  );
 
-  // ── AppBar — same style as profile screen ────────────────────────────────────
   PreferredSizeWidget _buildAppBar() => AppBar(
-    // backgroundColor: _primary,
-    foregroundColor: const Color.fromARGB(255, 9, 9, 9),
+    backgroundColor: Colors.white,
+    foregroundColor: _textDark,
     elevation: 0,
-    // title: const Text(
-    //   'Session Management',
-    //   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
-    // ),
+    centerTitle: false,
+    title: const Text(
+      'Session Management',
+      style: TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.w700,
+        color: _textDark,
+      ),
+    ),
+    bottom: PreferredSize(
+      preferredSize: const Size.fromHeight(1),
+      child: Container(height: 1, color: _border),
+    ),
     actions: [
       IconButton(
         tooltip: 'Refresh',
         icon: const Icon(Icons.refresh_rounded),
-        onPressed: _loadSessions,
+        onPressed: _loading ? null : _load,
       ),
-      const SizedBox(width: 4),
+      const SizedBox(width: 8),
     ],
   );
 
-  // ── Error — same as profile screen ──────────────────────────────────────────
-  Widget _buildError(Responsive r) => Center(
-    child: Padding(
-      padding: EdgeInsets.symmetric(horizontal: r.hPad),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: r.contentMaxWidth),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: _red.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.wifi_off_rounded, color: _red, size: 40),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Failed to load sessions',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: _textDark,
+  Widget _buildBody() {
+    if (_loading) return _buildSkeleton();
+    if (_error != null) return _buildError();
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: _primary,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Column(
+                children: [
+                  _buildStatsRow(),
+                  const SizedBox(height: 14),
+                  _buildSearchBar(),
+                  const SizedBox(height: 10),
+                  _buildFilterRow(),
+                  const SizedBox(height: 14),
+                ],
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              _errorMessage!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: _textMid, fontSize: 13),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: _loadSessions,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Try Again'),
-              style: FilledButton.styleFrom(
-                backgroundColor: _primary,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          ),
+          if (_filtered.isEmpty)
+            SliverFillRemaining(child: _buildEmpty())
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (ctx, i) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _buildCard(_filtered[i]),
+                  ),
+                  childCount: _filtered.length,
                 ),
               ),
             ),
-          ],
+        ],
+      ),
+    );
+  }
+
+  // ── Stats ──────────────────────────────────────────────────────────────────
+  Widget _buildStatsRow() => Row(
+    children: [
+      Expanded(
+        child: _statCard(
+          '${_all.length}',
+          'Total',
+          Icons.people_rounded,
+          _primary,
+          _primaryLight,
         ),
       ),
-    ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: _statCard(
+          '$_activeCount',
+          'Active',
+          Icons.circle,
+          _success,
+          _successLight,
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: _statCard(
+          '$_inactiveCount',
+          'Offline',
+          Icons.circle_outlined,
+          _slate,
+          const Color(0xFFF1F5F9),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: _statCard(
+          '$_lockedCount',
+          'Locked',
+          Icons.lock_rounded,
+          _danger,
+          _dangerLight,
+        ),
+      ),
+    ],
   );
 
-  // ── Body ─────────────────────────────────────────────────────────────────────
-  Widget _buildBody(Responsive r) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHeroCard(r),
-        const SizedBox(height: 16),
-        _buildSearchBar(r),
-        const SizedBox(height: 12),
-        _buildFilterChips(r),
-        const SizedBox(height: 12),
-        if (_filtered.isEmpty)
-          _buildEmpty(r)
-        else if (r.useTwoColSections)
-          _buildTwoColGrid(r)
-        else
-          _buildSingleColList(r),
-      ],
-    );
-  }
-
-  // ── Hero Card — gradient, same pattern as profile hero ───────────────────────
-  Widget _buildHeroCard(Responsive r) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1A56DB), Color(0xFF1E3A8A), Color(0xFF1e1b4b)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  Widget _statCard(
+    String val,
+    String label,
+    IconData icon,
+    Color fg,
+    Color bg,
+  ) => Container(
+    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+    decoration: BoxDecoration(
+      color: _card,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: _border),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.04),
+          blurRadius: 6,
+          offset: const Offset(0, 2),
         ),
-        borderRadius: BorderRadius.circular(r.cardRadius),
-        boxShadow: [
-          BoxShadow(
-            color: _primary.withOpacity(0.35),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            top: -30,
-            right: -30,
-            child: Container(
-              width: 130,
-              height: 130,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.05),
-              ),
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.all(
-              r.isDesktop
-                  ? 28
-                  : r.isTablet
-                  ? 24
-                  : 20,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Icon block — mirrors avatar block
-                    Container(
-                      width: r.avatarSize,
-                      height: r.avatarSize,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(
-                          r.isDesktop ? 22 : 18,
-                        ),
-                        color: Colors.white.withOpacity(0.15),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 2,
-                        ),
-                      ),
-                      child: const Center(
-                        child: Icon(
-                          Icons.manage_accounts_rounded,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: r.isDesktop ? 20 : 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Login Sessions',
-                            style: TextStyle(
-                              fontSize: r.heroNameSize,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              height: 1.2,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            'Monitor and control active device sessions',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.7),
-                              fontSize: r.bodyTextSize,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Container(height: 1, color: Colors.white.withOpacity(0.12)),
-                const SizedBox(height: 14),
-                // Stat row — same _heroStat pattern
-                Row(
-                  children: [
-                    _heroStat('${_allSessions.length}', 'Total Users', r),
-                    _heroVDiv(),
-                    _heroStat('$_activeCount', 'Logged In', r),
-                    _heroVDiv(),
-                    _heroStat('$_idleCount', 'Logged Out', r),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _heroStat(String v, String l, Responsive r) => Expanded(
+      ],
+    ),
     child: Column(
       children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: fg, size: 16),
+        ),
+        const SizedBox(height: 6),
         Text(
-          v,
-          style: const TextStyle(
-            fontSize: 15,
+          val,
+          style: TextStyle(
+            fontSize: 18,
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: fg,
+            height: 1,
           ),
         ),
         const SizedBox(height: 2),
         Text(
-          l.toUpperCase(),
-          style: TextStyle(
-            fontSize: 9,
-            color: Colors.white.withOpacity(0.5),
-            letterSpacing: 0.5,
+          label,
+          style: const TextStyle(
+            fontSize: 10,
             fontWeight: FontWeight.w500,
+            color: _slate,
           ),
         ),
       ],
     ),
   );
 
-  Widget _heroVDiv() =>
-      Container(width: 1, height: 32, color: Colors.white.withOpacity(0.12));
-
-  // ── Search bar ───────────────────────────────────────────────────────────────
-  Widget _buildSearchBar(Responsive r) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(r.cardRadius),
-        border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: TextField(
-        onChanged: (v) => setState(() => _searchQuery = v),
-        style: const TextStyle(fontSize: 14, color: _textDark),
-        decoration: InputDecoration(
-          hintText: 'Search by name, username, role or device…',
-          hintStyle: const TextStyle(color: _textLight, fontSize: 14),
-          prefixIcon: const Icon(Icons.search_rounded, color: _textMid),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Filter chips ─────────────────────────────────────────────────────────────
-  Widget _buildFilterChips(Responsive r) {
-    final opts = ['All', 'LoggedIn', 'LoggedOut'];
-    final labels = {
-      'All': 'All Users',
-      'LoggedIn': 'Logged In',
-      'LoggedOut': 'Logged Out',
-    };
-    return Row(
-      children: opts.map((opt) {
-        final selected = _filterStatus == opt;
-        final color = opt == 'LoggedIn'
-            ? _accent
-            : opt == 'LoggedOut'
-            ? _textMid
-            : _primary;
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(
-            onTap: () => setState(() => _filterStatus = opt),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: selected ? color : _card,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: selected ? color : _border,
-                  width: 1.5,
-                ),
-                boxShadow: selected
-                    ? [
-                        BoxShadow(
-                          color: color.withOpacity(0.2),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ]
-                    : [],
-              ),
-              child: Text(
-                labels[opt]!,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: selected ? Colors.white : _textMid,
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  // ── Desktop 2-col grid ───────────────────────────────────────────────────────
-  Widget _buildTwoColGrid(Responsive r) {
-    final items = _filtered;
-    return Column(
-      children: List.generate((items.length / 2).ceil(), (i) {
-        final a = items[i * 2];
-        final b = (i * 2 + 1 < items.length) ? items[i * 2 + 1] : null;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: _buildSessionCard(r, a)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: b != null ? _buildSessionCard(r, b) : const SizedBox(),
-                ),
-              ],
-            ),
-          ),
-        );
-      }),
-    );
-  }
-
-  // ── Single col list ──────────────────────────────────────────────────────────
-  Widget _buildSingleColList(Responsive r) {
-    return Column(
-      children: _filtered
-          .map(
-            (s) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _buildSessionCard(r, s),
-            ),
-          )
-          .toList(),
-    );
-  }
-
-  Widget _buildEmpty(Responsive r) => Container(
-    margin: const EdgeInsets.only(top: 8),
-    padding: const EdgeInsets.symmetric(vertical: 48),
+  // ── Search ─────────────────────────────────────────────────────────────────
+  Widget _buildSearchBar() => Container(
+    height: 44,
     decoration: BoxDecoration(
       color: _card,
-      borderRadius: BorderRadius.circular(r.cardRadius),
+      borderRadius: BorderRadius.circular(12),
       border: Border.all(color: _border),
-    ),
-    child: Column(
-      children: [
-        Icon(Icons.people_outline_rounded, size: 48, color: _textLight),
-        const SizedBox(height: 12),
-        const Text(
-          'No users found',
-          style: TextStyle(
-            color: _textMid,
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-          ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.04),
+          blurRadius: 6,
+          offset: const Offset(0, 2),
         ),
       ],
     ),
+    child: TextField(
+      onChanged: (v) => setState(() => _search = v),
+      style: const TextStyle(fontSize: 13.5, color: _textDark),
+      decoration: const InputDecoration(
+        hintText: 'Search name, username, role…',
+        hintStyle: TextStyle(color: _slate, fontSize: 13),
+        prefixIcon: Icon(Icons.search_rounded, size: 18, color: _slate),
+        border: InputBorder.none,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      ),
+    ),
   );
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // SESSION CARD — matches section card structure from profile screen
-  // ─────────────────────────────────────────────────────────────────────────────
-  Widget _buildSessionCard(Responsive r, SessionUser user) {
-    final isActive = user.isLoggedIn;
-    final roleColor = _roleColor(user.roleName);
+  // ── Filter chips ────────────────────────────────────────────────────────────
+  Widget _buildFilterRow() {
+    const filters = [
+      ('all', 'All'),
+      ('active', 'Active'),
+      ('inactive', 'Offline'),
+      ('locked', 'Locked'),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: filters.map((f) {
+          final selected = _filter == f.$1;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () => setState(() => _filter = f.$1),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: selected ? _primary : _card,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: selected ? _primary : _border,
+                    width: 1.5,
+                  ),
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                            color: _primary.withValues(alpha: 0.2),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : [],
+                ),
+                child: Text(
+                  f.$2,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? Colors.white : _textMid,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ── Session card ────────────────────────────────────────────────────────────
+  Widget _buildCard(SessionUser u) {
+    final rs = _roleStyle(u.roleId);
+    final isActive = u.isLoggedIn;
+
+    // Border color priority: account-locked > brute-force locked > active > default
+    final borderColor = u.isAccountLocked
+        ? _danger.withValues(alpha: 0.4)
+        : u.isLocked
+        ? _warning.withValues(alpha: 0.4)
+        : isActive
+        ? _success.withValues(alpha: 0.25)
+        : _border;
 
     return Container(
       decoration: BoxDecoration(
         color: _card,
-        borderRadius: BorderRadius.circular(r.cardRadius),
-        border: Border.all(
-          color: isActive ? _accent.withOpacity(0.3) : _border,
-        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Section header — same as _buildSection header ──────────────────
+          // ── Header ────────────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
             child: Row(
               children: [
-                // Avatar — same style as profile hero avatar
+                // Avatar
                 Container(
-                  width: 42,
-                  height: 42,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    color: roleColor.withOpacity(0.1),
+                    color: u.isAccountLocked ? _dangerLight : rs.bg,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: roleColor.withOpacity(0.25),
+                      color: (u.isAccountLocked ? _danger : rs.fg).withValues(
+                        alpha: 0.2,
+                      ),
                       width: 1.5,
                     ),
                   ),
                   child: Center(
-                    child: Text(
-                      user.initials,
-                      style: TextStyle(
-                        color: roleColor,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
+                    child: u.isAccountLocked
+                        ? const Icon(
+                            Icons.lock_rounded,
+                            color: _danger,
+                            size: 18,
+                          )
+                        : Text(
+                            u.initials,
+                            style: TextStyle(
+                              color: rs.fg,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                            ),
+                          ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
+                // Name
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        user.fullName,
+                        u.fullName,
                         style: TextStyle(
-                          fontSize: r.sectionTitleSize,
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: _textDark,
+                          color: u.isAccountLocked ? _danger : _textDark,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 2),
                       Text(
-                        user.username,
-                        style: const TextStyle(color: _textMid, fontSize: 12),
+                        '@${u.username}',
+                        style: const TextStyle(fontSize: 12, color: _slate),
                       ),
                     ],
                   ),
                 ),
-                // Status badge — same pill pattern as profile
-                _statusBadge(isActive),
+                const SizedBox(width: 8),
+                _statusBadge(u),
               ],
             ),
           ),
 
           const Divider(height: 1, thickness: 1, color: _border),
 
-          // ── Info rows — same _buildInfoRow style ───────────────────────────
+          // ── Info rows ──────────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
             child: Column(
               children: [
                 _infoRow(
-                  r,
-                  'Role',
-                  user.roleName,
-                  pill: true,
-                  pillColor: roleColor,
+                  icon: rs.icon,
+                  iconColor: rs.fg,
+                  label: 'Role',
+                  value: u.roleName,
+                  valueColor: rs.fg,
+                  bold: true,
                 ),
                 _infoRow(
-                  r,
-                  'Device',
-                  isActive ? (user.sessionDevice ?? 'Unknown device') : '-',
+                  // ← add this block
+                  icon: Icons.business_rounded,
+                  iconColor: _slate,
+                  label: 'Department',
+                  value: u.departmentName,
                 ),
-                _infoRow(r, 'Last Login', _timeAgo(user.lastLoginAt)),
+                if (isActive && u.sessionDevice != null)
+                  _infoRow(
+                    icon: Icons.phone_android_rounded,
+                    iconColor: _slate,
+                    label: 'Device',
+                    value: u.sessionDevice!,
+                  ),
+                _infoRow(
+                  icon: Icons.schedule_rounded,
+                  iconColor: _slate,
+                  label: 'Last Login',
+                  value: _timeAgo(u.lastLoginAt),
+                ),
+                if (u.isAccountLocked)
+                  _infoRow(
+                    icon: Icons.block_rounded,
+                    iconColor: _danger,
+                    label: 'Status',
+                    value: 'Account locked by admin',
+                    valueColor: _danger,
+                  ),
+                if (u.isLocked && u.lockedUntil != null)
+                  _infoRow(
+                    icon: Icons.lock_clock_rounded,
+                    iconColor: _warning,
+                    label: 'Locked Until',
+                    value: _formatLockTime(u.lockedUntil!),
+                    valueColor: _warning,
+                  ),
+                if (u.failedAttempts > 0 && !u.isLocked && !u.isAccountLocked)
+                  _infoRow(
+                    icon: Icons.warning_amber_rounded,
+                    iconColor: _warning,
+                    label: 'Failed Attempts',
+                    value: '${u.failedAttempts}',
+                    valueColor: _warning,
+                  ),
               ],
             ),
           ),
 
-          // ── Action area ────────────────────────────────────────────────────
-          // ── Action area ────────────────────────────────────────────────────
-          // ── Action area ────────────────────────────────────────────────────
+          // ── Actions ────────────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                // ✅ ALWAYS AVAILABLE
-                OutlinedButton.icon(
-                  onPressed: () => _handleResetPassword(user),
-                  icon: const Icon(Icons.lock_reset, size: 14),
-                  label: const Text('Reset Pass'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _primary,
-                    side: BorderSide(color: _primary),
+                // Left: Lock / Unlock account toggle
+                if (u.isAccountLocked)
+                  _actionBtn(
+                    icon: Icons.lock_open_rounded,
+                    label: 'Unlock Account',
+                    onTap: () => _doUnlockAccount(u),
+                    color: _success,
+                  )
+                else
+                  _actionBtn(
+                    icon: Icons.lock_rounded,
+                    label: 'Lock Account',
+                    onTap: () => _doLockAccount(u),
+                    color: _danger,
+                    outlined: true,
                   ),
-                ),
 
-                // ✅ ONLY IF LOGGED IN
-                if (isActive) ...[
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: () => _handleForceLogout(user),
-                    icon: const Icon(Icons.logout_rounded, size: 14),
-                    label: const Text('Force Logout'),
-                    style: FilledButton.styleFrom(backgroundColor: _red),
+                const Spacer(),
+
+                // Right: clear brute-force lock
+                if (u.isLocked && !u.isAccountLocked) ...[
+                  _actionBtn(
+                    icon: Icons.lock_open_rounded,
+                    label: 'Clear Lock',
+                    onTap: () => _doUnlockBruteForce(u),
+                    color: _warning,
                   ),
+                  const SizedBox(width: 8),
                 ],
+
+                // Right: force logout (only if actively logged in)
+                if (isActive && !u.isAccountLocked)
+                  _actionBtn(
+                    icon: Icons.logout_rounded,
+                    label: 'Force Logout',
+                    onTap: () => _doForceLogout(u),
+                    color: _danger,
+                  ),
               ],
             ),
           ),
-          // else
-          //   Padding(
-          //     padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
-          //     child: Row(
-          //       mainAxisAlignment: MainAxisAlignment.end,
-          //       children: [
-          //         Icon(
-          //           Icons.check_circle_outline_rounded,
-          //           size: 14,
-          //           color: _textLight,
-          //         ),
-          //         const SizedBox(width: 5),
-          //         Text(
-          //           'No active session',
-          //           style: TextStyle(
-          //             fontSize: 12,
-          //             color: _textLight,
-          //             fontStyle: FontStyle.italic,
-          //           ),
-          //         ),
-          //       ],
-          //     ),
-          //   ),
         ],
       ),
     );
   }
 
-  // ── Info row — same pattern as profile _buildInfoRow ────────────────────────
-  Widget _infoRow(
-    Responsive r,
-    String label,
-    String value, {
-    bool pill = false,
-    Color pillColor = _primary,
-  }) {
-    final isEmpty = value == '-';
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: r.infoLabelWidth,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: _textMid,
-                fontWeight: FontWeight.w500,
-                height: 1.5,
-              ),
-            ),
-          ),
-          Expanded(
-            child: pill && !isEmpty
-                ? Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: pillColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(7),
-                      ),
-                      child: Text(
-                        value,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: pillColor,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  )
-                : Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isEmpty ? _textLight : _textDark,
-                      fontWeight: isEmpty ? FontWeight.w400 : FontWeight.w600,
-                      height: 1.5,
-                    ),
-                  ),
-          ),
-        ],
-      ),
+  Widget _statusBadge(SessionUser u) {
+    if (u.isAccountLocked)
+      return _pill('Locked', _danger, _dangerLight, Icons.lock_rounded);
+    if (u.isLocked)
+      return _pill(
+        'Blocked',
+        _warning,
+        const Color(0xFFFFFBEB),
+        Icons.lock_clock_rounded,
+      );
+    if (u.isLoggedIn)
+      return _pill('Active', _success, _successLight, Icons.circle);
+    return _pill(
+      'Offline',
+      _slate,
+      const Color(0xFFF1F5F9),
+      Icons.circle_outlined,
     );
   }
 
-  Future<void> _handleResetPassword(SessionUser user) async {
-    final passwordController = TextEditingController();
-    final confirmController = TextEditingController();
-    bool obscureNew = true;
-    bool obscureConfirm = true;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlg) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+  Widget _pill(String label, Color fg, Color bg, IconData icon) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: fg.withValues(alpha: 0.25)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 8, color: fg),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: fg,
           ),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Reset Password',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                user.fullName,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: _textMid,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Info banner ─────────────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: _amber.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _amber.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline_rounded, size: 15, color: _amber),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'User will be logged out from all devices and must change this password on next login.',
-                        style: TextStyle(fontSize: 12, color: _textMid),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // ── New password ────────────────────────────────────────────
-              TextField(
-                controller: passwordController,
-                obscureText: obscureNew,
-                style: const TextStyle(fontSize: 14),
-                decoration: InputDecoration(
-                  labelText: 'New Password',
-                  labelStyle: const TextStyle(fontSize: 13),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      obscureNew
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      size: 18,
-                    ),
-                    onPressed: () => setDlg(() => obscureNew = !obscureNew),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // ── Confirm password ────────────────────────────────────────
-              TextField(
-                controller: confirmController,
-                obscureText: obscureConfirm,
-                style: const TextStyle(fontSize: 14),
-                decoration: InputDecoration(
-                  labelText: 'Confirm Password',
-                  labelStyle: const TextStyle(fontSize: 13),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      obscureConfirm
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      size: 18,
-                    ),
-                    onPressed: () =>
-                        setDlg(() => obscureConfirm = !obscureConfirm),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel', style: TextStyle(color: _textMid)),
-            ),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: _primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              icon: const Icon(Icons.lock_reset, size: 16),
-              label: const Text('Reset'),
-              onPressed: () => Navigator.pop(ctx, true),
-            ),
-          ],
         ),
-      ),
-    );
+      ],
+    ),
+  );
 
-    if (ok != true) return;
+  Widget _infoRow({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String value,
+    Color? valueColor,
+    bool bold = false,
+  }) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Row(
+      children: [
+        Icon(icon, size: 14, color: iconColor),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 100,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: _slate,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: valueColor ?? _textDark,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    ),
+  );
 
-    // ── Client-side validation ────────────────────────────────────────────────
-    final newPass = passwordController.text.trim();
-    final confirmPass = confirmController.text.trim();
-
-    if (newPass.isEmpty || confirmPass.isEmpty) {
-      _snack('Please fill in both password fields', _amber);
-      return;
-    }
-    if (newPass != confirmPass) {
-      _snack('Passwords do not match', _red);
-      return;
-    }
-    if (newPass.length < 8) {
-      _snack('Password must be at least 8 characters', _red);
-      return;
-    }
-    if (!RegExp(r'[a-zA-Z]').hasMatch(newPass)) {
-      _snack('Password must contain at least one letter', _red);
-      return;
-    }
-    if (!RegExp(r'[0-9]').hasMatch(newPass)) {
-      _snack('Password must contain at least one number', _red);
-      return;
-    }
-
-    setState(() => _actionLoading = true);
-
-    try {
-      final res = await ApiClient.post('/auth/reset-password', {
-        'emp_id': user.empId,
-        'new_password': newPass,
-        'confirm_password': confirmPass,
-      });
-
-      final body = jsonDecode(res.body);
-
-      if (res.statusCode == 200 && body['success'] == true) {
-        _snack(
-          '✓ Password reset for ${user.fullName}. They are now logged out from all devices.',
-          _accent,
-        );
-        // ── Refresh list so session card updates to "Logged Out" ─────────────
-        await _loadSessions();
-      } else {
-        _snack(body['message'] ?? 'Reset failed', _red);
-      }
-    } catch (e) {
-      _snack('Network error. Please try again.', _red);
-    } finally {
-      setState(() => _actionLoading = false);
-    }
-  }
-
-  // ── Status badge — same pill style as profile _statusBadge ──────────────────
-  Widget _statusBadge(bool isActive) {
-    final color = isActive ? _accent : _textLight;
-    final label = isActive ? 'Logged In' : 'Logged Out';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+  Widget _actionBtn({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    required Color color,
+    bool outlined = false,
+  }) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
+        color: outlined ? Colors.white : color,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color, width: 1.2),
+        boxShadow: outlined
+            ? []
+            : [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.25),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
+          Icon(icon, size: 13, color: outlined ? color : Colors.white),
           const SizedBox(width: 5),
           Text(
             label,
             style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: outlined ? color : Colors.white,
             ),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+
+  // ── Skeleton ───────────────────────────────────────────────────────────────
+  Widget _buildSkeleton() => SingleChildScrollView(
+    // ← add this
+    physics: const NeverScrollableScrollPhysics(), // skeleton shouldn't scroll
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      children: [
+        _shimmerBox(height: 92, radius: 12),
+        const SizedBox(height: 12),
+        _shimmerBox(height: 44, radius: 12),
+        const SizedBox(height: 10),
+        _shimmerBox(height: 36, radius: 20),
+        const SizedBox(height: 14),
+        for (int i = 0; i < 4; i++) ...[
+          _shimmerBox(height: 160, radius: 14),
+          const SizedBox(height: 10),
+        ],
+      ],
+    ),
+  );
+  Widget _shimmerBox({required double height, double radius = 8}) =>
+      AnimatedBuilder(
+        animation: _shimmerCtrl,
+        builder: (_, __) {
+          final v = _shimmerCtrl.value;
+          return Container(
+            height: height,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: const [
+                  Color(0xFFE2E8F0),
+                  Color(0xFFF1F5F9),
+                  Color(0xFFE2E8F0),
+                ],
+                stops: [
+                  (v - 0.3).clamp(0.0, 1.0),
+                  v.clamp(0.0, 1.0),
+                  (v + 0.3).clamp(0.0, 1.0),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(radius),
+            ),
+          );
+        },
+      );
+
+  Widget _buildError() => Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: const BoxDecoration(
+            color: _dangerLight,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.wifi_off_rounded, color: _danger, size: 32),
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'Failed to load sessions',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: _textDark,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(_error ?? '', style: const TextStyle(color: _slate, fontSize: 13)),
+        const SizedBox(height: 20),
+        ElevatedButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh_rounded, size: 16),
+          label: const Text('Try Again'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _primary,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildEmpty() => Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.manage_search_rounded, size: 48, color: _border),
+        const SizedBox(height: 12),
+        const Text(
+          'No users found',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: _slate,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIRM DIALOG
+// ─────────────────────────────────────────────────────────────────────────────
+class _ConfirmDialog extends StatelessWidget {
+  final String title;
+  final String body;
+  final String confirmText;
+  final Color confirmColor;
+
+  const _ConfirmDialog({
+    required this.title,
+    required this.body,
+    required this.confirmText,
+    required this.confirmColor,
+  });
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+    title: Text(
+      title,
+      style: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF0F172A),
+      ),
+    ),
+    content: Text(
+      body,
+      style: const TextStyle(
+        fontSize: 13.5,
+        color: Color(0xFF475569),
+        height: 1.5,
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context, false),
+        child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+      ),
+      FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: confirmColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        onPressed: () => Navigator.pop(context, true),
+        child: Text(confirmText),
+      ),
+    ],
+  );
 }

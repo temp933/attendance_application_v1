@@ -49,7 +49,11 @@ const Map<String, (Color, Color)> _dailyStatusColors = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class AdminAttendanceReportScreen extends StatefulWidget {
-  const AdminAttendanceReportScreen({super.key});
+  const AdminAttendanceReportScreen({
+    super.key,
+    required this.mode, // 'normal' | 'gps' | 'gps_face'
+  });
+  final String mode;
 
   @override
   State<AdminAttendanceReportScreen> createState() =>
@@ -143,7 +147,10 @@ class _AdminAttendanceReportScreenState
       ),
       body: TabBarView(
         controller: _tab,
-        children: const [_MatrixTab(), _DailyTab()],
+        children: [
+          _MatrixTab(mode: widget.mode),
+          _DailyTab(mode: widget.mode),
+        ],
       ),
     ),
   );
@@ -316,7 +323,8 @@ mixin _DepartmentMixin<T extends StatefulWidget> on State<T> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _MatrixTab extends StatefulWidget {
-  const _MatrixTab();
+  const _MatrixTab({required this.mode});
+  final String mode;
 
   @override
   State<_MatrixTab> createState() => _MatrixTabState();
@@ -337,6 +345,8 @@ class _MatrixTabState extends State<_MatrixTab>
   List<MatrixDate> _dates = [];
   String _search = '';
 
+  bool _compOffEnabled = true; // field
+
   @override
   void initState() {
     super.initState();
@@ -354,6 +364,7 @@ class _MatrixTabState extends State<_MatrixTab>
         _fromDate,
         _toDate,
         departmentId: _deptId,
+        mode: widget.mode,
       );
       final List rawDates = body['dates'] ?? [];
       final List rawData = body['data'] ?? [];
@@ -366,6 +377,7 @@ class _MatrixTabState extends State<_MatrixTab>
             .toList();
         _fetched = true;
         _search = '';
+        _compOffEnabled = body['comp_off_enabled'] == true;
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -521,13 +533,14 @@ class _MatrixTabState extends State<_MatrixTab>
   Widget _legendRow() => Wrap(
     spacing: 8,
     runSpacing: 6,
-    children: const [
-      _LegendChip('P', 'Present', Color(0xFFECFDF5), Color(0xFF16A34A)),
-      _LegendChip('A', 'Absent', Color(0xFFFEF2F2), Color(0xFFDC2626)),
-      _LegendChip('L', 'Leave', Color(0xFFFFE4E6), Color(0xFFBE123C)),
-      _LegendChip('H', 'Holiday', Color(0xFFE0F2FE), Color(0xFF0369A1)),
-      _LegendChip('W', 'Week-off', Color(0xFFF5F3FF), _purple),
-      _LegendChip('C', 'Comp-Off', Color(0xFFFFFBEB), _orange),
+    children: [
+      const _LegendChip('P', 'Present', Color(0xFFECFDF5), Color(0xFF16A34A)),
+      const _LegendChip('A', 'Absent', Color(0xFFFEF2F2), Color(0xFFDC2626)),
+      const _LegendChip('L', 'Leave', Color(0xFFFFE4E6), Color(0xFFBE123C)),
+      const _LegendChip('H', 'Holiday', Color(0xFFE0F2FE), Color(0xFF0369A1)),
+      const _LegendChip('W', 'Week-off', Color(0xFFF5F3FF), _purple),
+      if (_compOffEnabled)
+        const _LegendChip('C', 'Comp-Off', Color(0xFFFFFBEB), _orange),
     ],
   );
 
@@ -543,14 +556,15 @@ class _MatrixTabState extends State<_MatrixTab>
 
     // 10 summary cols: Present, Absent, Leave, CompOffDays,
     //                  C.Earned, C.Used, C.Expired, Lv App, Lv Rej, Att%
-    const summaryCols = 10;
+    // When comp-off disabled: drop C.Off Earned, C.Off Used, C.Off Expired (3 cols)
+    final int summaryCols = _compOffEnabled ? 10 : 7;
     final totalW =
         snoW +
         empIdW +
         nameW +
         (_dates.length * dayW) +
         (summaryCols * summaryW) +
-        (_dates.length + summaryCols + 2); // dividers
+        (_dates.length + summaryCols + 2);
 
     Widget div() => Container(width: 1, color: _divCol);
     Widget hdiv(double w) => Container(height: 1, width: w, color: _divCol);
@@ -651,13 +665,14 @@ class _MatrixTabState extends State<_MatrixTab>
                       summaryHdr('Absent'),
                       div(),
                       summaryHdr('Leave'),
-                      div(),
-
-                      summaryHdr('C.Off\nEarned', bg: _orange),
-                      div(),
-                      summaryHdr('C.Off\nUsed', bg: _amber),
-                      div(),
-                      summaryHdr('C.Off\nExpired', bg: _red),
+                      if (_compOffEnabled) ...[
+                        div(),
+                        summaryHdr('C.Off\nEarned', bg: _orange),
+                        div(),
+                        summaryHdr('C.Off\nUsed', bg: _amber),
+                        div(),
+                        summaryHdr('C.Off\nExpired', bg: _red),
+                      ],
                       div(),
                       summaryHdr('Lv\nApp', bg: _accent),
                       div(),
@@ -805,27 +820,30 @@ class _MatrixTabState extends State<_MatrixTab>
           emp.leaveDays > 0 ? const Color(0xFFBE123C) : _textMid,
         ),
 
-        div(),
-        // C.Off Earned (all-time)
-        summaryCell(
-          '${emp.compOffEarned}',
-          emp.compOffEarned > 0 ? const Color(0xFFFFFBEB) : rowBg,
-          emp.compOffEarned > 0 ? _orange : _textMid,
-        ),
-        div(),
-        // C.Off Used (all-time)
-        summaryCell(
-          '${emp.compOffUsed}',
-          emp.compOffUsed > 0 ? const Color(0xFFFEF3C7) : rowBg,
-          emp.compOffUsed > 0 ? _amber : _textMid,
-        ),
-        div(),
-        // C.Off Expired (all-time)
-        summaryCell(
-          '${emp.compOffExpired}',
-          emp.compOffExpired > 0 ? const Color(0xFFFEE2E2) : rowBg,
-          emp.compOffExpired > 0 ? _red : _textMid,
-        ),
+        if (_compOffEnabled) ...[
+          div(),
+          // C.Off Earned (all-time)
+          summaryCell(
+            '${emp.compOffEarned}',
+            emp.compOffEarned > 0 ? const Color(0xFFFFFBEB) : rowBg,
+            emp.compOffEarned > 0 ? _orange : _textMid,
+          ),
+          div(),
+          // C.Off Used (all-time)
+          summaryCell(
+            '${emp.compOffUsed}',
+            emp.compOffUsed > 0 ? const Color(0xFFFEF3C7) : rowBg,
+            emp.compOffUsed > 0 ? _amber : _textMid,
+          ),
+          div(),
+          // C.Off Expired (all-time)
+          summaryCell(
+            '${emp.compOffExpired}',
+            emp.compOffExpired > 0 ? const Color(0xFFFEE2E2) : rowBg,
+            emp.compOffExpired > 0 ? _red : _textMid,
+          ),
+        ],
+
         div(),
         // Leave Approved
         summaryCell(
@@ -878,7 +896,8 @@ class _MatrixTabState extends State<_MatrixTab>
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _DailyTab extends StatefulWidget {
-  const _DailyTab();
+  const _DailyTab({required this.mode});
+  final String mode;
 
   @override
   State<_DailyTab> createState() => _DailyTabState();
@@ -899,6 +918,7 @@ class _DailyTabState extends State<_DailyTab>
   bool _isWeekend = false;
   String? _holidayName;
   String _search = '';
+  bool _compOffEnabled = true;
 
   @override
   void initState() {
@@ -923,7 +943,11 @@ class _DailyTabState extends State<_DailyTab>
       _fetched = false;
     });
     try {
-      final body = await ReportService.fetchDaily(_date, departmentId: _deptId);
+      final body = await ReportService.fetchDaily(
+        _date,
+        departmentId: _deptId,
+        mode: widget.mode,
+      );
       final List rows = body['data'] ?? [];
       setState(() {
         _data = rows
@@ -934,6 +958,7 @@ class _DailyTabState extends State<_DailyTab>
         _holidayName = body['holiday_name']?.toString();
         _fetched = true;
         _search = '';
+        _compOffEnabled = body['comp_off_enabled'] == true;
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -1002,8 +1027,9 @@ class _DailyTabState extends State<_DailyTab>
                   ),
                   onNext: () {
                     final next = _date.add(const Duration(days: 1));
-                    if (!next.isAfter(DateTime.now()))
+                    if (!next.isAfter(DateTime.now())) {
                       setState(() => _date = next);
+                    }
                   },
                   onToday: () => setState(() => _date = DateTime.now()),
                   deptDropdown: buildDeptDropdown(),
@@ -1159,12 +1185,13 @@ class _DailyTabState extends State<_DailyTab>
               '$onLeave',
               const Color(0xFFBE123C),
             ),
-            chip(
-              Icons.event_available_rounded,
-              'CO Earned', // ← clearer label
-              '$compOff',
-              _orange,
-            ),
+            if (_compOffEnabled)
+              chip(
+                Icons.event_available_rounded,
+                'CO Earned',
+                '$compOff',
+                _orange,
+              ),
             chip(Icons.timelapse_rounded, 'Late', '$late', _amber),
           ],
         );
@@ -1177,7 +1204,8 @@ class _DailyTabState extends State<_DailyTab>
     if (rows.isEmpty) return const _EmptyState();
 
     // Index: 0=SNo 1=EmpID 2=Name 3=In 4=Out 5=Hrs 6=Status 7=Late 8=LateBy 9=CO-Today
-    const cols = [
+    // Index: 0=SNo 1=EmpID 2=Name 3=In 4=Out 5=Hrs 6=Status 7=Late 8=LateBy [9=CO-Today]
+    final cols = [
       ('S.No', 52.0, true),
       ('Emp ID', 70.0, true),
       ('Employee Name', 190.0, false),
@@ -1187,7 +1215,7 @@ class _DailyTabState extends State<_DailyTab>
       ('Status', 90.0, true),
       ('Late', 55.0, true),
       ('Late By', 75.0, true),
-      ('Comp-Off\nToday', 90.0, true),
+      if (_compOffEnabled) ('Comp-Off\nToday', 90.0, true),
     ];
 
     Widget div() => Container(width: 1, color: _divCol);
@@ -1278,13 +1306,15 @@ class _DailyTabState extends State<_DailyTab>
             cols[8].$2,
             fg: emp.lateMinutes > 0 ? const Color(0xFFB45309) : _textMid,
           ),
-          div(),
-          cell(
-            emp.compOffEarned ? '✓ Yes' : '-',
-            cols[9].$2,
-            fg: emp.compOffEarned ? const Color(0xFF92400E) : _textMid,
-            bold: emp.compOffEarned,
-          ),
+          if (_compOffEnabled) ...[
+            div(),
+            cell(
+              emp.compOffEarned ? '✓ Yes' : '-',
+              cols[9].$2,
+              fg: emp.compOffEarned ? const Color(0xFF92400E) : _textMid,
+              bold: emp.compOffEarned,
+            ),
+          ],
         ],
       );
     }

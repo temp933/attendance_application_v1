@@ -40,6 +40,33 @@ function requireAppAdmin(req, res, next) {
   next();
 }
 
+// ── Add this helper near the top of the file ──────────────────────────────
+function fmtDate(val) {
+  if (!val) return null;
+  // If MySQL already gave us a Date object, pull YYYY-MM-DD directly
+  if (val instanceof Date) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, "0");
+    const d = String(val.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  // If it's a string, slice the date part only
+  return String(val).slice(0, 10);
+}
+
+function normalizeDates(org) {
+  const dateFields = [
+    "trial_ends_at",
+    "plan_starts_at",
+    "plan_ends_at",
+    "created_at",
+    "updated_at",
+  ];
+  for (const f of dateFields) {
+    if (f in org) org[f] = fmtDate(org[f]);
+  }
+  return org;
+}
 // ─────────────────────────────────────────────────────────────
 // GET /api/app-admin/organizations
 // ─────────────────────────────────────────────────────────────
@@ -147,7 +174,7 @@ router.get("/organizations", requireAppAdmin, async (req, res) => {
     return res.json({
       success: true,
       stats: statsRows[0],
-      organizations: rows,
+      organizations: rows.map(normalizeDates),
       pagination: {
         total,
         page: parseInt(page),
@@ -215,7 +242,7 @@ router.get("/organizations/:tenant_id", requireAppAdmin, async (req, res) => {
 
     return res.json({
       success: true,
-      organization: rows[0],
+      organization: normalizeDates(rows[0]),
     });
   } catch (err) {
     console.error("GET /organizations/:id error:", err);

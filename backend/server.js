@@ -662,12 +662,16 @@ app.use("/api/leave", authMiddleware, leaveRouter);
 const compOffRoutes = require("./Attendance/comp-off");
 app.use("/api/comp-off", compOffRoutes);
 
-const reportRouter = require("./Attendance/normal_attendance_report_routes");
+const reportRouter = require("./Attendance/attendance_report_routes");
 app.use("/api", authMiddleware, reportRouter);
 
 const attendanceSessionRouter = require("./Attendance/attendance_session_router");
 app.use("/api/attendance_sessions", authMiddleware, attendanceSessionRouter);
 
+const sessionsRouter = require("./sessions");
+app.use("/api/admin", sessionsRouter);
+
+app.use("/api/attendance/history", require("./Attendance/history"));
 // In server.js — temporary stubs for leave status summary and dashboard data
 app.get("/api/leave-status-summary", (req, res) => {
   res.json({ ok: true, data: [] });

@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/api_config.dart';
 import 'face_verify_screen.dart';
+import 'att_history.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -631,33 +632,100 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
   }
 
   // ── Header ─────────────────────────────────────────────────────────────────
+  // Widget _buildHeader() {
+  //   return Row(
+  //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //     children: [
+  //       Column(
+  //         crossAxisAlignment: CrossAxisAlignment.start,
+  //         children: [
+  //           Text(
+  //             DateFormat('EEE, d MMM yyyy').format(_now),
+  //             style: TextStyle(
+  //               fontSize: 12,
+  //               color: Colors.grey.shade500,
+  //               fontWeight: FontWeight.w500,
+  //             ),
+  //           ),
+  //           const SizedBox(height: 2),
+  //           const Text(
+  //             'GPS Attendance',
+  //             style: TextStyle(
+  //               fontSize: 22,
+  //               fontWeight: FontWeight.w800,
+  //               color: Color(0xFF1A1A2E),
+  //               letterSpacing: -0.3,
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //       Container(
+  //         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+  //         decoration: BoxDecoration(
+  //           color: Colors.white,
+  //           borderRadius: BorderRadius.circular(14),
+  //           boxShadow: [
+  //             BoxShadow(
+  //               color: Colors.black.withValues(alpha: 0.06),
+  //               blurRadius: 12,
+  //               offset: const Offset(0, 3),
+  //             ),
+  //           ],
+  //         ),
+  //         child: Row(
+  //           children: [
+  //             const Icon(
+  //               Icons.access_time_rounded,
+  //               size: 15,
+  //               color: Color(0xFF5C6BC0),
+  //             ),
+  //             const SizedBox(width: 6),
+  //             Text(
+  //               DateFormat('hh:mm:ss a').format(_now),
+  //               style: const TextStyle(
+  //                 fontFeatures: [FontFeature.tabularFigures()],
+  //                 fontSize: 13,
+  //                 fontWeight: FontWeight.w700,
+  //                 color: Color(0xFF1A1A2E),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
   Widget _buildHeader() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              DateFormat('EEE, d MMM yyyy').format(_now),
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade500,
-                fontWeight: FontWeight.w500,
+        // Title (takes all remaining space)
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                DateFormat('EEE, d MMM yyyy').format(_now),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade500,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            const SizedBox(height: 2),
-            const Text(
-              'GPS Attendance',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF1A1A2E),
-                letterSpacing: -0.3,
+              const SizedBox(height: 2),
+              const Text(
+                'GPS Attendance',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1A1A2E),
+                  letterSpacing: -0.3,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+
+        // Clock
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
@@ -689,6 +757,39 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
                 ),
               ),
             ],
+          ),
+        ),
+
+        const SizedBox(width: 10),
+
+        // History button
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AttendanceHistoryScreen(mode: 'gps_face'),
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.history_rounded,
+              size: 20,
+              color: Color(0xFF5C6BC0),
+            ),
           ),
         ),
       ],
@@ -1372,12 +1473,23 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
         else if (_history.isEmpty)
           _buildEmptyHistory()
         else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _history.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (_, i) => _buildHistoryRow(_history[i]),
+          Builder(
+            builder: (_) {
+              final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+              final todayRecords = _history
+                  .where(
+                    (r) => (r['work_date'] as String? ?? '').startsWith(today),
+                  )
+                  .toList();
+              if (todayRecords.isEmpty) return _buildEmptyHistory();
+              return ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: todayRecords.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) => _buildHistoryRow(todayRecords[i]),
+              );
+            },
           ),
       ],
     );

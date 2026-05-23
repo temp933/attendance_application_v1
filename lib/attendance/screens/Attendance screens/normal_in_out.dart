@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../providers/api_config.dart';
 import '../../services/normal_attendance_service.dart';
-import 'normal_att_history.dart';
+import 'att_history.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Models
@@ -390,7 +390,10 @@ class _NormalAttendanceScreenState extends State<NormalAttendanceScreen>
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => AttendanceHistoryScreen()),
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const AttendanceHistoryScreen(mode: 'normal'),
+                  ),
                 );
               },
               child: Container(

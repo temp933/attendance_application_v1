@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../providers/api_config.dart';
+import 'holiday_management_screen.dart';
 
 // ─── Design Tokens ───────────────────────────────────────────────────────────
 const _p900 = Color(0xFF1E3A8A);
@@ -413,6 +414,31 @@ class _Header extends StatelessWidget {
                     ],
                   ),
                 ),
+
+                Material(
+                  color: _slate100,
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const HolidayManagementScreen(),
+                      ),
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.calendar_month_rounded,
+                        color: _slate700,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
                 Material(
                   color: _slate100,
                   borderRadius: BorderRadius.circular(10),

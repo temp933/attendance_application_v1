@@ -67,20 +67,16 @@ function calcLateMinutes(checkinDatetime, officeInTime) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper — sum ALL completed sessions for an employee on a given date.
 // ─────────────────────────────────────────────────────────────────────────────
-async function getDailyTotal(tenantId, empId, workDate) {
+// FIX — add mode parameter
+async function getDailyTotal(tenantId, empId, workDate, mode = "normal") {
   const [[row]] = await db.query(
-    `SELECT
-        SEC_TO_TIME(
-            SUM(TIMESTAMPDIFF(SECOND, checkin_time, checkout_time))
-        ) AS daily_total
-        FROM employee_attendance
-        WHERE tenant_id    = ?
-        AND employee_id  = ?
-        AND work_date    = ?
-        AND status       = 'completed'
-        AND checkin_time  IS NOT NULL
-        AND checkout_time IS NOT NULL`,
-    [tenantId, empId, workDate],
+    `SELECT SEC_TO_TIME(SUM(TIMESTAMPDIFF(SECOND, checkin_time, checkout_time))) AS daily_total
+     FROM employee_attendance
+     WHERE tenant_id = ? AND employee_id = ? AND work_date = ?
+     AND attendance_mode = ?
+     AND status = 'completed'
+     AND checkin_time IS NOT NULL AND checkout_time IS NOT NULL`,
+    [tenantId, empId, workDate, mode],
   );
   return row?.daily_total ?? null;
 }
@@ -129,6 +125,7 @@ router.get("/today", requireAuth, async (req, res) => {
         WHERE tenant_id   = ?
             AND employee_id = ?
             AND work_date   = ?
+            AND attendance_mode = 'normal'
         ORDER BY attendance_id DESC
         LIMIT 1`,
       [tenantId, empId, todayDate()],
@@ -165,6 +162,7 @@ router.post("/checkin", requireAuth, async (req, res) => {
         WHERE tenant_id   = ?
             AND employee_id = ?
             AND work_date   = ?
+             AND attendance_mode = 'normal'
         ORDER BY attendance_id DESC
         LIMIT 1`,
       [tenantId, empId, todayDate()],
@@ -278,6 +276,7 @@ router.post("/checkout", requireAuth, async (req, res) => {
             AND employee_id = ?
             AND work_date   = ?
             AND status      = 'active'
+            AND attendance_mode = 'normal'
         ORDER BY attendance_id DESC
         LIMIT 1`,
       [tenantId, empId, todayDate()],
@@ -381,6 +380,7 @@ router.post("/auto-checkout", async (req, res) => {
             WHERE tenant_id    = ?
             AND work_date    = ?
             AND status       = 'active'
+            AND attendance_mode = 'normal'
             AND checkin_time < ?`,
         [checkoutTime, policy.tenant_id, todayDate(), checkoutTime],
       );
@@ -397,10 +397,6 @@ router.post("/auto-checkout", async (req, res) => {
     res.status(500).json({ success: false, message: "Server error." });
   }
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/attendance/history?limit=30&offset=0
-// ─────────────────────────────────────────────────────────────────────────────
 router.get("/history", requireAuth, async (req, res) => {
   const { tenantId, empId } = req.user;
   try {
@@ -417,6 +413,7 @@ router.get("/history", requireAuth, async (req, res) => {
         FROM employee_attendance
         WHERE tenant_id   = ?
             AND employee_id = ?
+            AND attendance_mode = 'normal'
         ORDER BY work_date DESC, attendance_id DESC
         LIMIT ? OFFSET ?`,
       [tenantId, empId, limit, offset],
@@ -428,7 +425,6 @@ router.get("/history", requireAuth, async (req, res) => {
     res.status(500).json({ success: false, message: "Server error." });
   }
 });
-
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/attendance/summary
 // ─────────────────────────────────────────────────────────────────────────────
@@ -450,6 +446,7 @@ router.get("/summary", requireAuth, async (req, res) => {
         FROM employee_attendance
         WHERE tenant_id   = ?
             AND employee_id = ?
+            AND attendance_mode = 'normal'
             AND work_date BETWEEN DATE_FORMAT(CONVERT_TZ(NOW(), '+00:00', '+05:30'), '%Y-%m-01')
                             AND DATE(CONVERT_TZ(NOW(), '+00:00', '+05:30'))`,
       [tenantId, empId],
@@ -535,7 +532,8 @@ router.get("/all", requireAuth, async (req, res) => {
             COALESCE(SUM(ea.status = 'active'), 0)  AS active_now
         FROM employee_attendance ea
         WHERE ea.tenant_id = ?
-            AND ea.work_date = ?`,
+            AND ea.work_date = ?
+            AND ea.attendance_mode = 'normal'`,
       [tenantId, tenantId, date],
     );
 

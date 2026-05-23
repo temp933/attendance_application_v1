@@ -14,7 +14,7 @@ import '../services/location_services.dart';
 import 'emp_work_location.dart';
 import 'session_guard_mixin.dart';
 import 'comp_off_screen.dart';
-import 'holiday_management_screen.dart';
+
 class DashboardScreen extends StatefulWidget {
   final int loginId;
   final String tenantId;
@@ -75,7 +75,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     // ReportsScreen(), // 7
     EmployeeProfileScreen(employeeId: widget.empId.toString()), // 8
     CompOffScreen(), // 9
-    HolidayManagementScreen(), // 10
     // const Center(
     //   child: Text(
     //     'Notifications',
@@ -98,7 +97,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     // 'Reports',
     'Profile',
     'Comp-Off',
-    'Holidays',
     // 'Notifications',
   ];
 
@@ -163,11 +161,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       icon: Icon(Icons.calendar_today_outlined),
       selectedIcon: Icon(Icons.calendar_today),
       label: Text('Comp-Off'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.calendar_today_outlined),
-      selectedIcon: Icon(Icons.calendar_today),
-      label: Text('Holidays'),
     ),
   ];
 

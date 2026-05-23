@@ -47,10 +47,11 @@ class ReportService {
     DateTime from,
     DateTime to, {
     int? departmentId,
+    String mode = 'normal',
   }) async {
     final dept = departmentId != null ? '&department_id=$departmentId' : '';
     final res = await ApiClient.get(
-      '/attendance/report/matrix?from=${fmtApi(from)}&to=${fmtApi(to)}$dept',
+      '/attendance/report/matrix?from=${fmtApi(from)}&to=${fmtApi(to)}$dept&mode=$mode',
     );
     _assertOk(res, 'matrix');
     return jsonDecode(res.body) as Map<String, dynamic>;
@@ -61,10 +62,11 @@ class ReportService {
   static Future<Map<String, dynamic>> fetchDaily(
     DateTime date, {
     int? departmentId,
+    String mode = 'normal',
   }) async {
     final dept = departmentId != null ? '&department_id=$departmentId' : '';
     final res = await ApiClient.get(
-      '/attendance/report/daily?date=${fmtApi(date)}$dept',
+      '/attendance/report/daily?date=${fmtApi(date)}$dept&mode=$mode',
     );
     _assertOk(res, 'daily');
     return jsonDecode(res.body) as Map<String, dynamic>;

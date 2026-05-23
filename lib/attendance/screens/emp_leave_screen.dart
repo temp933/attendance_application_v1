@@ -192,12 +192,14 @@ class _LeaveScreenState extends State<LeaveScreen>
                 ),
                 const Spacer(),
                 _AppBarBtn(
-                  icon: Icons.approval_rounded,
-                  tooltip: 'Pending Approvals',
+                  icon: Icons
+                      .calendar_month_rounded, // ← was Icons.approval_rounded
+                  tooltip: 'Holidays',
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const PendingApprovalsScreen(),
+                      builder: (_) =>
+                          const HolidaysScreen(), // ← was PendingApprovalsScreen
                     ),
                   ),
                 ),
@@ -2102,19 +2104,32 @@ class _LeaveDetailsScreenState extends State<LeaveDetailsScreen> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// PendingApprovalsScreen
+// HolidaysScreen  –  shows all holidays for the current financial year
+// Financial year: 1 Apr → 31 Mar  (India standard)
 // ══════════════════════════════════════════════════════════════════════════════
-class PendingApprovalsScreen extends StatefulWidget {
-  const PendingApprovalsScreen({super.key});
+class HolidaysScreen extends StatefulWidget {
+  const HolidaysScreen({super.key});
 
   @override
-  State<PendingApprovalsScreen> createState() => _PendingApprovalsScreenState();
+  State<HolidaysScreen> createState() => _HolidaysScreenState();
 }
 
-class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
-  List<Map<String, dynamic>> _leaves = [];
+class _HolidaysScreenState extends State<HolidaysScreen> {
+  List<Map<String, dynamic>> _holidays = [];
   bool _loading = true;
   String? _error;
+
+  // ── Financial year helpers ─────────────────────────────────────────────────
+  static int _fyStartYear() {
+    final now = DateTime.now();
+    // FY starts April 1; if we're in Jan–Mar the FY started the previous year
+    return now.month >= 4 ? now.year : now.year - 1;
+  }
+
+  String get _fyLabel {
+    final s = _fyStartYear();
+    return 'FY ${s}–${(s + 1).toString().substring(2)}';
+  }
 
   @override
   void initState() {
@@ -2128,21 +2143,80 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
       _error = null;
     });
     try {
-      final res = await ApiClient.get('/leave/pending-approvals');
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
-      if (body['ok'] == true) {
-        setState(
-          () => _leaves = List<Map<String, dynamic>>.from(body['data'] ?? []),
-        );
-      } else {
-        setState(() => _error = body['message'] ?? 'Failed');
+      final year = _fyStartYear();
+      // Fetch both halves of the FY in parallel
+      final results = await Future.wait([
+        ApiClient.get('/holidays?year=$year'),
+        ApiClient.get('/holidays?year=${year + 1}'),
+      ]);
+
+      final all = <Map<String, dynamic>>[];
+      for (final res in results) {
+        if (res.statusCode == 200) {
+          final body = jsonDecode(res.body) as Map<String, dynamic>;
+          if (body['success'] == true) {
+            all.addAll(List<Map<String, dynamic>>.from(body['data'] ?? []));
+          }
+        }
       }
+
+      // Keep only dates within the financial year (Apr 1 → Mar 31 next year)
+      final fyStart = DateTime(_fyStartYear(), 4, 1);
+      final fyEnd = DateTime(_fyStartYear() + 1, 3, 31, 23, 59, 59);
+
+      all.retainWhere((h) {
+        try {
+          final d = DateTime.parse(h['holiday_date'] as String);
+          return !d.isBefore(fyStart) && !d.isAfter(fyEnd);
+        } catch (_) {
+          return false;
+        }
+      });
+
+      // Sort ascending
+      all.sort((a, b) {
+        try {
+          return DateTime.parse(
+            a['holiday_date'] as String,
+          ).compareTo(DateTime.parse(b['holiday_date'] as String));
+        } catch (_) {
+          return 0;
+        }
+      });
+
+      if (mounted) setState(() => _holidays = all);
     } catch (e) {
-      setState(() => _error = 'Error: $e');
+      if (mounted)
+        setState(
+          () => _error = 'Unable to load holidays. Check your connection.',
+        );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
+
+  // ── Group by month ─────────────────────────────────────────────────────────
+  Map<String, List<Map<String, dynamic>>> get _grouped {
+    final map = <String, List<Map<String, dynamic>>>{};
+    for (final h in _holidays) {
+      try {
+        final d = DateTime.parse(h['holiday_date'] as String);
+        final key = DateFormat('MMMM yyyy').format(d);
+        (map[key] ??= []).add(h);
+      } catch (_) {}
+    }
+    return map;
+  }
+
+  int get _upcoming => _holidays.where((h) {
+    try {
+      return !DateTime.parse(
+        h['holiday_date'] as String,
+      ).isBefore(DateTime.now());
+    } catch (_) {
+      return false;
+    }
+  }).length;
 
   @override
   Widget build(BuildContext context) {
@@ -2151,262 +2225,335 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
       appBar: AppBar(
         backgroundColor: _primary,
         foregroundColor: Colors.white,
-        title: const Text(
-          'Pending Approvals',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
         elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Public Holidays',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
+            Text(
+              _fyLabel,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Colors.white70,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _load),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh',
+            onPressed: _loading ? null : _load,
+          ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _primary))
           : _error != null
           ? _ErrorView(message: _error!, onRetry: _load)
-          : _leaves.isEmpty
+          : _holidays.isEmpty
           ? const _EmptyState(
-              message: 'No pending approvals',
-              icon: Icons.approval_rounded,
+              message: 'No holidays found',
+              icon: Icons.celebration_rounded,
             )
           : RefreshIndicator(
               color: _primary,
               onRefresh: _load,
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: _kMaxContentWidth,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  // ── Summary strip ──────────────────────────────
+                  SliverToBoxAdapter(
+                    child: _HolidaySummaryStrip(
+                      total: _holidays.length,
+                      upcoming: _upcoming,
+                    ),
                   ),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _leaves.length,
-                    itemBuilder: (ctx, i) =>
-                        _ApprovalCard(leave: _leaves[i], onAction: _load),
-                  ),
-                ),
+
+                  // ── Month sections ─────────────────────────────
+                  for (final entry in _grouped.entries) ...[
+                    SliverToBoxAdapter(child: _MonthHeader(month: entry.key)),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (ctx, i) => _HolidayRow(
+                            holiday: entry.value[i],
+                            isLast: i == entry.value.length - 1,
+                          ),
+                          childCount: entry.value.length,
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                ],
               ),
             ),
     );
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// _ApprovalCard
-// ══════════════════════════════════════════════════════════════════════════════
-class _ApprovalCard extends StatefulWidget {
-  final Map<String, dynamic> leave;
-  final VoidCallback onAction;
-  const _ApprovalCard({required this.leave, required this.onAction});
+// ── Summary strip ────────────────────────────────────────────────────────────
+class _HolidaySummaryStrip extends StatelessWidget {
+  final int total, upcoming;
+  const _HolidaySummaryStrip({required this.total, required this.upcoming});
 
   @override
-  State<_ApprovalCard> createState() => _ApprovalCardState();
-}
-
-class _ApprovalCardState extends State<_ApprovalCard> {
-  final _remarksCtrl = TextEditingController();
-  bool _acting = false;
-
-  @override
-  void dispose() {
-    _remarksCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _act(String action) async {
-    if (action == 'reject' && _remarksCtrl.text.trim().isEmpty) {
-      _snack('Remarks are required for rejection');
-      return;
-    }
-    setState(() => _acting = true);
-    try {
-      final leaveId = widget.leave['leave_id'];
-      final endpoint = action == 'approve'
-          ? '/leave/approve/$leaveId'
-          : '/leave/reject/$leaveId';
-      final res = await ApiClient.post(endpoint, {
-        'remarks': _remarksCtrl.text.trim(),
-      });
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
-      _snack(body['message'] ?? 'Done', success: body['ok'] == true);
-      if (body['ok'] == true) widget.onAction();
-    } catch (e) {
-      _snack('Error: $e');
-    } finally {
-      if (mounted) setState(() => _acting = false);
-    }
-  }
-
-  void _snack(String msg, {bool success = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: success ? _accent : _red,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
+  Widget build(BuildContext context) {
+    final past = total - upcoming;
+    return Container(
+      color: _primary,
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.13),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withOpacity(0.18)),
+        ),
+        child: Row(
+          children: [
+            _StatItem(value: '$total', label: 'Total', color: Colors.white),
+            _StatDivider(),
+            _StatItem(
+              value: '$upcoming',
+              label: 'Upcoming',
+              color: const Color(0xFF6EE7B7),
+            ),
+            _StatDivider(),
+            _StatItem(value: '$past', label: 'Past', color: Colors.white60),
+          ],
+        ),
       ),
     );
+  }
+}
+
+// ── Month section header ─────────────────────────────────────────────────────
+class _MonthHeader extends StatelessWidget {
+  final String month;
+  const _MonthHeader({required this.month});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: _primaryLight,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              month,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: _primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(child: Divider(color: _border)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Single holiday row ───────────────────────────────────────────────────────
+class _HolidayRow extends StatelessWidget {
+  final Map<String, dynamic> holiday;
+  final bool isLast;
+  const _HolidayRow({required this.holiday, required this.isLast});
+
+  static const _typeColors = <String, Color>{
+    'National': _primary,
+    'Regional': _accent,
+    'Optional': _amber,
+    'Religious': Color(0xFF7C3AED),
+  };
+
+  bool get _isPast {
+    try {
+      return DateTime.parse(
+        holiday['holiday_date'] as String,
+      ).isBefore(DateTime.now());
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool get _isToday {
+    try {
+      final d = DateTime.parse(holiday['holiday_date'] as String);
+      final now = DateTime.now();
+      return d.year == now.year && d.month == now.month && d.day == now.day;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final leave = widget.leave;
-    DateTime? startDt, endDt;
+    DateTime? date;
     try {
-      startDt = DateTime.parse(leave['leave_start_date']);
-      endDt = DateTime.parse(leave['leave_end_date']);
+      date = DateTime.parse(holiday['holiday_date'] as String);
     } catch (_) {}
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 14),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 2,
-      shadowColor: Colors.black.withOpacity(0.06),
+    final type = holiday['holiday_type'] as String? ?? 'National';
+    final typeColor = _typeColors[type] ?? _primary;
+    final isPast = _isPast;
+    final isToday = _isToday;
+    final name = holiday['holiday_name'] as String? ?? '-';
+    final desc = holiday['description'] as String? ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      decoration: BoxDecoration(
+        color: isToday
+            ? _primaryLight
+            : isPast
+            ? const Color(0xFFF8F9FA)
+            : Colors.white,
+        border: Border(
+          left: BorderSide(
+            color: isToday
+                ? _primary
+                : typeColor.withOpacity(isPast ? 0.3 : 0.6),
+            width: isToday ? 3 : 2,
+          ),
+          bottom: isLast
+              ? BorderSide.none
+              : const BorderSide(color: _border, width: 0.5),
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: _primaryLight,
-                  child: Text(
-                    (leave['employee_name'] as String? ?? 'U')
-                        .substring(0, 1)
-                        .toUpperCase(),
-                    style: const TextStyle(
-                      color: _primary,
+            // ── Date badge ──────────────────────────────────────────────
+            SizedBox(
+              width: 44,
+              child: Column(
+                children: [
+                  Text(
+                    date != null ? DateFormat('dd').format(date) : '--',
+                    style: TextStyle(
+                      fontSize: 20,
                       fontWeight: FontWeight.w800,
-                      fontSize: 16,
+                      color: isPast ? _textLight : _textDark,
+                      height: 1,
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        leave['employee_name'] ?? '-',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          color: _textDark,
-                        ),
-                      ),
-                      Text(
-                        leave['leave_name'] ?? 'Leave',
-                        style: const TextStyle(fontSize: 12, color: _textMid),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _amberLight,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${leave['number_of_days']} day(s)',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: _amber,
+                  Text(
+                    date != null ? DateFormat('EEE').format(date) : '',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: isPast ? _textLight : _textMid,
+                      letterSpacing: 0.5,
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.date_range_rounded,
-              label: 'Dates',
-              value: startDt == null
-                  ? '-'
-                  : '${_fmt(startDt)} → ${_fmt(endDt!)}',
-            ),
-            const SizedBox(height: 8),
-            _InfoRow(
-              icon: Icons.comment_rounded,
-              label: 'Reason',
-              value: leave['reason'] ?? '-',
-            ),
-            const SizedBox(height: 14),
-            Divider(height: 1, color: Colors.grey.shade100),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _remarksCtrl,
-              maxLines: 2,
-              decoration: InputDecoration(
-                hintText: 'Remarks (required for rejection)',
-                hintStyle: const TextStyle(color: _textLight, fontSize: 12),
-                filled: true,
-                fillColor: _surface,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: _border),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: _border),
-                ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
+            const SizedBox(width: 12),
+
+            // ── Name + description ──────────────────────────────────────
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: isPast ? _textMid : _textDark,
+                    ),
+                  ),
+                  if (desc.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      desc,
+                      style: const TextStyle(fontSize: 11, color: _textLight),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            // ── Right side badges ───────────────────────────────────────
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _red,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    onPressed: _acting ? null : () => _act('reject'),
-                    icon: const Icon(Icons.close_rounded, size: 16),
-                    label: const Text(
-                      'Reject',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
+                // Type pill
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: typeColor.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: typeColor.withOpacity(0.25)),
+                  ),
+                  child: Text(
+                    type,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: typeColor.withOpacity(isPast ? 0.5 : 1),
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _accent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+
+                // Today / Past badge
+                if (isToday) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
                     ),
-                    onPressed: _acting ? null : () => _act('approve'),
-                    icon: const Icon(Icons.check_rounded, size: 16),
-                    label: const Text(
-                      'Approve',
+                    decoration: BoxDecoration(
+                      color: _primary,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'TODAY',
                       style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 0.8,
                       ),
                     ),
                   ),
-                ),
+                ] else if (isPast) ...[
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Past',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: _textLight,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -2415,7 +2562,6 @@ class _ApprovalCardState extends State<_ApprovalCard> {
     );
   }
 }
-
 // ══════════════════════════════════════════════════════════════════════════════
 // Reusable micro-widgets
 // ══════════════════════════════════════════════════════════════════════════════

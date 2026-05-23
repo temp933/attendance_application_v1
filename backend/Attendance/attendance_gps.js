@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
 const authMiddleware = require("../middleware/auth");
+const { generateCompOff } = require("./comp-off");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Auth
@@ -140,6 +141,7 @@ router.get("/today", requireAuth, async (req, res) => {
        WHERE tenant_id  = ?
          AND employee_id = ?
          AND work_date   = ?
+         AND attendance_mode = 'gps' 
        ORDER BY attendance_id DESC
        LIMIT 1`,
       [tenantId, empId, todayDate()],
@@ -323,10 +325,22 @@ router.post("/checkout", requireAuth, async (req, res) => {
       [active.attendance_id],
     );
 
+    generateCompOff(tenantId, active.attendance_id).catch((err) =>
+      console.error("[CompOff] generateCompOff failed after checkout:", err),
+    );
+
+    const compOffResult = await generateCompOff(
+      tenantId,
+      active.attendance_id,
+    ).catch((err) => {
+      console.error("[CompOff] generateCompOff failed:", err);
+      return null;
+    });
     res.json({
       success: true,
       message: "Checked out successfully.",
       record: normalizeRecord(record),
+      comp_off: compOffResult ?? undefined,
     });
   } catch (err) {
     console.error("[POST /gps/checkout]", err);

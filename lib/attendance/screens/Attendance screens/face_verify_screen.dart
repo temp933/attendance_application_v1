@@ -5,7 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-// import '../../providers/api_config.dart';
+import '../../providers/api_config.dart';
 
 /// Result returned after face verification attempt
 class FaceVerifyResult {
@@ -108,7 +108,7 @@ class _FaceVerifyScreenState extends State<FaceVerifyScreen>
       final request =
           http.MultipartRequest(
               'POST',
-              Uri.parse('http://192.168.1.12:8000/compare'), // ← port 8000
+              Uri.parse(ApiConfig.face_url + '/compare'), // ← port 8000
             )
             ..fields['emp_id'] = widget.employeeId
                 .toString() // ← Python expects emp_id

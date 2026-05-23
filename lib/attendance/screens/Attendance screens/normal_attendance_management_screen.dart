@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'attendance_policy_screen.dart';
 import 'admin_force_close_screen.dart';
+import '../admin_attendance_report.dart';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
 const Color _primary = Color(0xFF1A56DB);
@@ -434,14 +435,48 @@ class _NormalAttendanceManagementScreenState
                 clipBehavior: Clip.none,
                 children: [
                   IconButton(
+                    tooltip: 'Report',
+                    icon: const Icon(Icons.report, color: _red),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AdminAttendanceReportScreen(
+                          mode: 'normal', // pass 'gps' or 'gps_face' as needed
+                        ),
+                      ),
+                    ).then((_) => _loadData()),
+                  ),
+                  // Badge — only show when there are active sessions
+                  if ((_stats?.activeNow ?? 0) > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: _red,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
                     tooltip: 'Force close open sessions',
                     icon: const Icon(Icons.lock_open_rounded, color: _red),
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => AdminForceCloseScreen(loginId: 57),
+                        builder: (_) => AdminForceCloseScreen(
+                          loginId: 57,
+                          mode: 'normal', // pass 'gps' or 'gps_face' as needed
+                        ),
                       ),
-                    ).then((_) => _loadData()), // refresh list on return
+                    ).then((_) => _loadData()),
                   ),
                   // Badge — only show when there are active sessions
                   if ((_stats?.activeNow ?? 0) > 0)

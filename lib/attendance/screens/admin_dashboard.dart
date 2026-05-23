@@ -111,7 +111,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             '',
       ),
 
-AdminAttendanceReportScreen(),
+      AdminAttendanceReportScreen(mode: 'normal'), // 1
       AdminDepartmentsScreen(tenantId: widget.tenantId), // 4
       ManageUserScreen(roleId: widget.roleId, tenantId: widget.tenantId), // 5
       AdminApprovalPage(),
@@ -120,6 +120,7 @@ AdminAttendanceReportScreen(),
 
       LeavePolicyManagementScreen(), // 7
       LeaveApprovalScreen(), // 8
+      AdminSessionManagementScreen(), // 9
     ]);
     print(
       'DEBUG AdminDepartmentsScreen receiving tenantId: "${widget.tenantId}"',
@@ -140,6 +141,7 @@ AdminAttendanceReportScreen(),
     'Profile',
     'Leave Policy Management',
     'Leave Management',
+    'Sesion Management',
   ];
 
   // ── Rail items ─────────────────────────────────────────────────────────────
@@ -165,7 +167,7 @@ AdminAttendanceReportScreen(),
       selectedIcon: Icon(Icons.face),
       label: Text('Face & GPS Attendance'),
     ),
- NavigationRailDestination(
+    NavigationRailDestination(
       icon: Icon(Icons.report_outlined),
       selectedIcon: Icon(Icons.report),
       label: Text('Reports'),
@@ -204,6 +206,11 @@ AdminAttendanceReportScreen(),
       icon: Icon(Icons.leave_bags_at_home_outlined),
       selectedIcon: Icon(Icons.leave_bags_at_home),
       label: Text('Leave Management'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.lock_clock_outlined),
+      selectedIcon: Icon(Icons.lock_clock),
+      label: Text('Session Management'),
     ),
   ];
 

@@ -228,8 +228,13 @@ String _isoWithOffset(DateTime date, TimeOfDay time) {
 // Screen
 // ─────────────────────────────────────────────────────────────────────────────
 class AdminForceCloseScreen extends StatefulWidget {
-  const AdminForceCloseScreen({super.key, required this.loginId});
+  const AdminForceCloseScreen({
+    super.key,
+    required this.loginId,
+    required this.mode, // 'normal' | 'gps' | 'gps_face'
+  });
   final int loginId;
+  final String mode;
 
   @override
   State<AdminForceCloseScreen> createState() => _AdminForceCloseScreenState();
@@ -283,7 +288,7 @@ class _AdminForceCloseScreenState extends State<AdminForceCloseScreen>
     setState(() => _loadState = _LoadState.loading);
     try {
       final resp = await ApiClient.get(
-        '/attendance_sessions/open-sessions?date=${_fmtApi(_selectedDate)}',
+        '/attendance_sessions/open-sessions?date=${_fmtApi(_selectedDate)}&mode=${widget.mode}',
       );
 
       // ApiClient.get returns http.Response — always decode the body string

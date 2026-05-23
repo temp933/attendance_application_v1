@@ -207,16 +207,16 @@ class _AdminHrAttendanceScreenState extends State<AdminHrAttendanceScreen>
                 ),
                 onPressed: _openForceClose,
               ),
-              IconButton(
-                tooltip: 'Download Report',
-                icon: const Icon(Icons.download_rounded, color: Colors.black),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AdminAttendanceReportScreen(),
-                  ),
-                ),
-              ),
+              // IconButton(
+              //   tooltip: 'Download Report',
+              //   icon: const Icon(Icons.download_rounded, color: Colors.black),
+              //   onPressed: () => Navigator.push(
+              //     context,
+              //     MaterialPageRoute(
+              //       builder: (_) => const AdminAttendanceReportScreen(),
+              //     ),
+              //   ),
+              // ),
             ],
           ),
         ),

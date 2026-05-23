@@ -33,6 +33,7 @@ router.get("/open-sessions", async (req, res) => {
   try {
     const date =
       (req.query.date ?? "").trim() || new Date().toISOString().slice(0, 10);
+    const mode = (req.query.mode ?? "").trim() || null;
 
     const [rows] = await db.query(
       `SELECT
@@ -69,11 +70,12 @@ router.get("/open-sessions", async (req, res) => {
             ON  d.department_id = e.department_id
             AND CONVERT(d.tenant_id  USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
               = CONVERT(ea.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
-      WHERE CONVERT(ea.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = ?
+       WHERE CONVERT(ea.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = ?
         AND ea.work_date = ?
         AND ea.status    = 'active'
+        ${mode ? `AND ea.attendance_mode = ?` : ""}
       ORDER BY open_minutes DESC`,
-      [tenantId, date],
+      mode ? [tenantId, date, mode] : [tenantId, date],
     );
 
     res.json({ success: true, data: rows });

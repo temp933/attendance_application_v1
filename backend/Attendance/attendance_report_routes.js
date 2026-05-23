@@ -33,7 +33,7 @@ function dateRange(from, to) {
 
 async function fetchPolicy(tenantId) {
   const [[row]] = await db.query(
-    `SELECT is_saturday_weekoff, is_sunday_weekoff
+    `SELECT is_saturday_weekoff, is_sunday_weekoff, comp_off_enabled
      FROM attendance_policy
      WHERE tenant_id = ? LIMIT 1`,
     [tenantId],
@@ -41,6 +41,7 @@ async function fetchPolicy(tenantId) {
   return {
     isSatWeekoff: row?.is_saturday_weekoff == 1,
     isSunWeekoff: row?.is_sunday_weekoff == 1,
+    compOffEnabled: row?.comp_off_enabled == 1, // ← NEW
   };
 }
 
@@ -101,13 +102,13 @@ async function fetchLeaveMap(tenantId, from, to) {
   return map;
 }
 
-async function fetchAttendanceMap(tenantId, from, to) {
+async function fetchAttendanceMap(tenantId, from, to, mode = "normal") {
   const [rows] = await db.query(
     `SELECT DISTINCT employee_id, DATE_FORMAT(work_date, '%Y-%m-%d') AS work_date
      FROM employee_attendance
      WHERE tenant_id = ? AND work_date BETWEEN ? AND ?
-       AND checkin_time IS NOT NULL AND attendance_mode = 'normal'`,
-    [tenantId, from, to],
+       AND checkin_time IS NOT NULL AND attendance_mode = ?`,
+    [tenantId, from, to, mode],
   );
   const map = new Map();
   for (const row of rows) {
@@ -117,7 +118,7 @@ async function fetchAttendanceMap(tenantId, from, to) {
   return map;
 }
 
-async function fetchAttendanceDetail(tenantId, date) {
+async function fetchAttendanceDetail(tenantId, date, mode = "normal") {
   const [rows] = await db.query(
     `SELECT
        ea.employee_id,
@@ -128,9 +129,8 @@ async function fetchAttendanceDetail(tenantId, date) {
        TIMESTAMPDIFF(MINUTE, ea.checkin_time, ea.checkout_time) AS worked_minutes
      FROM employee_attendance ea
      WHERE ea.tenant_id = ? AND ea.work_date = ?
-       AND ea.attendance_mode = 'normal' AND ea.checkin_time IS NOT NULL
-     ORDER BY ea.attendance_id ASC`,
-    [tenantId, date],
+       AND ea.attendance_mode = ? AND ea.checkin_time IS NOT NULL`,
+    [tenantId, date, mode],
   );
   const map = new Map();
   for (const r of rows) map.set(r.employee_id, r);
@@ -256,7 +256,8 @@ router.get("/attendance/report/daily", async (req, res) => {
   const tenant_id = getTenantId(req);
   if (!tenant_id) return send(res, 401, false, "Unauthorized");
 
-  const { date, department_id } = req.query;
+  const { date, department_id, mode } = req.query;
+  const attendanceMode = (mode ?? "").trim() || null;
   if (!date || !isValidDate(date))
     return send(res, 400, false, "Invalid or missing date (YYYY-MM-DD)");
 
@@ -277,7 +278,7 @@ router.get("/attendance/report/daily", async (req, res) => {
       fetchEmployees(tenant_id, deptId),
       fetchHolidayMapByDate(tenant_id, date, date),
       fetchLeaveMap(tenant_id, date, date),
-      fetchAttendanceDetail(tenant_id, date),
+      fetchAttendanceDetail(tenant_id, date, attendanceMode ?? "normal"),
       fetchCompOffSet(tenant_id, date),
       fetchCompOffUsedMap(tenant_id, date, date),
     ]);
@@ -354,6 +355,7 @@ router.get("/attendance/report/daily", async (req, res) => {
       is_weekend: isWeekendDay_,
       holiday_name: holidayName,
       department_id: deptId,
+      comp_off_enabled: policy.compOffEnabled,
       data,
     });
   } catch (err) {
@@ -370,7 +372,8 @@ router.get("/attendance/report/matrix", async (req, res) => {
   const tenant_id = getTenantId(req);
   if (!tenant_id) return send(res, 401, false, "Unauthorized");
 
-  const { from, to, department_id } = req.query;
+  const { from, to, department_id, mode } = req.query;
+  const attendanceMode = (mode ?? "").trim() || null;
   if (!from || !to) return send(res, 400, false, "from and to are required");
   if (!isValidDate(from)) return send(res, 400, false, "Invalid from date");
   if (!isValidDate(to)) return send(res, 400, false, "Invalid to date");
@@ -392,7 +395,7 @@ router.get("/attendance/report/matrix", async (req, res) => {
       fetchEmployees(tenant_id, deptId),
       fetchHolidayMapByDate(tenant_id, from, to),
       fetchLeaveMap(tenant_id, from, to),
-      fetchAttendanceMap(tenant_id, from, to),
+      fetchAttendanceMap(tenant_id, from, to, attendanceMode ?? 'normal'),
       fetchCompOffUsedMap(tenant_id, from, to),
     ]);
 
@@ -490,6 +493,7 @@ router.get("/attendance/report/matrix", async (req, res) => {
       from,
       to,
       department_id: deptId,
+      comp_off_enabled: policy.compOffEnabled,
       dates,
       data,
     });

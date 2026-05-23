@@ -1,7 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiConfig {
-  static const String baseUrl = 'http://192.168.1.8:5000/api';
+  static const String face_url = 'http://192.168.1.14:8000';
+  static const String baseUrl = 'http://192.168.1.14:5000/api';
 
   // ── Single source of truth for all SharedPreferences keys ─────────
   static const _kToken = 'session_token';
