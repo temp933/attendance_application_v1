@@ -1,16 +1,14 @@
-import 'dart:math';
-import 'admin_profile_screen.dart';
 import '../services/auth_service.dart';
 import '../providers/attendance_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
-import 'admin_hr_attendance_screen.dart';
+import 'package:flutter/foundation.dart';
 import 'login_screen.dart';
 import 'admin_home_screen.dart';
-import 'emp_attendance_screen.dart';
+
 import 'admin_hr_leave_approval.dart';
 import 'admin_department_screen.dart';
-import 'manage_location.dart';
+
 import '../services/location_services.dart';
 import 'emp_profile_screen.dart';
 import 'admin_approval.dart';
@@ -25,8 +23,7 @@ import './Attendance screens/normal_attendance_management_screen.dart';
 import './Attendance screens/gps_attendance_management_screen.dart';
 import './Attendance screens/face_gps_attendance_management_screen.dart';
 import 'admin_face_approval.dart';
-import 'leave_policy_management.dart';
-import 'admin_attendance_report.dart';
+import 'notification.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final int initialIndex;
@@ -63,7 +60,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   late int selectedIndex;
   bool isExpanded = false;
 
-  // static const int notificationIndex = 16;
 
   @override
   void initState() {
@@ -111,14 +107,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             '',
       ),
 
-      AdminAttendanceReportScreen(mode: 'normal'), // 1
       AdminDepartmentsScreen(tenantId: widget.tenantId), // 4
       ManageUserScreen(roleId: widget.roleId, tenantId: widget.tenantId), // 5
       AdminApprovalPage(),
       AdminFaceApprovalPage(),
-      AdminProfileScreen(employeeId: widget.employeeId), // 6
-
-      LeavePolicyManagementScreen(), // 7
+      EmployeeProfileScreen(employeeId: widget.employeeId), // 6
       LeaveApprovalScreen(), // 8
       AdminSessionManagementScreen(), // 9
     ]);
@@ -133,13 +126,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     'Normal Attendance',
     'GPS Attendance',
     'Face & GPS Attendance',
-    'Reports',
+
     'Departments',
     'Manage Users',
     'Approvals',
     'Face Approval',
     'Profile',
-    'Leave Policy Management',
+    // 'Leave Policy Management',
     'Leave Management',
     'Sesion Management',
   ];
@@ -167,11 +160,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       selectedIcon: Icon(Icons.face),
       label: Text('Face & GPS Attendance'),
     ),
-    NavigationRailDestination(
-      icon: Icon(Icons.report_outlined),
-      selectedIcon: Icon(Icons.report),
-      label: Text('Reports'),
-    ),
+
     NavigationRailDestination(
       icon: Icon(Icons.apartment_outlined),
       selectedIcon: Icon(Icons.apartment),
@@ -197,11 +186,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       selectedIcon: Icon(Icons.person),
       label: Text('Profile'),
     ),
-    NavigationRailDestination(
-      icon: Icon(Icons.policy_outlined),
-      selectedIcon: Icon(Icons.policy),
-      label: Text('Leave Policy'),
-    ),
+    // NavigationRailDestination(
+    //   icon: Icon(Icons.policy_outlined),
+    //   selectedIcon: Icon(Icons.policy),
+    //   label: Text('Leave Policy'),
+    // ),
     NavigationRailDestination(
       icon: Icon(Icons.leave_bags_at_home_outlined),
       selectedIcon: Icon(Icons.leave_bags_at_home),
@@ -236,18 +225,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ),
           ),
           iconTheme: const IconThemeData(color: Colors.white),
-          // actions: [
-          //   IconButton(
-          //     tooltip: 'Notifications',
-          //     icon: const Icon(
-          //       Icons.notifications_outlined,
-          //       color: Colors.white,
-          //     ),
-          //     onPressed: () =>
-          //         setState(() => selectedIndex = notificationIndex),
-          //   ),
-          //   const SizedBox(width: 4),
-          // ],
+          actions: [
+            if (!kIsWeb &&
+                (defaultTargetPlatform == TargetPlatform.android ||
+                    defaultTargetPlatform == TargetPlatform.iOS))
+              IconButton(
+                tooltip: 'Notifications',
+                icon: const Icon(
+                  Icons.notifications_outlined,
+                  color: Colors.white,
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => NotificationScreen(),
+                    ),
+                  );
+                },
+              ),
+            const SizedBox(width: 4),
+          ],
         ),
         drawer: isDesktop
             ? null

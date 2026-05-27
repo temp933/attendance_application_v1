@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import '../services/attendance_state.dart';
 import '../services/site_cache.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'emp_home_screen.dart';
 import './Attendance screens/normal_in_out.dart';
 import './Attendance screens/attendance_gps.dart';
@@ -14,6 +15,7 @@ import '../services/location_services.dart';
 import 'emp_work_location.dart';
 import 'session_guard_mixin.dart';
 import 'comp_off_screen.dart';
+import 'notification.dart';
 
 class DashboardScreen extends StatefulWidget {
   final int loginId;
@@ -184,14 +186,25 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
-        // actions: [
-        //   IconButton(
-        //     tooltip: 'Notifications',
-        //     icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-        //     onPressed: () => setState(() => selectedIndex = notificationIndex),
-        //   ),
-        //   const SizedBox(width: 4),
-        // ],
+        actions: [
+          if (!kIsWeb &&
+              (defaultTargetPlatform == TargetPlatform.android ||
+                  defaultTargetPlatform == TargetPlatform.iOS))
+            IconButton(
+              tooltip: 'Notifications',
+              icon: const Icon(
+                Icons.notifications_outlined,
+                color: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => NotificationScreen()),
+                );
+              },
+            ),
+          const SizedBox(width: 4),
+        ],
       ),
       drawer: isDesktop ? null : _mobileDrawer(),
       body: Row(

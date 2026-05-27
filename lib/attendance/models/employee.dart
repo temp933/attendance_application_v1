@@ -8,7 +8,6 @@ class Employee {
   final String? phone;
   final String? dob;
   final String? gender;
-
   final int? departmentId;
   final String? departmentName;
 
@@ -48,6 +47,7 @@ class Employee {
   final int? yearsExperience;
   final List<Education>? educationList;
   final int? tlId;
+  final String? requestType;
 
   Employee({
     required this.empId,
@@ -90,6 +90,7 @@ class Employee {
     this.yearsExperience,
     this.educationList,
     this.tlId,
+    this.requestType,
   });
   // In employee.dart — add this method to the Employee class
   Employee copyWithPendingStatus({String? adminApprove, int? requestId}) {

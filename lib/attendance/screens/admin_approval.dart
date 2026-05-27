@@ -15,6 +15,12 @@ const Color _textMid = Color(0xFF64748B);
 const Color _textLight = Color(0xFF94A3B8);
 const Color _border = Color(0xFFE2E8F0);
 
+// Highlight colors for changed fields
+const Color _highlightBg = Color(0xFFFFFBEB);
+const Color _highlightBorder = Color(0xFFF59E0B);
+const Color _highlightOld = Color(0xFFB45309);
+const Color _highlightNew = Color(0xFF92400E);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // LIST PAGE
 // ─────────────────────────────────────────────────────────────────────────────
@@ -44,7 +50,6 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     try {
       final res = await ApiClient.get('/admin/pending-requests');
       if (res.statusCode == 200) {
-        // FIX: parse body first, then read ['data']
         final body = jsonDecode(res.body);
         setState(() => _requests = body['data'] ?? []);
       } else {
@@ -272,7 +277,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Request Card
+// REQUEST CARD
 // ─────────────────────────────────────────────────────────────────────────────
 class _RequestCard extends StatefulWidget {
   final Map request;
@@ -484,6 +489,7 @@ class _RequestCardState extends State<_RequestCard> {
 class ApprovalDetailPage extends StatefulWidget {
   final Map request;
   const ApprovalDetailPage({super.key, required this.request});
+
   @override
   State<ApprovalDetailPage> createState() => _ApprovalDetailPageState();
 }
@@ -491,13 +497,16 @@ class ApprovalDetailPage extends StatefulWidget {
 class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
   late final Future<http.Response> _photoFuture;
 
+  // ── current_data from master (only for UPDATE requests) ──
+  Map? get _current => widget.request['current_data'] as Map?;
+  bool get _isUpdate => widget.request['request_type'] == 'UPDATE';
+
   @override
   void initState() {
     super.initState();
     final requestId = widget.request['request_id'];
     final empId = widget.request['emp_id'];
-    final isUpdate = widget.request['request_type'] == 'UPDATE';
-    _photoFuture = _resolvePhoto(requestId, empId, isUpdate);
+    _photoFuture = _resolvePhoto(requestId, empId, _isUpdate);
   }
 
   Future<http.Response> _resolvePhoto(
@@ -515,6 +524,28 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     return http.Response('', 404);
   }
 
+  // ── Diff helpers ──────────────────────────────────────────────────────────
+
+  /// Returns true if the pending value differs from the master value.
+  bool _changed(String field) {
+    if (!_isUpdate || _current == null) return false;
+    final pending = widget.request[field]?.toString().trim() ?? '';
+    final current = _current![field]?.toString().trim() ?? '';
+    if (pending.isEmpty) return false;
+    return pending != current;
+  }
+
+  /// Returns the formatted OLD value for display (struck-through label).
+  String _old(String field, {String Function(dynamic)? fmt}) {
+    if (_current == null) return '';
+    final v = _current![field];
+    if (v == null || v.toString().isEmpty) return '';
+    return fmt != null ? fmt(v) : v.toString();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Date formatter
+  // ─────────────────────────────────────────────────────────────────────────
   String _fmt(dynamic date) {
     if (date == null || date.toString().isEmpty) return '-';
     try {
@@ -541,6 +572,9 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     'Dec',
   ][m];
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Section card wrapper
+  // ─────────────────────────────────────────────────────────────────────────
   Widget _sectionCard({required Widget child}) => Container(
     margin: const EdgeInsets.only(bottom: 12),
     decoration: BoxDecoration(
@@ -596,53 +630,153 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Info tile — supports old/new diff display
+  // ─────────────────────────────────────────────────────────────────────────
   Widget _infoTile({
     required IconData icon,
     required String label,
     required String value,
     int maxLines = 4,
     Color? valueColor,
+    bool highlight = false,
+    String oldValue = '',
   }) {
     final isEmpty = value.isEmpty || value == '-';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 130,
-            child: Row(
-              children: [
-                Icon(icon, size: 14, color: _textMid),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: _textMid,
-                      fontWeight: FontWeight.w500,
+
+    return Container(
+      decoration: highlight
+          ? const BoxDecoration(
+              color: _highlightBg,
+              border: Border(
+                left: BorderSide(color: _highlightBorder, width: 3),
+              ),
+            )
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Label column
+            SizedBox(
+              width: 134,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Icon(
+                      icon,
+                      size: 14,
+                      color: highlight ? _highlightBorder : _textMid,
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Text(
-              isEmpty ? '-' : value,
-              maxLines: maxLines,
-              overflow: TextOverflow.visible,
-              softWrap: true,
-              style: TextStyle(
-                fontSize: 13,
-                color: isEmpty ? _textLight : (valueColor ?? _textDark),
-                fontWeight: isEmpty ? FontWeight.w400 : FontWeight.w600,
-                height: 1.5,
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: highlight ? _highlightBorder : _textMid,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            // Value column
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Old value (struck-through) — only shown when changed
+                  if (highlight && oldValue.isNotEmpty) ...[
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.remove_circle_outline_rounded,
+                          size: 11,
+                          color: _highlightOld,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            oldValue,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: _highlightOld,
+                              decoration: TextDecoration.lineThrough,
+                              decorationColor: _highlightOld,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                  // New / current value
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (highlight) ...[
+                        const Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 11,
+                          color: _highlightBorder,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Text(
+                          isEmpty ? '-' : value,
+                          maxLines: maxLines,
+                          overflow: TextOverflow.visible,
+                          softWrap: true,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: highlight
+                                ? _highlightNew
+                                : isEmpty
+                                ? _textLight
+                                : (valueColor ?? _textDark),
+                            fontWeight: highlight || !isEmpty
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Changed badge
+            if (highlight)
+              Container(
+                margin: const EdgeInsets.only(left: 8, top: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                  ),
+                ),
+                child: const Text(
+                  'Changed',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF92400E),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -650,14 +784,46 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
   Widget _dividerRow() =>
       const Divider(height: 1, thickness: 1, color: _border);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Profile hero
+  // ─────────────────────────────────────────────────────────────────────────
   Widget _profileHero() {
     final name = [
       widget.request['first_name'],
       widget.request['mid_name'],
       widget.request['last_name'],
     ].where((e) => e != null && e.toString().trim().isNotEmpty).join(' ');
+
     final isNew = widget.request['request_type'] == 'NEW';
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+    // Count total changed fields for badge
+    final changedFields = [
+      'first_name',
+      'mid_name',
+      'last_name',
+      'email_id',
+      'phone_number',
+      'date_of_birth',
+      'gender',
+      'father_name',
+      'emergency_contact',
+      'emergency_contact_relation',
+      'department_id',
+      'role_id',
+      'date_of_joining',
+      'date_of_relieving',
+      'employment_type',
+      'work_type',
+      'years_experience',
+      'permanent_address',
+      'communication_address',
+      'aadhar_number',
+      'pan_number',
+      'passport_number',
+      'pf_number',
+      'esic_number',
+    ].where(_changed).length;
 
     return Container(
       decoration: BoxDecoration(
@@ -767,41 +933,85 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                             ),
                           ),
                           const SizedBox(height: 10),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  isNew
-                                      ? Icons.person_add_rounded
-                                      : Icons.edit_rounded,
-                                  size: 13,
-                                  color: Colors.white,
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
                                 ),
-                                const SizedBox(width: 5),
-                                Text(
-                                  isNew
-                                      ? 'New Employee Request'
-                                      : 'Update Request',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 12,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      isNew
+                                          ? Icons.person_add_rounded
+                                          : Icons.edit_rounded,
+                                      size: 13,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      isNew
+                                          ? 'New Employee Request'
+                                          : 'Update Request',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Changed fields count badge (UPDATE only)
+                              if (_isUpdate && changedFields > 0) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 9,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFFF59E0B,
+                                    ).withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: const Color(
+                                        0xFFF59E0B,
+                                      ).withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.edit_note_rounded,
+                                        size: 12,
+                                        color: _amber,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '$changedFields field${changedFields == 1 ? '' : 's'} changed',
+                                        style: const TextStyle(
+                                          color: _amber,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
-                            ),
+                            ],
                           ),
                         ],
                       ),
@@ -887,7 +1097,10 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     color: Colors.white.withValues(alpha: 0.12),
   );
 
-  Widget _educationSection(List educations) {
+  // ─────────────────────────────────────────────────────────────────────────
+  // Education section — full diff support
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _educationSection(List pendingEdu) {
     const levelColors = {
       '10': Color(0xFF6366F1),
       '12': Color(0xFF8B5CF6),
@@ -905,6 +1118,16 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
       'PhD': 'Doctorate (PhD)',
     };
 
+    // Get current education list from master (for UPDATE diff)
+    final List currentEdu = (_current?['education_list'] as List?) ?? [];
+
+    // Build a lookup map: level → current edu record
+    Map<String, Map> currentByLevel = {};
+    for (final e in currentEdu) {
+      final level = e['education_level']?.toString() ?? '';
+      if (level.isNotEmpty) currentByLevel[level] = Map.from(e);
+    }
+
     return _sectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -915,7 +1138,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
             _accent,
             const Color(0xFFECFDF5),
           ),
-          if (educations.isEmpty)
+          if (pendingEdu.isEmpty)
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text(
@@ -927,96 +1150,179 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
             Padding(
               padding: const EdgeInsets.all(14),
               child: Column(
-                children: educations.map<Widget>((e) {
+                children: pendingEdu.map<Widget>((e) {
                   final level = e['education_level']?.toString() ?? '';
                   final color = levelColors[level] ?? _textMid;
                   final label = levelLabels[level] ?? level;
+                  final current = currentByLevel[level];
+
+                  // Compare each sub-field
+                  bool fieldChanged(String f) {
+                    if (!_isUpdate || current == null) return false;
+                    final pv = e[f]?.toString().trim() ?? '';
+                    final cv = current[f]?.toString().trim() ?? '';
+                    return pv.isNotEmpty && pv != cv;
+                  }
+
+                  String oldField(String f) => current?[f]?.toString() ?? '';
+
+                  final anyChanged =
+                      _isUpdate &&
+                      current != null &&
+                      [
+                        'stream',
+                        'score',
+                        'year_of_passout',
+                        'college_name',
+                        'university',
+                      ].any(fieldChanged);
+
+                  // Is this level brand new (not in master)?
+                  final isNew =
+                      _isUpdate && current == null && currentEdu.isNotEmpty;
+
                   return Container(
                     margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.04),
+                      color: anyChanged || isNew
+                          ? _highlightBg
+                          : color.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: color.withValues(alpha: 0.2)),
+                      border: Border.all(
+                        color: anyChanged || isNew
+                            ? _highlightBorder.withValues(alpha: 0.4)
+                            : color.withValues(alpha: 0.2),
+                        width: anyChanged || isNew ? 1.5 : 1,
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: color.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: color.withValues(alpha: 0.3),
+                        // Header row
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: color.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Text(
+                                  level,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: color,
+                                  ),
                                 ),
                               ),
-                              child: Text(
-                                level,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: color,
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  e['stream']?.toString().trim().isNotEmpty ==
+                                          true
+                                      ? e['stream'].toString()
+                                      : label,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textDark,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                e['stream']?.toString().trim().isNotEmpty ==
-                                        true
-                                    ? e['stream'].toString()
-                                    : label,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: _textDark,
+                              if (isNew)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFECFDF5),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: _accent.withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'New',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: _accent,
+                                    ),
+                                  ),
                                 ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+                              if (anyChanged && !isNew)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: _highlightBorder.withValues(
+                                        alpha: 0.4,
+                                      ),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Changed',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF92400E),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: [
-                            if (e['score'] != null)
-                              _eduChip(
-                                Icons.percent_rounded,
-                                '${e['score']}%',
-                                color,
-                              ),
-                            if (e['year_of_passout'] != null)
-                              _eduChip(
-                                Icons.calendar_today_rounded,
-                                e['year_of_passout'].toString(),
-                                _purple,
-                              ),
-                            if (e['college_name']
-                                    ?.toString()
-                                    .trim()
-                                    .isNotEmpty ==
-                                true)
-                              _eduChip(
-                                Icons.account_balance_rounded,
-                                e['college_name'].toString(),
-                                _primary,
-                              ),
-                            if (e['university']?.toString().trim().isNotEmpty ==
-                                true)
-                              _eduChip(
-                                Icons.school_outlined,
-                                e['university'].toString(),
-                                _amber,
-                              ),
-                          ],
+                        // Fields as mini diff rows
+                        _eduDiffRow(
+                          icon: Icons.percent_rounded,
+                          label: 'Score',
+                          newVal: e['score'] != null ? '${e['score']}%' : '',
+                          oldVal: oldField('score').isNotEmpty
+                              ? '${oldField('score')}%'
+                              : '',
+                          changed: fieldChanged('score'),
+                          color: color,
+                        ),
+                        _eduDiffRow(
+                          icon: Icons.calendar_today_rounded,
+                          label: 'Year',
+                          newVal: e['year_of_passout']?.toString() ?? '',
+                          oldVal: oldField('year_of_passout'),
+                          changed: fieldChanged('year_of_passout'),
+                          color: _purple,
+                        ),
+                        _eduDiffRow(
+                          icon: Icons.account_balance_rounded,
+                          label: 'College',
+                          newVal: e['college_name']?.toString() ?? '',
+                          oldVal: oldField('college_name'),
+                          changed: fieldChanged('college_name'),
+                          color: _primary,
+                        ),
+                        _eduDiffRow(
+                          icon: Icons.school_outlined,
+                          label: 'University',
+                          newVal: e['university']?.toString() ?? '',
+                          oldVal: oldField('university'),
+                          changed: fieldChanged('university'),
+                          color: _amber,
+                          isLast: true,
                         ),
                       ],
                     ),
@@ -1029,30 +1335,97 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     );
   }
 
-  Widget _eduChip(IconData icon, String label, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(7),
-      border: Border.all(color: color.withValues(alpha: 0.2)),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
+  Widget _eduDiffRow({
+    required IconData icon,
+    required String label,
+    required String newVal,
+    required String oldVal,
+    required bool changed,
+    required Color color,
+    bool isLast = false,
+  }) {
+    if (newVal.isEmpty && oldVal.isEmpty) return const SizedBox.shrink();
+
+    return Column(
       children: [
-        Icon(icon, size: 11, color: color),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: color,
-            fontWeight: FontWeight.w600,
+        const Divider(height: 1, thickness: 1, color: _border),
+        Container(
+          color: changed ? _highlightBg : null,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left side border for changed
+              if (changed)
+                Container(
+                  width: 3,
+                  height: 36,
+                  color: _highlightBorder,
+                  margin: const EdgeInsets.only(right: 8),
+                ),
+              Icon(icon, size: 13, color: changed ? _highlightBorder : color),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 72,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: changed ? _highlightBorder : _textMid,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (changed && oldVal.isNotEmpty)
+                      Text(
+                        oldVal,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: _highlightOld,
+                          decoration: TextDecoration.lineThrough,
+                          decorationColor: _highlightOld,
+                        ),
+                      ),
+                    if (changed && oldVal.isNotEmpty) const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        if (changed)
+                          const Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 10,
+                            color: _highlightBorder,
+                          ),
+                        if (changed) const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            newVal,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: changed ? _highlightNew : _textDark,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
+        if (isLast) const SizedBox(height: 4),
       ],
-    ),
-  );
+    );
+  }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Dialogs
+  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _showAutoRejectedDialog(BuildContext context, String reason) {
     return showDialog(
       context: context,
@@ -1144,7 +1517,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     );
   }
 
-  // FIX: BuildContext async gap — capture ScaffoldMessenger before await
   Future<void> _approve(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
@@ -1160,8 +1532,6 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     final res = await ApiClient.post('/admin/approve-request', {
       'request_id': widget.request['request_id'],
     });
-
-    // Close loading dialog
     navigator.pop();
 
     final data = jsonDecode(res.body);
@@ -1357,6 +1727,9 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // BUILD
+  // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final hasRejectReason =
@@ -1430,6 +1803,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                 _profileHero(),
                 const SizedBox(height: 14),
 
+                // Previous rejection reason banner
                 if (hasRejectReason) ...[
                   Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -1484,6 +1858,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                   ),
                 ],
 
+                // ── PERSONAL INFORMATION ──────────────────────────────────
                 _sectionCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1501,27 +1876,59 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                       ),
                       _dividerRow(),
                       _infoTile(
+                        icon: Icons.person_rounded,
+                        label: 'First Name',
+                        value: widget.request['first_name'] ?? '-',
+                        highlight: _changed('first_name'),
+                        oldValue: _old('first_name'),
+                      ),
+                      _dividerRow(),
+                      _infoTile(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Middle Name',
+                        value: widget.request['mid_name'] ?? '-',
+                        highlight: _changed('mid_name'),
+                        oldValue: _old('mid_name'),
+                      ),
+                      _dividerRow(),
+                      _infoTile(
+                        icon: Icons.person_rounded,
+                        label: 'Last Name',
+                        value: widget.request['last_name'] ?? '-',
+                        highlight: _changed('last_name'),
+                        oldValue: _old('last_name'),
+                      ),
+                      _dividerRow(),
+                      _infoTile(
                         icon: Icons.wc_rounded,
                         label: 'Gender',
                         value: widget.request['gender'] ?? '-',
+                        highlight: _changed('gender'),
+                        oldValue: _old('gender'),
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.cake_outlined,
                         label: 'Date of Birth',
                         value: _fmt(widget.request['date_of_birth']),
+                        highlight: _changed('date_of_birth'),
+                        oldValue: _old('date_of_birth', fmt: _fmt),
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.person_outline_rounded,
                         label: 'Father Name',
                         value: widget.request['father_name'] ?? '-',
+                        highlight: _changed('father_name'),
+                        oldValue: _old('father_name'),
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.phone_android_rounded,
                         label: 'Emergency Contact',
                         value: widget.request['emergency_contact'] ?? '-',
+                        highlight: _changed('emergency_contact'),
+                        oldValue: _old('emergency_contact'),
                       ),
                       _dividerRow(),
                       _infoTile(
@@ -1529,11 +1936,14 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         label: 'Emergency Relation',
                         value:
                             widget.request['emergency_contact_relation'] ?? '-',
+                        highlight: _changed('emergency_contact_relation'),
+                        oldValue: _old('emergency_contact_relation'),
                       ),
                     ],
                   ),
                 ),
 
+                // ── CONTACT INFORMATION ───────────────────────────────────
                 _sectionCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1549,12 +1959,16 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         label: 'Email',
                         value: widget.request['email_id'] ?? '-',
                         valueColor: _primary,
+                        highlight: _changed('email_id'),
+                        oldValue: _old('email_id'),
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.phone_outlined,
                         label: 'Phone',
                         value: widget.request['phone_number'] ?? '-',
+                        highlight: _changed('phone_number'),
+                        oldValue: _old('phone_number'),
                       ),
                       _dividerRow(),
                       _infoTile(
@@ -1562,6 +1976,8 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         label: 'Permanent Address',
                         value: widget.request['permanent_address'] ?? '-',
                         maxLines: 4,
+                        highlight: _changed('permanent_address'),
+                        oldValue: _old('permanent_address'),
                       ),
                       _dividerRow(),
                       _infoTile(
@@ -1569,11 +1985,14 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         label: 'Communication Address',
                         value: widget.request['communication_address'] ?? '-',
                         maxLines: 4,
+                        highlight: _changed('communication_address'),
+                        oldValue: _old('communication_address'),
                       ),
                     ],
                   ),
                 ),
 
+                // ── EMPLOYMENT INFORMATION ────────────────────────────────
                 _sectionCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1588,18 +2007,29 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         icon: Icons.business_outlined,
                         label: 'Department',
                         value: widget.request['department_name'] ?? '-',
+                        highlight: _changed('department_id'),
+                        oldValue: _old('department_id').isNotEmpty
+                            ? (_current?['department_name'] ??
+                                  _old('department_id'))
+                            : '',
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.badge_outlined,
                         label: 'Role',
                         value: widget.request['role_name'] ?? '-',
+                        highlight: _changed('role_id'),
+                        oldValue: _old('role_id').isNotEmpty
+                            ? (_current?['role_name'] ?? _old('role_id'))
+                            : '',
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.calendar_today_outlined,
                         label: 'Date of Joining',
                         value: _fmt(widget.request['date_of_joining']),
+                        highlight: _changed('date_of_joining'),
+                        oldValue: _old('date_of_joining', fmt: _fmt),
                       ),
                       if (widget.request['date_of_relieving'] != null &&
                           widget.request['date_of_relieving']
@@ -1610,6 +2040,8 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                           icon: Icons.event_busy_outlined,
                           label: 'Date of Relieving',
                           value: _fmt(widget.request['date_of_relieving']),
+                          highlight: _changed('date_of_relieving'),
+                          oldValue: _old('date_of_relieving', fmt: _fmt),
                         ),
                       ],
                       _dividerRow(),
@@ -1617,12 +2049,16 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         icon: Icons.category_outlined,
                         label: 'Employment Type',
                         value: widget.request['employment_type'] ?? '-',
+                        highlight: _changed('employment_type'),
+                        oldValue: _old('employment_type'),
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.access_time_outlined,
                         label: 'Work Type',
                         value: widget.request['work_type'] ?? '-',
+                        highlight: _changed('work_type'),
+                        oldValue: _old('work_type'),
                       ),
                       _dividerRow(),
                       _infoTile(
@@ -1630,15 +2066,21 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         label: 'Experience',
                         value:
                             '${widget.request['years_experience'] ?? '-'} yrs',
+                        highlight: _changed('years_experience'),
+                        oldValue: _old('years_experience').isNotEmpty
+                            ? '${_old('years_experience')} yrs'
+                            : '',
                       ),
                     ],
                   ),
                 ),
 
+                // ── EDUCATION DETAILS ─────────────────────────────────────
                 _educationSection(
                   (widget.request['education_list'] as List?) ?? [],
                 ),
 
+                // ── DOCUMENTS & STATUTORY ─────────────────────────────────
                 _sectionCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1653,35 +2095,46 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         icon: Icons.credit_card_outlined,
                         label: 'Aadhar Number',
                         value: widget.request['aadhar_number'] ?? '-',
+                        highlight: _changed('aadhar_number'),
+                        oldValue: _old('aadhar_number'),
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.assignment_outlined,
                         label: 'PAN Number',
                         value: widget.request['pan_number'] ?? '-',
+                        highlight: _changed('pan_number'),
+                        oldValue: _old('pan_number'),
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.airplanemode_active_outlined,
                         label: 'Passport Number',
                         value: widget.request['passport_number'] ?? '-',
+                        highlight: _changed('passport_number'),
+                        oldValue: _old('passport_number'),
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.account_balance_rounded,
                         label: 'PF Number',
                         value: widget.request['pf_number'] ?? '-',
+                        highlight: _changed('pf_number'),
+                        oldValue: _old('pf_number'),
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.health_and_safety_outlined,
                         label: 'ESIC Number',
                         value: widget.request['esic_number'] ?? '-',
+                        highlight: _changed('esic_number'),
+                        oldValue: _old('esic_number'),
                       ),
                     ],
                   ),
                 ),
 
+                // ── EDIT REASON ───────────────────────────────────────────
                 if (hasEditReason)
                   _sectionCard(
                     child: Column(
@@ -1721,6 +2174,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
 
                 const SizedBox(height: 8),
 
+                // ── ACTION BUTTONS ────────────────────────────────────────
                 Row(
                   children: [
                     Expanded(

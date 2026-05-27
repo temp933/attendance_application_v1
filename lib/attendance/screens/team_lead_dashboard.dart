@@ -908,7 +908,7 @@ class _TLDashboardScreenState extends State<TLDashboardScreen>
       loginId: widget.loginId.toString(), // ← add this
       onNavigate: (index) => setState(() => selectedIndex = index),
     ), // 0
-    AttendanceScreen(employeeId: int.parse(widget.employeeId)), // 1
+    // AttendanceScreen(employeeId: int.parse(widget.employeeId)), // 1
     TLAttendanceScreen(loginId: widget.loginId), // 2
     // TLLeaveScreen(loginId: widget.loginId), // 3
     TL_HR_LeaveScreen(employeeId: widget.employeeId), // 4

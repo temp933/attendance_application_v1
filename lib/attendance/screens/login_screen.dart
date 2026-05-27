@@ -363,6 +363,7 @@ class _SignInTabState extends State<_SignInTab> {
           _appAdminSessionId = body['session_id'] as String;
           _appAdminEmailHint = body['email_hint'] as String? ?? '***';
         });
+        debugPrint('🔑 sessionId stored: $_appAdminSessionId');
         _startResendCd();
       } else {
         setState(

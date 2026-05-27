@@ -21,11 +21,18 @@
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
 
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="high_importance_channel" />
+
+        <!-- Geolocator foreground service — needs foregroundServiceType on Android 14+ -->
         <service
             android:name="com.lyokone.location.FlutterLocationService"
+            android:foregroundServiceType="location"
             android:permission="android.permission.FOREGROUND_SERVICE"
             android:exported="false" />
 
+        <!-- flutter_background_service -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="location"
@@ -33,7 +40,7 @@
             android:exported="true"
             tools:replace="android:exported,android:stopWithTask,android:foregroundServiceType" />
 
-        <!-- ← ADDED: Required by image_cropper for the crop UI screen -->
+        <!-- image_cropper UI screen -->
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
@@ -52,8 +59,10 @@
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
-<meta-data android:name="com.google.firebase.messaging.default_notification_channel_id"
-           android:value="high_importance_channel"/>
+            <meta-data
+                android:name="com.google.firebase.messaging.default_notification_channel_id"
+                android:value="high_importance_channel" />
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

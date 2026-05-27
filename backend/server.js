@@ -68,12 +68,12 @@ async function sendOtpEmail(to, otp, orgName) {
     to,
     subject: `Your OTP for ${orgName} Registration`,
     html: `
-      <div style="font-family:sans-serif;padding:20px;">
-        <h2>Your OTP</h2>
-        <h1>${otp}</h1>
-        <p>This OTP expires in 10 minutes.</p>
-      </div>
-    `,
+        <div style="font-family:sans-serif;padding:20px;">
+          <h2>Your OTP</h2>
+          <h1>${otp}</h1>
+          <p>This OTP expires in 10 minutes.</p>
+        </div>
+      `,
   });
 }
 
@@ -223,13 +223,13 @@ app.post("/api/auth/complete", async (req, res) => {
     // ─────────────────────────────────────────────────────────────
     const [[planRow]] = await conn.query(
       `SELECT 
-      trial_days,
-      billing_cycle,
-      price_monthly,
-      price_yearly
-   FROM plans
-   WHERE plan_id = ?
-   LIMIT 1`,
+        trial_days,
+        billing_cycle,
+        price_monthly,
+        price_yearly
+    FROM plans
+    WHERE plan_id = ?
+    LIMIT 1`,
       [plan_id || "plan-free-trial"],
     );
 
@@ -287,14 +287,14 @@ app.post("/api/auth/complete", async (req, res) => {
     // ── Step 1: Insert tenant ─────────────────────────────────────────────
     await conn.query(
       `INSERT INTO tenants
-    (tenant_id, company_name, contact_person, contact_number,
-     admin_email, hr_email, max_users, company_address,
-     domain_name, gst_number, plan_id, status,
-     trial_ends_at, plan_starts_at, plan_ends_at,   -- ← NEW
-     created_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'trial',
-     ?, ?, ?,                                        -- ← NEW
-     NOW())`,
+      (tenant_id, company_name, contact_person, contact_number,
+      admin_email, hr_email, max_users, company_address,
+      domain_name, gst_number, plan_id, status,
+      trial_ends_at, plan_starts_at, plan_ends_at,   -- ← NEW
+      created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'trial',
+      ?, ?, ?,                                        -- ← NEW
+      NOW())`,
       [
         tenantId,
         org_name,
@@ -323,15 +323,15 @@ app.post("/api/auth/complete", async (req, res) => {
     // ── Step 3: Insert Admin into employee_master ─────────────────────────
     const [adminEmpResult] = await conn.query(
       `INSERT INTO employee_master
-        (tenant_id, first_name, mid_name, last_name,
-         email_id, phone_number, date_of_birth, gender,
-         department_id, role_id, date_of_joining,
-         employment_type, work_type,
-         permanent_address, communication_address,
-         father_name, emergency_contact, emergency_contact_relation,
-         aadhar_number, pan_number, pf_number, esic_number,
-         years_experience, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())`,
+          (tenant_id, first_name, mid_name, last_name,
+          email_id, phone_number, date_of_birth, gender,
+          department_id, role_id, date_of_joining,
+          employment_type, work_type,
+          permanent_address, communication_address,
+          father_name, emergency_contact, emergency_contact_relation,
+          aadhar_number, pan_number, pf_number, esic_number,
+          years_experience, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())`,
       [
         tenantId,
         admin_profile?.first_name?.trim() ||
@@ -369,15 +369,15 @@ app.post("/api/auth/complete", async (req, res) => {
     // ── Step 4: Insert HR into employee_master ────────────────────────────
     const [hrEmpResult] = await conn.query(
       `INSERT INTO employee_master
-        (tenant_id, first_name, mid_name, last_name,
-         email_id, phone_number, date_of_birth, gender,
-         department_id, role_id, date_of_joining,
-         employment_type, work_type,
-         permanent_address, communication_address,
-         father_name, emergency_contact, emergency_contact_relation,
-         aadhar_number, pan_number, pf_number, esic_number,
-         years_experience, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())`,
+          (tenant_id, first_name, mid_name, last_name,
+          email_id, phone_number, date_of_birth, gender,
+          department_id, role_id, date_of_joining,
+          employment_type, work_type,
+          permanent_address, communication_address,
+          father_name, emergency_contact, emergency_contact_relation,
+          aadhar_number, pan_number, pf_number, esic_number,
+          years_experience, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())`,
       [
         tenantId,
         hr_profile?.first_name?.trim() || "HR",
@@ -414,9 +414,9 @@ app.post("/api/auth/complete", async (req, res) => {
     // ── Step 6: Create login records linked to emp_id ─────────────────────
     await conn.query(
       `INSERT INTO login_master
-        (tenant_id, company_id, emp_id, username, contact_number,
-         password, role_id, is_first_login, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'Active', NOW())`,
+          (tenant_id, company_id, emp_id, username, contact_number,
+          password, role_id, is_first_login, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'Active', NOW())`,
       [
         tenantId,
         companyCode,
@@ -430,9 +430,9 @@ app.post("/api/auth/complete", async (req, res) => {
 
     await conn.query(
       `INSERT INTO login_master
-        (tenant_id, company_id, emp_id, username, contact_number,
-         password, role_id, is_first_login, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'Active', NOW())`,
+          (tenant_id, company_id, emp_id, username, contact_number,
+          password, role_id, is_first_login, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'Active', NOW())`,
       [
         tenantId,
         companyCode,
@@ -472,25 +472,25 @@ app.post("/api/auth/forgot-password/send-otp", async (req, res) => {
 
     const [users] = await db.query(
       `SELECT
-          lm.login_id,
-          lm.username,
-          lm.contact_number,
-          lm.role_id,
-          lm.tenant_id,
-          t.admin_email,
-          t.hr_email,
-          e.email_id
-       FROM login_master lm
+            lm.login_id,
+            lm.username,
+            lm.contact_number,
+            lm.role_id,
+            lm.tenant_id,
+            t.admin_email,
+            t.hr_email,
+            e.email_id
+        FROM login_master lm
 
-       LEFT JOIN tenants t
-         ON t.tenant_id = lm.tenant_id
+        LEFT JOIN tenants t
+          ON t.tenant_id = lm.tenant_id
 
-       LEFT JOIN employee_master e
-         ON e.emp_id = lm.emp_id
+        LEFT JOIN employee_master e
+          ON e.emp_id = lm.emp_id
 
-       WHERE lm.username = ?
-         AND lm.contact_number = ?
-       LIMIT 1`,
+        WHERE lm.username = ?
+          AND lm.contact_number = ?
+        LIMIT 1`,
       [username, contact_number],
     );
 
@@ -529,9 +529,9 @@ app.post("/api/auth/forgot-password/send-otp", async (req, res) => {
 
     await db.query(
       `UPDATE login_master
-       SET reset_otp = ?,
-    reset_otp_expiry = DATE_ADD(NOW(), INTERVAL 10 MINUTE)
-       WHERE login_id = ?`,
+        SET reset_otp = ?,
+      reset_otp_expiry = DATE_ADD(NOW(), INTERVAL 10 MINUTE)
+        WHERE login_id = ?`,
       [otp, user.login_id],
     );
 
@@ -540,12 +540,12 @@ app.post("/api/auth/forgot-password/send-otp", async (req, res) => {
       to: email,
       subject: "Password Reset OTP",
       html: `
-        <div style="font-family:sans-serif;padding:20px;">
-          <h2>Password Reset OTP</h2>
-          <h1>${otp}</h1>
-          <p>This OTP expires in 10 minutes.</p>
-        </div>
-      `,
+          <div style="font-family:sans-serif;padding:20px;">
+            <h2>Password Reset OTP</h2>
+            <h1>${otp}</h1>
+            <p>This OTP expires in 10 minutes.</p>
+          </div>
+        `,
     });
 
     res.json({
@@ -672,6 +672,32 @@ const sessionsRouter = require("./sessions");
 app.use("/api/admin", sessionsRouter);
 
 app.use("/api/attendance/history", require("./Attendance/history"));
+
+const { initializeNotificationService } = require("./notify");
+initializeNotificationService();
+
+const notifRoutes = require("./notification_routes");
+app.use("/api/notifications", authMiddleware, notifRoutes);
+
+// ── Global Notification Service (Cron for scheduled notifications)
+const { initGlobalCron } = require("./global_notify");
+initGlobalCron(); // starts the scheduled-notification cron
+
+// ── Super Admin Global Notification API
+const globalNotifRoutes = require("./global_notification_routes");
+app.use(
+  "/api/app-admin/notifications",
+  authMiddleware,
+  globalNotifRoutes,
+);
+
+// ── Flutter app can mark a global notification as opened (normal user auth)
+app.post(
+  "/api/notifications/mark-global-opened",
+  authMiddleware,
+  globalNotifRoutes, // the router handles /mark-opened internally
+);
+
 // In server.js — temporary stubs for leave status summary and dashboard data
 app.get("/api/leave-status-summary", (req, res) => {
   res.json({ ok: true, data: [] });

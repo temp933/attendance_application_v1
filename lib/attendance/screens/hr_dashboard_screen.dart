@@ -74,7 +74,7 @@ class _HRDashboardScreenState extends State<HRDashboardScreen>
         employeeId: widget.employeeId,
         onNavigate: (index) => setState(() => selectedIndex = index),
       ), // 0
-      AttendanceScreen(employeeId: int.parse(widget.employeeId)), // 1
+      // AttendanceScreen(employeeId: int.parse(widget.employeeId)), // 1
       AdminHrAttendanceScreen(loginId: widget.loginId), // 2
       TL_HR_LeaveScreen(employeeId: widget.employeeId), // 3
       EmployeeAssignmentsScreen(),

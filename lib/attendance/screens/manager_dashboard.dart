@@ -70,7 +70,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen>
       employeeId: widget.employeeId,
       onNavigate: (index) => setState(() => selectedIndex = index),
     ), // 0
-    AttendanceScreen(employeeId: int.parse(widget.employeeId)), // 1
+    // AttendanceScreen(employeeId: int.parse(widget.employeeId)), // 1
     AdminHrAttendanceScreen(loginId: widget.loginId), // 2
     // LeaveApprovalScreen(loginId: widget.loginId), // 3
     MGLeaveScreen(employeeId: widget.employeeId), // 4

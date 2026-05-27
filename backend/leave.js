@@ -1,16 +1,6 @@
 "use strict";
 
-/**
- * leave.js  —  Leave Policy + Apply/Approve/Reject/Cancel Module (Enterprise HRMS)
- *
- * Mount in app.js:
- *   const leaveRouter = require('./leave');
- *   app.use('/api/leave', authMiddleware, leaveRouter);
- *
- * Leave Policy routes   → /api/leave/policy/...
- * Employee Leave routes → /api/leave/...
- */
-
+ 
 const express = require("express");
 const db = require("./config/db");
 const router = express.Router();

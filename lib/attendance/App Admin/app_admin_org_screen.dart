@@ -60,6 +60,8 @@ class Organization {
   final String? planCode;
   final double? priceMonthly;
   final double? priceYearly;
+  final String? planId;
+  final List<String> modules;
   final int employeeCount;
   final int activeEmployeeCount;
   // FIX: daysRemaining can be negative (expired plans); use int not clamped
@@ -87,6 +89,8 @@ class Organization {
     this.planCode,
     this.priceMonthly,
     this.priceYearly,
+    this.planId,
+    this.modules = const [],
     required this.employeeCount,
     required this.activeEmployeeCount,
     required this.daysRemaining,
@@ -115,6 +119,13 @@ class Organization {
     planCode: j['plan_code']?.toString(),
     priceMonthly: double.tryParse(j['price_monthly']?.toString() ?? ''),
     priceYearly: double.tryParse(j['price_yearly']?.toString() ?? ''),
+    planId: j['plan_id']?.toString(),
+    modules:
+        (j['modules'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .where((e) => e.isNotEmpty)
+            .toList() ??
+        [],
     employeeCount: _i(j['employee_count']),
     activeEmployeeCount: _i(j['active_employee_count']),
     // FIX: allow negative values (expired); don't clamp to 0
@@ -187,6 +198,48 @@ class OrgService {
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     return data['success'] == true;
   }
+
+  Future<bool> updateDetails(
+    String tenantId,
+    Map<String, dynamic> fields,
+  ) async {
+    final uri = Uri.parse('$baseUrl/app-admin/organizations/$tenantId/details');
+    final resp = await http.patch(
+      uri,
+      headers: _headers,
+      body: jsonEncode(fields),
+    );
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    return data['success'] == true;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchPlans() async {
+    final uri = Uri.parse('$baseUrl/plans/list');
+    final resp = await http.get(uri, headers: _headers);
+    if (resp.statusCode != 200) throw Exception('Failed to fetch plans');
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    return List<Map<String, dynamic>>.from(data['plans'] ?? []);
+  }
+
+  Future<bool> resetAdminPassword(String tenantId) async {
+    final uri = Uri.parse(
+      '$baseUrl/app-admin/organizations/$tenantId/reset-password',
+    );
+    final resp = await http.post(uri, headers: _headers);
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    return data['success'] == true;
+  }
+
+  Future<bool> updatePlan(String tenantId, Map<String, dynamic> fields) async {
+    final uri = Uri.parse('$baseUrl/app-admin/organizations/$tenantId/plan');
+    final resp = await http.patch(
+      uri,
+      headers: _headers,
+      body: jsonEncode(fields),
+    );
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    return data['success'] == true;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,7 +272,8 @@ class _AppAdminOrgScreenState extends State<AppAdminOrgScreen> {
 
   // FIX: proper debounce timer replacing unused ValueNotifier
   Timer? _debounceTimer;
-
+  List<Organization> get _expiringOrgs =>
+      _orgs.where((o) => o.daysRemaining > 0 && o.daysRemaining <= 7).toList();
   static const _tabs = [
     _StatusTab('all', 'All'),
     _StatusTab('active', 'Active'),
@@ -321,6 +375,54 @@ class _AppAdminOrgScreenState extends State<AppAdminOrgScreen> {
                             onTap: _onStatusTab,
                           ),
                           const SizedBox(height: 12),
+                          if (_expiringOrgs.isNotEmpty)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF3CD),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color(
+                                    0xFFFFB703,
+                                  ).withOpacity(0.4),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.warning_amber_outlined,
+                                    color: Color(0xFFFFB703),
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      '${_expiringOrgs.length} org${_expiringOrgs.length > 1 ? 's' : ''} expiring within 7 days',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF92600A),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () => _onStatusTab('active'),
+                                    child: const Text(
+                                      'View',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFFFFB703),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -1007,6 +1109,52 @@ class _OrgDetailScreenState extends State<OrgDetailScreen> {
     _loadFresh();
   }
 
+  Future<void> _resetAdminPassword() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Reset Password?',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        content: Text('A reset link will be sent to ${_org.adminEmail}.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFB703),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Send Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    final ok = await widget.service.resetAdminPassword(_org.tenantId);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to send reset link'),
+          backgroundColor: Color(0xFFEF476F),
+        ),
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Reset link sent to ${_org.adminEmail}'),
+        backgroundColor: const Color(0xFF06D6A0),
+      ),
+    );
+  }
+
   Future<void> _loadFresh() async {
     if (!mounted) return;
     setState(() => _refreshing = true);
@@ -1138,14 +1286,20 @@ class _OrgDetailScreenState extends State<OrgDetailScreen> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             )
-          else
+          else ...[
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, color: Color(0xFF4361EE)),
+              tooltip: 'Edit details',
+              onPressed: _showEditSheet,
+            ),
             TextButton(
               onPressed: _showStatusSheet,
               child: const Text(
-                'Change status',
+                'Status',
                 style: TextStyle(color: Color(0xFF4361EE), fontSize: 13),
               ),
             ),
+          ],
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -1245,9 +1399,72 @@ class _OrgDetailScreenState extends State<OrgDetailScreen> {
                 _DetailRow('Created At', fmt.format(_org.createdAt)),
               ],
             ),
+
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: 'Plan Modules',
+              icon: Icons.extension_outlined,
+              children: [
+                if (_org.modules.isEmpty)
+                  const _DetailRow('Modules', 'No modules assigned')
+                else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _org.modules
+                          .map(
+                            (m) => Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF2FF),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: const Color(
+                                    0xFF4361EE,
+                                  ).withOpacity(0.2),
+                                ),
+                              ),
+                              child: Text(
+                                m,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF4361EE),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
             const SizedBox(height: 20),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showEditSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditSheet(
+        org: _org,
+        service: widget.service,
+        onSaved: () {
+          widget.onRefresh();
+          _loadFresh();
+        },
       ),
     );
   }
@@ -1578,6 +1795,960 @@ class _StatusSheet extends StatelessWidget {
             }),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ignore_for_file: unused_element
+
+/// Full-featured edit bottom sheet for org details + plan.
+class _EditSheet extends StatefulWidget {
+  final Organization org;
+  final OrgService service;
+  final VoidCallback onSaved;
+
+  const _EditSheet({
+    required this.org,
+    required this.service,
+    required this.onSaved,
+  });
+
+  @override
+  State<_EditSheet> createState() => _EditSheetState();
+}
+
+class _EditSheetState extends State<_EditSheet>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabCtrl;
+  bool _saving = false;
+
+  // ── Contact/Details fields ──
+  late final TextEditingController _companyName;
+  late final TextEditingController _companyCode;
+  late final TextEditingController _adminEmail;
+  late final TextEditingController _hrEmail;
+  late final TextEditingController _contactPerson;
+  late final TextEditingController _contactNumber;
+  late final TextEditingController _companyAddress;
+  late final TextEditingController _domainName;
+  late final TextEditingController _gstNumber;
+  late final TextEditingController _timezone;
+
+  // ── Plan fields ──
+  late final TextEditingController _maxUsers;
+  DateTime? _planStartsAt;
+  DateTime? _planEndsAt;
+  DateTime? _trialEndsAt;
+
+  final _detailsFormKey = GlobalKey<FormState>();
+  final _planFormKey = GlobalKey<FormState>();
+  List<Map<String, dynamic>> _plans = [];
+  String? _selectedPlanId;
+  int? _planMaxUsers; // the ceiling from the chosen plan
+  bool _loadingPlans = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabCtrl = TabController(length: 2, vsync: this);
+
+    final o = widget.org;
+    _companyName = TextEditingController(text: o.companyName);
+    _companyCode = TextEditingController(text: o.companyCode ?? '');
+    _adminEmail = TextEditingController(text: o.adminEmail);
+    _hrEmail = TextEditingController(text: o.hrEmail ?? '');
+    _contactPerson = TextEditingController(text: o.contactPerson ?? '');
+    _contactNumber = TextEditingController(text: o.contactNumber ?? '');
+    _companyAddress = TextEditingController(text: o.companyAddress ?? '');
+    _domainName = TextEditingController(text: o.domainName ?? '');
+    _gstNumber = TextEditingController(text: o.gstNumber ?? '');
+    _timezone = TextEditingController(text: o.timezone ?? '');
+    _maxUsers = TextEditingController(text: o.maxUsers.toString());
+    _planStartsAt = o.planStartsAt;
+    _planEndsAt = o.planEndsAt;
+    _trialEndsAt = o.trialEndsAt;
+    _selectedPlanId = widget.org.planId; // add planId to Organization model
+    _loadPlans();
+  }
+
+  Future<void> _loadPlans() async {
+    try {
+      final plans = await widget.service.fetchPlans();
+      if (!mounted) return;
+      setState(() {
+        _plans = plans.where((p) => p['is_active'] == 1).toList();
+        _loadingPlans = false;
+        // set ceiling from currently selected plan
+        final current = _plans.firstWhere(
+          (p) => p['plan_id'] == _selectedPlanId,
+          orElse: () => {},
+        );
+        _planMaxUsers = current.isEmpty ? null : current['max_users'] as int?;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingPlans = false);
+    }
+  }
+
+  void _onPlanChanged(String? planId) {
+    if (planId == null) return;
+    final plan = _plans.firstWhere(
+      (p) => p['plan_id'] == planId,
+      orElse: () => {},
+    );
+    setState(() {
+      _selectedPlanId = planId;
+      _planMaxUsers = plan.isEmpty
+          ? null
+          : int.tryParse(plan['max_users'].toString());
+      // clamp current value if it exceeds the new plan ceiling
+      final current = int.tryParse(_maxUsers.text) ?? 0;
+      if (_planMaxUsers != null && current > _planMaxUsers!) {
+        _maxUsers.text = _planMaxUsers.toString();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    for (final c in [
+      _companyName,
+      _companyCode,
+      _adminEmail,
+      _hrEmail,
+      _contactPerson,
+      _contactNumber,
+      _companyAddress,
+      _domainName,
+      _gstNumber,
+      _timezone,
+      _maxUsers,
+    ]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _saveDetails() async {
+    if (!_detailsFormKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      final payload = {
+        'company_name': _companyName.text.trim(),
+        'company_code': _companyCode.text.trim(),
+        'admin_email': _adminEmail.text.trim(),
+        'hr_email': _hrEmail.text.trim(),
+        'contact_person': _contactPerson.text.trim(),
+        'contact_number': _contactNumber.text.trim(),
+        'company_address': _companyAddress.text.trim(),
+        'domain_name': _domainName.text.trim(),
+        'gst_number': _gstNumber.text.trim(),
+        'timezone': _timezone.text.trim(),
+      };
+      final ok = await widget.service.updateDetails(
+        widget.org.tenantId,
+        payload,
+      );
+      if (!mounted) return;
+      if (ok) {
+        widget.onSaved();
+        Navigator.pop(context);
+        _showSnack('Details updated successfully', const Color(0xFF06D6A0));
+      } else {
+        _showSnack('Failed to update details', const Color(0xFFEF476F));
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Error: $e', const Color(0xFFEF476F));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _savePlan() async {
+    if (!_planFormKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      final fmt = DateFormat('yyyy-MM-dd');
+      final payload = <String, dynamic>{
+        if (_selectedPlanId != null) 'plan_id': _selectedPlanId, // ← ADD
+        'max_users': int.tryParse(_maxUsers.text.trim()) ?? widget.org.maxUsers,
+        if (_planStartsAt != null) 'plan_starts_at': fmt.format(_planStartsAt!),
+        if (_planEndsAt != null) 'plan_ends_at': fmt.format(_planEndsAt!),
+        if (_trialEndsAt != null) 'trial_ends_at': fmt.format(_trialEndsAt!),
+      };
+      final ok = await widget.service.updatePlan(widget.org.tenantId, payload);
+      if (!mounted) return;
+      if (ok) {
+        widget.onSaved();
+        Navigator.pop(context);
+        _showSnack('Plan updated successfully', const Color(0xFF06D6A0));
+      } else {
+        _showSnack('Failed to update plan', const Color(0xFFEF476F));
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Error: $e', const Color(0xFFEF476F));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _showSnack(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<void> _pickDate(
+    BuildContext ctx,
+    DateTime? initial,
+    ValueChanged<DateTime> onPicked,
+  ) async {
+    final picked = await showDatePicker(
+      context: ctx,
+      initialDate: initial ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: Color(0xFF4361EE),
+            onPrimary: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) onPicked(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.88,
+      margin: EdgeInsets.only(bottom: bottomPad),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF5F6FA),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          // Handle
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: const Color(0xFFD1D5DB),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Edit Organization',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  color: const Color(0xFF9CA3AF),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          // Tab bar
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: TabBar(
+              controller: _tabCtrl,
+              indicator: BoxDecoration(
+                color: const Color(0xFF4361EE),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelColor: Colors.white,
+              unselectedLabelColor: const Color(0xFF6B7280),
+              labelStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+              dividerColor: Colors.transparent,
+              tabs: const [
+                Tab(text: 'Contact & Details'),
+                Tab(text: 'Plan & Dates'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Tab views
+          Expanded(
+            child: TabBarView(
+              controller: _tabCtrl,
+              children: [
+                _DetailsTab(
+                  formKey: _detailsFormKey,
+                  companyName: _companyName,
+                  companyCode: _companyCode,
+                  adminEmail: _adminEmail,
+                  hrEmail: _hrEmail,
+                  contactPerson: _contactPerson,
+                  contactNumber: _contactNumber,
+                  companyAddress: _companyAddress,
+                  domainName: _domainName,
+                  gstNumber: _gstNumber,
+                  timezone: _timezone,
+                ),
+                _PlanTab(
+                  formKey: _planFormKey,
+                  maxUsers: _maxUsers,
+                  planStartsAt: _planStartsAt,
+                  planEndsAt: _planEndsAt,
+                  trialEndsAt: _trialEndsAt,
+                  onPickPlanStart: (ctx) => _pickDate(
+                    ctx,
+                    _planStartsAt,
+                    (d) => setState(() => _planStartsAt = d),
+                  ),
+                  onPickPlanEnd: (ctx) => _pickDate(
+                    ctx,
+                    _planEndsAt,
+                    (d) => setState(() => _planEndsAt = d),
+                  ),
+                  onPickTrialEnd: (ctx) => _pickDate(
+                    ctx,
+                    _trialEndsAt,
+                    (d) => setState(() => _trialEndsAt = d),
+                  ),
+                  plans: _plans,
+                  selectedPlanId: _selectedPlanId,
+                  planMaxUsers: _planMaxUsers,
+                  loadingPlans: _loadingPlans,
+                  onPlanChanged: _onPlanChanged,
+                ),
+              ],
+            ),
+          ),
+          // Save button
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4361EE),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          if (_tabCtrl.index == 0) {
+                            _saveDetails();
+                          } else {
+                            _savePlan();
+                          }
+                        },
+                  child: _saving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : AnimatedBuilder(
+                          animation: _tabCtrl,
+                          builder: (_, __) => Text(
+                            _tabCtrl.index == 0 ? 'Save Details' : 'Save Plan',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Contact & Details Tab ──────────────────────────────────────────────────
+
+class _DetailsTab extends StatelessWidget {
+  final GlobalKey<FormState> formKey;
+  final TextEditingController companyName;
+  final TextEditingController companyCode;
+  final TextEditingController adminEmail;
+  final TextEditingController hrEmail;
+  final TextEditingController contactPerson;
+  final TextEditingController contactNumber;
+  final TextEditingController companyAddress;
+  final TextEditingController domainName;
+  final TextEditingController gstNumber;
+  final TextEditingController timezone;
+
+  const _DetailsTab({
+    required this.formKey,
+    required this.companyName,
+    required this.companyCode,
+    required this.adminEmail,
+    required this.hrEmail,
+    required this.contactPerson,
+    required this.contactNumber,
+    required this.companyAddress,
+    required this.domainName,
+    required this.gstNumber,
+    required this.timezone,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Form(
+        key: formKey,
+        child: Column(
+          children: [
+            _EditSection(
+              title: 'Company',
+              icon: Icons.business_outlined,
+              fields: [
+                _EditField(
+                  label: 'Company Name',
+                  controller: companyName,
+                  required: true,
+                ),
+                _EditField(label: 'Company Code', controller: companyCode),
+                _EditField(
+                  label: 'Domain Name',
+                  controller: domainName,
+                  hint: 'e.g. company.com',
+                ),
+                _EditField(label: 'GST Number', controller: gstNumber),
+                _EditField(
+                  label: 'Timezone',
+                  controller: timezone,
+                  hint: 'e.g. Asia/Kolkata',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _EditSection(
+              title: 'Contact',
+              icon: Icons.contact_mail_outlined,
+              fields: [
+                _EditField(
+                  label: 'Admin Email',
+                  controller: adminEmail,
+                  required: true,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Required';
+                    if (!v.contains('@')) return 'Invalid email';
+                    return null;
+                  },
+                ),
+                _EditField(
+                  label: 'HR Email',
+                  controller: hrEmail,
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                _EditField(label: 'Contact Person', controller: contactPerson),
+                _EditField(
+                  label: 'Contact Number',
+                  controller: contactNumber,
+                  keyboardType: TextInputType.phone,
+                ),
+                _EditField(
+                  label: 'Company Address',
+                  controller: companyAddress,
+                  maxLines: 2,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Plan & Dates Tab ───────────────────────────────────────────────────────
+
+class _PlanTab extends StatelessWidget {
+  final GlobalKey<FormState> formKey;
+  final TextEditingController maxUsers;
+  final DateTime? planStartsAt;
+  final DateTime? planEndsAt;
+  final DateTime? trialEndsAt;
+  final Future<void> Function(BuildContext) onPickPlanStart;
+  final Future<void> Function(BuildContext) onPickPlanEnd;
+  final Future<void> Function(BuildContext) onPickTrialEnd;
+  // ── NEW params ──
+  final List<Map<String, dynamic>> plans;
+  final String? selectedPlanId;
+  final int? planMaxUsers;
+  final bool loadingPlans;
+  final ValueChanged<String?> onPlanChanged;
+
+  const _PlanTab({
+    required this.formKey,
+    required this.maxUsers,
+    required this.planStartsAt,
+    required this.planEndsAt,
+    required this.trialEndsAt,
+    required this.onPickPlanStart,
+    required this.onPickPlanEnd,
+    required this.onPickTrialEnd,
+    required this.plans,
+    required this.selectedPlanId,
+    required this.planMaxUsers,
+    required this.loadingPlans,
+    required this.onPlanChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('dd MMM yyyy');
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Form(
+        key: formKey,
+        child: Column(
+          children: [
+            _EditSection(
+              title: 'Plan & Limits',
+              icon: Icons.workspace_premium_outlined,
+              fields: const [],
+              children: [
+                // ── Plan Dropdown ──
+                if (loadingPlans)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    value: selectedPlanId,
+                    decoration: InputDecoration(
+                      labelText: 'Plan',
+                      labelStyle: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF9CA3AF),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF4361EE),
+                          width: 1.5,
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFFAFAFC),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      isDense: true,
+                    ),
+                    items: plans
+                        .map(
+                          (p) => DropdownMenuItem<String>(
+                            value: p['plan_id'] as String,
+                            child: Text(
+                              '${p['plan_name']} (max ${p['max_users']} users)',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: onPlanChanged,
+                  ),
+                const SizedBox(height: 10),
+                // ── Max Users field ──
+                TextFormField(
+                  controller: maxUsers,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF1A1A2E),
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Max Users *',
+                    labelStyle: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                    helperText: planMaxUsers != null
+                        ? 'Plan allows up to $planMaxUsers users'
+                        : null,
+                    helperStyle: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF4361EE),
+                        width: 1.5,
+                      ),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFEF476F)),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFEF476F),
+                        width: 1.5,
+                      ),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFFFAFAFC),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    isDense: true,
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Required';
+                    final parsed = int.tryParse(v);
+                    if (parsed == null) return 'Must be a number';
+                    if (parsed < 1) return 'Must be at least 1';
+                    if (planMaxUsers != null && parsed > planMaxUsers!) {
+                      return 'Exceeds plan limit of $planMaxUsers users';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _EditSection(
+              title: 'Plan Dates',
+              icon: Icons.date_range_outlined,
+              children: [
+                _DatePickerRow(
+                  label: 'Plan Starts',
+                  value: planStartsAt != null ? fmt.format(planStartsAt!) : '—',
+                  onTap: () => onPickPlanStart(context),
+                ),
+                const Divider(height: 1, color: Color(0xFFF1F3F4)),
+                _DatePickerRow(
+                  label: 'Plan Ends',
+                  value: planEndsAt != null ? fmt.format(planEndsAt!) : '—',
+                  onTap: () => onPickPlanEnd(context),
+                ),
+                const Divider(height: 1, color: Color(0xFFF1F3F4)),
+                _DatePickerRow(
+                  label: 'Trial Ends',
+                  value: trialEndsAt != null ? fmt.format(trialEndsAt!) : '—',
+                  onTap: () => onPickTrialEnd(context),
+                ),
+              ],
+              fields: const [],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+// ── Reusable sub-widgets ───────────────────────────────────────────────────
+
+class _EditSection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final List<_EditField> fields;
+  final List<Widget>? children;
+
+  const _EditSection({
+    required this.title,
+    required this.icon,
+    required this.fields,
+    this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Row(
+              children: [
+                Icon(icon, size: 15, color: const Color(0xFF4361EE)),
+                const SizedBox(width: 7),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1A1A2E),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFFF1F3F4)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Column(
+              children: [
+                ...fields.map(
+                  (f) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: f,
+                  ),
+                ),
+                if (children != null) ...children!,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final bool required;
+  final TextInputType? keyboardType;
+  final int? maxLines;
+  final String? hint;
+  final String? Function(String?)? validator;
+
+  const _EditField({
+    required this.label,
+    required this.controller,
+    this.required = false,
+    this.keyboardType,
+    this.maxLines = 1,
+    this.hint,
+    this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      maxLines: maxLines,
+      style: const TextStyle(fontSize: 13, color: Color(0xFF1A1A2E)),
+      decoration: InputDecoration(
+        labelText: label + (required ? ' *' : ''),
+        labelStyle: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+        hintText: hint,
+        hintStyle: const TextStyle(fontSize: 12, color: Color(0xFFD1D5DB)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF4361EE), width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFEF476F)),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFEF476F), width: 1.5),
+        ),
+        filled: true,
+        fillColor: const Color(0xFFFAFAFC),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
+        isDense: true,
+      ),
+      validator:
+          validator ??
+          (required
+              ? (v) => (v == null || v.trim().isEmpty) ? 'Required' : null
+              : null),
+    );
+  }
+}
+
+class _DatePickerRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  const _DatePickerRow({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              ),
+            ),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF1A1A2E),
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Icon(
+              Icons.calendar_today_outlined,
+              size: 14,
+              color: Color(0xFF4361EE),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DangerRow extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  final String buttonLabel;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _DangerRow({
+    required this.label,
+    required this.subtitle,
+    required this.buttonLabel,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1A1A2E),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF9CA3AF),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton(
+            onPressed: onTap,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: color,
+              side: BorderSide(color: color.withOpacity(0.4)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              buttonLabel,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }

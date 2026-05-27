@@ -200,7 +200,7 @@ router.get("/organizations/:tenant_id", requireAppAdmin, async (req, res) => {
 
     const [rows] = await db.query(
       `
-        SELECT
+       SELECT
           t.*,
           p.plan_name,
           p.plan_code,
@@ -214,7 +214,15 @@ router.get("/organizations/:tenant_id", requireAppAdmin, async (req, res) => {
           DATEDIFF(
             COALESCE(t.plan_ends_at, t.trial_ends_at),
             CURDATE()
-          ) AS days_remaining
+          ) AS days_remaining,
+
+          COALESCE(
+            (SELECT JSON_ARRAYAGG(sm.module_name)
+             FROM plan_modules pm
+             JOIN system_modules sm ON sm.module_id = pm.module_id
+             WHERE pm.plan_id = t.plan_id AND pm.is_included = 1),
+            JSON_ARRAY()
+          ) AS modules
 
         FROM tenants t
         LEFT JOIN plans p ON p.plan_id = t.plan_id
@@ -292,41 +300,67 @@ router.patch(
   },
 );
 
-// ─────────────────────────────────────────────────────────────
-// PATCH plan
-// ─────────────────────────────────────────────────────────────
 router.patch(
-  "/organizations/:tenant_id/plan",
+  "/organizations/:tenant_id/details",
   requireAppAdmin,
   async (req, res) => {
     try {
       const { tenant_id } = req.params;
-      const { plan_id, plan_starts_at, plan_ends_at, max_users } = req.body;
+
+      // Allowed fields that can be updated
+      const ALLOWED = [
+        "company_name",
+        "company_code",
+        "admin_email",
+        "hr_email",
+        "contact_person",
+        "contact_number",
+        "company_address",
+        "domain_name",
+        "gst_number",
+        "timezone",
+      ];
 
       const fields = [];
       const vals = [];
 
-      if (plan_id) {
-        fields.push("plan_id = ?");
-        vals.push(plan_id);
-      }
-      if (plan_starts_at) {
-        fields.push("plan_starts_at = ?");
-        vals.push(plan_starts_at);
-      }
-      if (plan_ends_at) {
-        fields.push("plan_ends_at = ?");
-        vals.push(plan_ends_at);
-      }
-      if (max_users) {
-        fields.push("max_users = ?");
-        vals.push(parseInt(max_users));
+      for (const key of ALLOWED) {
+        if (key in req.body) {
+          // Allow empty string to clear optional fields,
+          // but reject null/undefined for required fields
+          if (
+            (key === "company_name" || key === "admin_email") &&
+            !req.body[key]?.trim()
+          ) {
+            return res.status(400).json({
+              success: false,
+              message: `${key} is required and cannot be empty`,
+            });
+          }
+          fields.push(`${key} = ?`);
+          // Trim strings; store empty string as NULL for optional fields
+          const value = req.body[key]?.toString().trim() ?? "";
+          const isRequired = key === "company_name" || key === "admin_email";
+          vals.push(isRequired || value.length > 0 ? value : null);
+        }
       }
 
       if (!fields.length) {
         return res.status(400).json({
           success: false,
-          message: "Nothing to update",
+          message: "No valid fields provided to update",
+        });
+      }
+
+      // Check org exists
+      const [check] = await db.query(
+        "SELECT tenant_id FROM tenants WHERE tenant_id = ?",
+        [tenant_id],
+      );
+      if (!check.length) {
+        return res.status(404).json({
+          success: false,
+          message: "Organization not found",
         });
       }
 
@@ -338,9 +372,195 @@ router.patch(
         vals,
       );
 
+      // Return fresh org data
+      const [rows] = await db.query(
+        `SELECT t.*,
+          p.plan_name, p.plan_code, p.price_monthly, p.price_yearly,
+          COALESCE(emp.employee_count, 0) AS employee_count,
+          COALESCE(emp.active_count, 0) AS active_employee_count,
+          DATEDIFF(COALESCE(t.plan_ends_at, t.trial_ends_at), CURDATE()) AS days_remaining,
+          COALESCE(
+            (SELECT JSON_ARRAYAGG(sm.module_name)
+             FROM plan_modules pm
+             JOIN system_modules sm ON sm.module_id = pm.module_id
+             WHERE pm.plan_id = t.plan_id AND pm.is_included = 1),
+            JSON_ARRAY()
+          ) AS modules
+         FROM tenants t
+         LEFT JOIN plans p ON p.plan_id = t.plan_id
+         LEFT JOIN (
+           SELECT tenant_id, COUNT(*) AS employee_count,
+                  SUM(status = 'active') AS active_count
+           FROM employee_master GROUP BY tenant_id
+         ) emp ON emp.tenant_id = t.tenant_id
+         WHERE t.tenant_id = ?`,
+        [tenant_id],
+      );
+      return res.json({
+        success: true,
+        message: "Details updated successfully",
+        organization: normalizeDates(rows[0]),
+      });
+    } catch (err) {
+      console.error("PATCH details error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/app-admin/organizations/:tenant_id/reset-password
+// ─────────────────────────────────────────────────────────────
+router.post(
+  "/organizations/:tenant_id/reset-password",
+  requireAppAdmin,
+  async (req, res) => {
+    try {
+      const { tenant_id } = req.params;
+
+      // Check org exists and get admin email
+      const [rows] = await db.query(
+        "SELECT tenant_id, admin_email, company_name FROM tenants WHERE tenant_id = ?",
+        [tenant_id],
+      );
+
+      if (!rows.length) {
+        return res.status(404).json({
+          success: false,
+          message: "Organization not found",
+        });
+      }
+
+      const { admin_email, company_name } = rows[0];
+
+      // ── TODO: plug in your real email/reset logic here ──
+      // e.g. generate a token, store it, send via nodemailer / SendGrid
+      // For now we just acknowledge the request
+      console.log(
+        `[reset-password] Reset requested for ${admin_email} (${company_name})`,
+      );
+
+      return res.json({
+        success: true,
+        message: `Password reset link sent to ${admin_email}`,
+        admin_email,
+      });
+    } catch (err) {
+      console.error("POST reset-password error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+    }
+  },
+);
+// ─────────────────────────────────────────────────────────────
+// PATCH plan
+// ─────────────────────────────────────────────────────────────
+router.patch(
+  "/organizations/:tenant_id/plan",
+  requireAppAdmin,
+  async (req, res) => {
+    try {
+      const { tenant_id } = req.params;
+      const {
+        plan_id,
+        plan_starts_at,
+        plan_ends_at,
+        trial_ends_at,
+        max_users,
+      } = req.body;
+
+      const fields = [];
+      const vals = [];
+
+      if (plan_id !== undefined) {
+        fields.push("plan_id = ?");
+        vals.push(plan_id || null); // allow clearing plan
+      }
+      if (plan_starts_at !== undefined) {
+        fields.push("plan_starts_at = ?");
+        vals.push(plan_starts_at || null);
+      }
+      if (plan_ends_at !== undefined) {
+        fields.push("plan_ends_at = ?");
+        vals.push(plan_ends_at || null);
+      }
+      if (trial_ends_at !== undefined) {
+        fields.push("trial_ends_at = ?");
+        vals.push(trial_ends_at || null);
+      }
+      if (max_users !== undefined) {
+        const mu = parseInt(max_users);
+        if (isNaN(mu) || mu < 1) {
+          return res.status(400).json({
+            success: false,
+            message: "max_users must be a positive integer",
+          });
+        }
+        fields.push("max_users = ?");
+        vals.push(mu);
+      }
+
+      if (!fields.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Nothing to update",
+        });
+      }
+
+      // Check org exists
+      const [check] = await db.query(
+        "SELECT tenant_id FROM tenants WHERE tenant_id = ?",
+        [tenant_id],
+      );
+      if (!check.length) {
+        return res.status(404).json({
+          success: false,
+          message: "Organization not found",
+        });
+      }
+
+      fields.push("updated_at = NOW()");
+      vals.push(tenant_id);
+
+      await db.query(
+        `UPDATE tenants SET ${fields.join(", ")} WHERE tenant_id = ?`,
+        vals,
+      );
+
+      // Return fresh org data
+      const [rows] = await db.query(
+        `SELECT t.*,
+          p.plan_name, p.plan_code, p.price_monthly, p.price_yearly,
+          COALESCE(emp.employee_count, 0) AS employee_count,
+          COALESCE(emp.active_count, 0) AS active_employee_count,
+          DATEDIFF(COALESCE(t.plan_ends_at, t.trial_ends_at), CURDATE()) AS days_remaining,
+          COALESCE(
+            (SELECT JSON_ARRAYAGG(sm.module_name)
+             FROM plan_modules pm
+             JOIN system_modules sm ON sm.module_id = pm.module_id
+             WHERE pm.plan_id = t.plan_id AND pm.is_included = 1),
+            JSON_ARRAY()
+          ) AS modules
+         FROM tenants t
+         LEFT JOIN plans p ON p.plan_id = t.plan_id
+         LEFT JOIN (
+           SELECT tenant_id, COUNT(*) AS employee_count,
+                  SUM(status = 'active') AS active_count
+           FROM employee_master GROUP BY tenant_id
+         ) emp ON emp.tenant_id = t.tenant_id
+         WHERE t.tenant_id = ?`,
+        [tenant_id],
+      );
+
       return res.json({
         success: true,
         message: "Plan updated",
+        organization: normalizeDates(rows[0]),
       });
     } catch (err) {
       console.error("PATCH plan error:", err);

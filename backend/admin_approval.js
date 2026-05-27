@@ -15,7 +15,7 @@ function requireAuth(req, res, next) {
     }
     req.user.loginId = req.user.login_id;
     req.user.tenantId = req.user.tenant_id ?? req.headers["x-tenant-id"];
-    req.user.roleId = parseInt(req.user.role_id, 10); // ← parse to int
+    req.user.roleId = parseInt(req.user.role_id, 10);
     req.user.empId = req.user.emp_id;
     req.user.companyId = req.user.tenant_id ?? req.headers["x-tenant-id"];
     next();
@@ -24,13 +24,24 @@ function requireAuth(req, res, next) {
 
 function requireRole(...roles) {
   return (req, res, next) => {
-    // Parse to int — JWT often returns role_id as a string
     const userRole = parseInt(req.user.roleId, 10);
     if (!roles.includes(userRole)) {
       return res.status(403).json({ success: false, message: "Forbidden." });
     }
     next();
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: validate that a value looks like yyyy-MM-dd (or is null/undefined)
+// ─────────────────────────────────────────────────────────────────────────────
+function assertDateString(value, fieldName) {
+  if (value === null || value === undefined || value === "") return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(
+      `Field '${fieldName}' must be a plain 'yyyy-MM-dd' string, got: ${JSON.stringify(value)}`,
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,6 +105,7 @@ router.get(
       );
 
       for (const row of rows) {
+        // ── 1. Pending education rows ──────────────────────────────────────
         const [eduRows] = await db.query(
           `SELECT education_level, stream, score, year_of_passout, university, college_name
            FROM education_pending_request
@@ -118,7 +130,48 @@ router.get(
         } else {
           row.education_list = eduRows;
         }
-      }
+
+        // ── 2. Current master data for old-vs-new diff (UPDATE only) ──────
+        if (row.request_type === "UPDATE" && row.emp_id) {
+          const [[current]] = await db.query(
+            `SELECT
+               e.first_name, e.mid_name, e.last_name,
+               e.email_id, e.phone_number,
+               e.date_of_birth, e.gender, e.father_name,
+               e.emergency_contact, e.emergency_contact_relation,
+               e.department_id, e.role_id,
+               e.date_of_joining, e.date_of_relieving,
+               e.employment_type, e.work_type, e.years_experience,
+               e.permanent_address, e.communication_address,
+               e.aadhar_number, e.pan_number, e.passport_number,
+               e.pf_number, e.esic_number,
+               d.department_name,
+               r.role_name
+             FROM employee_master e
+             LEFT JOIN department_master d
+               ON d.department_id = e.department_id AND d.tenant_id = e.tenant_id
+             LEFT JOIN role_master r
+               ON r.role_id = e.role_id AND r.tenant_id = e.tenant_id
+             WHERE e.emp_id = ? AND e.tenant_id = ?`,
+            [row.emp_id, tenantId],
+          );
+
+          if (current) {
+            const [currentEdu] = await db.query(
+              `SELECT education_level, stream, score, year_of_passout, university, college_name
+               FROM education_details
+               WHERE emp_id = ?
+               ORDER BY education_level`,
+              [row.emp_id],
+            );
+            current.education_list = currentEdu;
+          }
+
+          row.current_data = current || null;
+        } else {
+          row.current_data = null;
+        }
+      } // ── end for loop ───────────────────────────────────────────────────
 
       res.json({ success: true, count: rows.length, data: rows });
     } catch (err) {
@@ -140,6 +193,84 @@ async function autoReject(conn, request_id, reason, errorMsg) {
   );
   await conn.commit();
   return { status: 409, body: { success: false, error: errorMsg } };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: apply education staging rows → education_details
+// ─────────────────────────────────────────────────────────────────────────────
+async function applyEducationChanges(conn, request_id, empId) {
+  const [eduRows] = await conn.query(
+    `SELECT * FROM education_pending_request
+      WHERE request_id = ?
+      ORDER BY edu_req_id`,
+    [request_id],
+  );
+
+  if (eduRows.length === 0) return false;
+
+  for (const edu of eduRows) {
+    if (edu.is_changed === 0) continue;
+
+    switch (edu.action_type) {
+      case "ADD":
+        await conn.query(
+          `INSERT INTO education_details
+              (emp_id, education_level, stream, score,
+               year_of_passout, university, college_name)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            empId,
+            edu.education_level,
+            edu.stream,
+            edu.score,
+            edu.year_of_passout,
+            edu.university,
+            edu.college_name,
+          ],
+        );
+        break;
+
+      case "UPDATE":
+        if (!edu.original_edu_id)
+          throw new Error(
+            `edu_req_id ${edu.edu_req_id} has action_type=UPDATE but no original_edu_id`,
+          );
+        await conn.query(
+          `UPDATE education_details
+              SET education_level = ?, stream = ?, score = ?,
+                  year_of_passout = ?, university = ?, college_name = ?
+            WHERE edu_id = ? AND emp_id = ?`,
+          [
+            edu.education_level,
+            edu.stream,
+            edu.score,
+            edu.year_of_passout,
+            edu.university,
+            edu.college_name,
+            edu.original_edu_id,
+            empId,
+          ],
+        );
+        break;
+
+      case "DELETE":
+        if (!edu.original_edu_id)
+          throw new Error(
+            `edu_req_id ${edu.edu_req_id} has action_type=DELETE but no original_edu_id`,
+          );
+        await conn.query(
+          `DELETE FROM education_details WHERE edu_id = ? AND emp_id = ?`,
+          [edu.original_edu_id, empId],
+        );
+        break;
+
+      default:
+        console.warn(
+          `Unknown action_type '${edu.action_type}' on edu_req_id ${edu.edu_req_id} — skipped`,
+        );
+    }
+  }
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -176,9 +307,12 @@ router.post(
           .json({ success: false, message: "Pending request not found." });
       }
 
+      assertDateString(pending.date_of_birth, "date_of_birth");
+      assertDateString(pending.date_of_joining, "date_of_joining");
+      assertDateString(pending.date_of_relieving, "date_of_relieving");
+
       // ── NEW EMPLOYEE ────────────────────────────────────────────────────────
       if (pending.request_type === "NEW") {
-        // ── 1. Email uniqueness ──
         const [[dupEmail]] = await conn.query(
           "SELECT emp_id FROM employee_master WHERE email_id = ? AND tenant_id = ? LIMIT 1",
           [pending.email_id, tenantId],
@@ -193,7 +327,6 @@ router.post(
           return res.status(r.status).json(r.body);
         }
 
-        // ── 2. Phone uniqueness ──
         const [[dupPhone]] = await conn.query(
           "SELECT emp_id FROM employee_master WHERE phone_number = ? AND tenant_id = ? LIMIT 1",
           [pending.phone_number, tenantId],
@@ -208,7 +341,6 @@ router.post(
           return res.status(r.status).json(r.body);
         }
 
-        // ── 3. Username uniqueness ──
         const [[dupUser]] = await conn.query(
           "SELECT login_id FROM login_master WHERE username = ? AND tenant_id = ? LIMIT 1",
           [pending.username, tenantId],
@@ -223,7 +355,6 @@ router.post(
           return res.status(r.status).json(r.body);
         }
 
-        // ── 4. Aadhar uniqueness ──
         if (pending.aadhar_number) {
           const [[dupAadhar]] = await conn.query(
             "SELECT emp_id FROM employee_master WHERE aadhar_number = ? AND tenant_id = ? LIMIT 1",
@@ -240,7 +371,6 @@ router.post(
           }
         }
 
-        // ── 5. PAN uniqueness ──
         if (pending.pan_number) {
           const [[dupPan]] = await conn.query(
             "SELECT emp_id FROM employee_master WHERE pan_number = ? AND tenant_id = ? LIMIT 1",
@@ -257,7 +387,6 @@ router.post(
           }
         }
 
-        // ── 6. No other PENDING request for same email ──
         const [[dupPending]] = await conn.query(
           `SELECT request_id FROM employee_pending_request
             WHERE email_id = ? AND tenant_id = ? AND admin_approve = 'PENDING'
@@ -272,7 +401,6 @@ router.post(
           });
         }
 
-        // ── Insert employee_master ──
         const [empResult] = await conn.query(
           `INSERT INTO employee_master
               (tenant_id, first_name, mid_name, last_name,
@@ -318,7 +446,6 @@ router.post(
 
         const newEmpId = empResult.insertId;
 
-        // ── Insert login_master ──
         await conn.query(
           `INSERT INTO login_master
               (tenant_id, emp_id, username, password,
@@ -333,28 +460,7 @@ router.post(
           ],
         );
 
-        // ── Copy education staging → live ──
-        const [eduRows] = await conn.query(
-          "SELECT * FROM education_pending_request WHERE request_id = ?",
-          [request_id],
-        );
-        for (const edu of eduRows) {
-          await conn.query(
-            `INSERT INTO education_details
-                (emp_id, education_level, stream, score,
-                 year_of_passout, university, college_name)
-               VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [
-              newEmpId,
-              edu.education_level,
-              edu.stream,
-              edu.score,
-              edu.year_of_passout,
-              edu.university,
-              edu.college_name,
-            ],
-          );
-        }
+        await applyEducationChanges(conn, request_id, newEmpId);
 
         await conn.query(
           "UPDATE employee_pending_request SET admin_approve = 'APPROVED' WHERE request_id = ?",
@@ -379,7 +485,6 @@ router.post(
         });
       }
 
-      // ── Duplicate guards for UPDATE (exclude self with emp_id != empId) ──
       if (pending.email_id) {
         const [[dupEmail]] = await conn.query(
           "SELECT emp_id FROM employee_master WHERE email_id = ? AND tenant_id = ? AND emp_id != ? LIMIT 1",
@@ -436,7 +541,6 @@ router.post(
         }
       }
 
-      // ── Build UPDATE SET clause ──
       const updatable = [
         ["first_name", pending.first_name],
         ["mid_name", pending.mid_name],
@@ -486,33 +590,7 @@ router.post(
         }
       }
 
-      // ── Replace education ──
-      const [eduRows] = await conn.query(
-        "SELECT * FROM education_pending_request WHERE request_id = ?",
-        [request_id],
-      );
-      if (eduRows.length > 0) {
-        await conn.query("DELETE FROM education_details WHERE emp_id = ?", [
-          empId,
-        ]);
-        for (const edu of eduRows) {
-          await conn.query(
-            `INSERT INTO education_details
-                (emp_id, education_level, stream, score,
-                 year_of_passout, university, college_name)
-               VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [
-              empId,
-              edu.education_level,
-              edu.stream,
-              edu.score,
-              edu.year_of_passout,
-              edu.university,
-              edu.college_name,
-            ],
-          );
-        }
-      }
+      await applyEducationChanges(conn, request_id, empId);
 
       await conn.query(
         "UPDATE employee_pending_request SET admin_approve = 'APPROVED' WHERE request_id = ?",

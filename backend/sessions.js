@@ -116,13 +116,17 @@ router.get("/sessions", requireAuth, requireAdmin, async (req, res) => {
       isAccountLocked: r.status === "Inactive", // admin-locked account
       isLoggedIn: r.device_logged_in === 1,
       sessionDevice: parseDevice(r.session_device),
-      lastLoginAt: r.last_login_at ? r.last_login_at.toISOString() : null,
+      lastLoginAt: r.last_login_at
+        ? new Date(r.last_login_at).toISOString()
+        : null,
       sessionExpiresAt: r.session_expires_at
-        ? r.session_expires_at.toISOString()
+        ? new Date(r.session_expires_at).toISOString()
+        : null,
+      lockedUntil: r.locked_until
+        ? new Date(r.locked_until).toISOString()
         : null,
       failedAttempts: r.failed_attempts ?? 0,
       isLocked: r.locked_until ? new Date(r.locked_until) > new Date() : false,
-      lockedUntil: r.locked_until ? r.locked_until.toISOString() : null,
       forceLogout: r.force_logout === 1,
     }));
 

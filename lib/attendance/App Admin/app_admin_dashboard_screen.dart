@@ -14,7 +14,7 @@ import '../services/site_cache.dart';
 import '../services/app_admin_provider.dart';
 import 'app_admin_org_screen.dart';
 import '../providers/api_config.dart';
-
+import 'global_notify.dart';
 const String baseUrl = ApiConfig.baseUrl;
 
 class AppAdminDashboardScreen extends StatefulWidget {
@@ -78,6 +78,7 @@ class _AppAdminDashboardScreenState extends State<AppAdminDashboardScreen>
       AppAdminCreateCompanyScreen(), // 1
       AppAdminPlanManagementScreen(), // 2
       AppAdminOrgScreen(), // 3
+      // GlobalNotifyConsole(), // 4  
     ]);
   }
 

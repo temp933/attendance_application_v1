@@ -1,0 +1,461 @@
+
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+// ─────────────────────────────────────────────
+// LOCAL NOTIFICATION PLUGIN INSTANCE
+// ─────────────────────────────────────────────
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+// Android Notification Channel
+const AndroidNotificationChannel channel = AndroidNotificationChannel(
+  'high_importance_channel',
+  'High Importance Notifications',
+  description: 'Used for important notifications',
+  importance: Importance.max,
+  playSound: true,
+);
+
+// ─────────────────────────────────────────────
+// BACKGROUND MESSAGE HANDLER (Top-Level Function)
+// Must be a top-level function, NOT inside a class
+// ─────────────────────────────────────────────
+
+@pragma('vm:entry-point')
+Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+
+  debugPrint("=== Background Notification Received ===");
+  debugPrint("Title : ${message.notification?.title}");
+  debugPrint("Body  : ${message.notification?.body}");
+
+  await showLocalNotification(
+    title: message.notification?.title ?? "Notification",
+    body: message.notification?.body ?? "You received a message",
+  );
+}
+
+// ─────────────────────────────────────────────
+// SHOW LOCAL NOTIFICATION
+// ─────────────────────────────────────────────
+
+Future<void> showLocalNotification({
+  required String title,
+  required String body,
+}) async {
+  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    'high_importance_channel',
+    'High Importance Notifications',
+    channelDescription: 'Used for important notifications',
+    importance: Importance.max,
+    priority: Priority.high,
+    playSound: true,
+    enableVibration: true,
+    icon: '@mipmap/ic_launcher',
+  );
+
+  const NotificationDetails notificationDetails = NotificationDetails(
+    android: androidDetails,
+  );
+
+  await flutterLocalNotificationsPlugin.show(
+    id: 0,
+    title: title,
+    body: body,
+    notificationDetails: notificationDetails,
+  );
+}
+
+// ─────────────────────────────────────────────
+// MAIN
+// ─────────────────────────────────────────────
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 1. Initialize Firebase
+  await Firebase.initializeApp();
+
+  // 2. Register Background Handler (BEFORE runApp)
+  FirebaseMessaging.onBackgroundMessage(firebaseBackgroundHandler);
+
+  // 3. Create Android Notification Channel
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(channel);
+
+  // 4. Initialize Local Notifications
+  const AndroidInitializationSettings androidSettings =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: androidSettings,
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(
+    settings: initializationSettings, // ← named 'settings:'
+    onDidReceiveNotificationResponse: (NotificationResponse response) {
+      debugPrint("Tapped: ${response.payload}");
+    },
+  );
+
+  // 5. Set Foreground Notification Presentation (iOS)
+  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
+  runApp(const MyApp());
+}
+
+// ─────────────────────────────────────────────
+// APP
+// ─────────────────────────────────────────────
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'FCM Notification Demo',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+      ),
+      home: const NotificationHomePage(),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// HOME PAGE
+// ─────────────────────────────────────────────
+
+class NotificationHomePage extends StatefulWidget {
+  const NotificationHomePage({super.key});
+
+  @override
+  State<NotificationHomePage> createState() => _NotificationHomePageState();
+}
+
+class _NotificationHomePageState extends State<NotificationHomePage> {
+  String _fcmToken = "Fetching token...";
+  String _lastNotificationTitle = "None";
+  String _lastNotificationBody = "None";
+  final List<Map<String, String>> _notificationLog = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _initFCM();
+  }
+
+  // ─────────────────────────────────────────────
+  // INIT FCM
+  // ─────────────────────────────────────────────
+
+  Future<void> _initFCM() async {
+    try {
+      final FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+      // 1. Request Permission
+      final NotificationSettings settings = await messaging.requestPermission(
+        alert: true,
+        announcement: false,
+        badge: true,
+        carPlay: false,
+        criticalAlert: false,
+        provisional: false,
+        sound: true,
+      );
+
+      debugPrint("Permission Status: ${settings.authorizationStatus}");
+
+      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        setState(() => _fcmToken = "Permission Denied");
+        return;
+      }
+
+      // 2. Get FCM Token
+      final String? token = await messaging.getToken();
+
+      debugPrint("====================================");
+      debugPrint("FCM TOKEN:");
+      debugPrint(token);
+      debugPrint("====================================");
+
+      if (mounted) {
+        setState(() => _fcmToken = token ?? "Token not available");
+      }
+
+      // 3. Listen for Token Refresh
+      messaging.onTokenRefresh.listen((newToken) {
+        debugPrint("Token Refreshed: $newToken");
+        if (mounted) setState(() => _fcmToken = newToken);
+      });
+
+      // 4. Foreground Notification Listener
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+        debugPrint("=== Foreground Notification ===");
+        debugPrint("Title : ${message.notification?.title}");
+        debugPrint("Body  : ${message.notification?.body}");
+
+        final String title = message.notification?.title ?? "Notification";
+        final String body = message.notification?.body ?? "No body";
+
+        // Show local notification because FCM doesn't auto-show in foreground on Android
+        await showLocalNotification(title: title, body: body);
+
+        if (mounted) {
+          setState(() {
+            _lastNotificationTitle = title;
+            _lastNotificationBody = body;
+            _notificationLog.insert(0, {
+              'title': title,
+              'body': body,
+              'time': TimeOfDay.now().format(context),
+            });
+          });
+        }
+      });
+
+      // 5. App Opened by Tapping Notification (from background)
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        debugPrint("=== Notification Tapped (Background → Foreground) ===");
+        debugPrint("Title : ${message.notification?.title}");
+
+        if (mounted) {
+          setState(() {
+            _lastNotificationTitle =
+                "[Tapped] ${message.notification?.title ?? ''}";
+            _lastNotificationBody = message.notification?.body ?? '';
+          });
+        }
+      });
+
+      // 6. App Opened from Terminated State via Notification
+      final RemoteMessage? initialMessage = await messaging.getInitialMessage();
+
+      if (initialMessage != null) {
+        debugPrint("=== App Launched by Notification (Terminated State) ===");
+        debugPrint("Title: ${initialMessage.notification?.title}");
+
+        if (mounted) {
+          setState(() {
+            _lastNotificationTitle =
+                "[Launch] ${initialMessage.notification?.title ?? ''}";
+            _lastNotificationBody = initialMessage.notification?.body ?? '';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("FCM INIT ERROR: $e");
+      if (mounted) setState(() => _fcmToken = "Error: $e");
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // UI
+  // ─────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F0F1A),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text(
+          "FCM Live Notifications",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // FCM Token Card
+            _buildCard(
+              icon: Icons.key,
+              iconColor: Colors.amber,
+              title: "FCM Token",
+              content: _fcmToken,
+              isScrollable: true,
+            ),
+
+            const SizedBox(height: 16),
+
+            // Last Notification Card
+            _buildCard(
+              icon: Icons.notifications_active,
+              iconColor: Colors.greenAccent,
+              title: "Last Notification",
+              content:
+                  "Title: $_lastNotificationTitle\nBody: $_lastNotificationBody",
+            ),
+
+            const SizedBox(height: 16),
+
+            // Log Header
+            const Text(
+              "Notification Log",
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.2,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // Notification Log List
+            Expanded(
+              child: _notificationLog.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.notifications_none,
+                            size: 48,
+                            color: Colors.white24,
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            "Waiting for notifications...",
+                            style: TextStyle(color: Colors.white38),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _notificationLog.length,
+                      itemBuilder: (context, index) {
+                        final n = _notificationLog[index];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E1E30),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.deepPurple.shade800,
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.circle_notifications,
+                                color: Colors.deepPurpleAccent,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      n['title'] ?? '',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      n['body'] ?? '',
+                                      style: const TextStyle(
+                                        color: Colors.white60,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                n['time'] ?? '',
+                                style: const TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String content,
+    bool isScrollable = false,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: iconColor, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          isScrollable
+              ? SizedBox(
+                  height: 60,
+                  child: SingleChildScrollView(
+                    child: Text(
+                      content,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                )
+              : Text(
+                  content,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+        ],
+      ),
+    );
+  }
+}
