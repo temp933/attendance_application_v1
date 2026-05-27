@@ -7,6 +7,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+
+backend/firebase-service-account.json
+
 # Environment files (DO NOT PUSH REAL SECRETS)
 .env
 .env.*

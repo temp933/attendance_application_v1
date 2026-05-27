@@ -5,6 +5,9 @@ build/
 # Local configuration
 local.properties
 
+# Firebase secrets
+backend/firebase-service-account.json
+
 # Signing keys (VERY IMPORTANT if present)
 *.jks
 *.keystore
