@@ -1,0 +1,4243 @@
+
+==================================================
+TABLE: app_admin_logs
+==================================================
+
+COLUMN: log_id
+TYPE: bigint unsigned
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: admin_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: action
+TYPE: varchar(100)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: meta_json
+TYPE: json
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: ip_address
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: NO
+KEY: MUL
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: app_admin_master
+==================================================
+
+COLUMN: admin_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: username
+TYPE: varchar(100)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: password_hash
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: email
+TYPE: varchar(255)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: full_name
+TYPE: varchar(150)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: secret_key
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_active
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_login_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_login_ip
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: failed_attempts
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: locked_until
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: app_admin_otps
+==================================================
+
+COLUMN: otp_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: admin_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: session_id
+TYPE: varchar(100)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: otp_hash
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: attempts
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: max_attempts
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: expires_at
+TYPE: datetime
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_used
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: ip_address
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: user_agent
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: verified_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: app_admins
+==================================================
+
+COLUMN: admin_id
+TYPE: varchar(36)
+NULL: NO
+KEY: PRI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: name
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: email
+TYPE: varchar(255)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: password_hash
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: role
+TYPE: enum('super_admin','support','billing')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_active
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_login_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: attendance_master
+==================================================
+
+COLUMN: attendance_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: in_time_date
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: out_time_date
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('IN','OUT')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_late
+TYPE: enum('YES','NO')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: worked_hrs
+TYPE: varchar(20)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: late_hrs
+TYPE: varchar(20)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Attendance management related table
+
+
+
+==================================================
+TABLE: attendance_policy
+==================================================
+
+COLUMN: id
+TYPE: bigint
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: office_in_time
+TYPE: time
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: office_out_time
+TYPE: time
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: late_after_minutes
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: halfday_after_minutes
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: overtime_after_minutes
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: multiple_in_out_allowed
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: auto_checkout_enabled
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: is_saturday_weekoff
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_sunday_weekoff
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: comp_off_enabled
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: comp_off_min_hours
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: comp_off_expiry_days
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Attendance management related table
+
+
+
+==================================================
+TABLE: branches
+==================================================
+
+COLUMN: branch_id
+TYPE: bigint unsigned
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: branch_name
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: city
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: address
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: geo_fence_json
+TYPE: json
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_active
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: comp_off
+==================================================
+
+COLUMN: id
+TYPE: bigint
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: employee_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: attendance_id
+TYPE: bigint
+NULL: YES
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: leave_id
+TYPE: bigint
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: earned_date
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: expiry_date
+TYPE: date
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('earned','used','expired')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: remarks
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: default_holiday_master
+==================================================
+
+COLUMN: holiday_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: holiday_name
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: holiday_date
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: holiday_type
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: description
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_recurring
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: department_master
+==================================================
+
+COLUMN: department_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: department_name
+TYPE: varchar(50)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('Active','Inactive')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: designation_master
+==================================================
+
+COLUMN: designation_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: department_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: designation_name
+TYPE: varchar(150)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('Active','Inactive')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: education_details
+==================================================
+
+COLUMN: edu_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: education_level
+TYPE: enum('10','12','Diploma','UG','PG','PhD')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: stream
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: score
+TYPE: decimal(5,2)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: year_of_passout
+TYPE: year
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: university
+TYPE: varchar(150)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: college_name
+TYPE: varchar(150)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: education_pending_request
+==================================================
+
+COLUMN: edu_req_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: request_id
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: education_level
+TYPE: enum('10','12','Diploma','UG','PG','PhD')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: stream
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: score
+TYPE: decimal(5,2)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: year_of_passout
+TYPE: year
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: university
+TYPE: varchar(150)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: college_name
+TYPE: varchar(150)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: action_type
+TYPE: enum('ADD','UPDATE','DELETE')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: original_edu_id
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_changed
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: employee_approval_mapping
+==================================================
+
+COLUMN: mapping_id
+TYPE: bigint
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: employee_id
+TYPE: bigint
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: approver_employee_id
+TYPE: bigint
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: module_name
+TYPE: varchar(50)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: approval_level
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_active
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Employee management related table
+
+
+
+==================================================
+TABLE: employee_attendance
+==================================================
+
+COLUMN: attendance_id
+TYPE: bigint
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: employee_id
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: attendance_mode
+TYPE: enum('normal','gps','gps_face')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: checkin_time
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: checkout_time
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: work_date
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('active','completed')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: force_closed
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: force_close_reason
+TYPE: varchar(500)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: force_closed_by
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: checkin_latitude
+TYPE: decimal(10,7)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: checkin_longitude
+TYPE: decimal(10,7)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: checkout_latitude
+TYPE: decimal(10,7)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: checkout_longitude
+TYPE: decimal(10,7)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_known_latitude
+TYPE: decimal(10,7)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_known_longitude
+TYPE: decimal(10,7)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_location_updated_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: total_work_time
+TYPE: time
+NULL: YES
+KEY: undefined
+EXTRA: STORED GENERATED
+----------------------------------------
+
+COLUMN: is_late
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: late_minutes
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Attendance management related table
+
+
+
+==================================================
+TABLE: employee_location_assignment
+==================================================
+
+COLUMN: assign_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: location_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: about_work
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: start_date
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: end_date
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('Active','Completed','Extended','Relieved')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: done_by
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: reason
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Employee management related table
+
+
+
+==================================================
+TABLE: employee_master
+==================================================
+
+COLUMN: emp_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: first_name
+TYPE: varchar(50)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: mid_name
+TYPE: varchar(50)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_name
+TYPE: varchar(50)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: email_id
+TYPE: varchar(100)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: phone_number
+TYPE: varchar(15)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: date_of_birth
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: gender
+TYPE: enum('Male','Female','Other')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: department_id
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: designation_id
+TYPE: int
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: role_id
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: reporting_to
+TYPE: int
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: date_of_joining
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: date_of_relieving
+TYPE: date
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: employment_type
+TYPE: enum('Permanent','Contract','Intern')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: work_type
+TYPE: enum('Full Time','Part Time')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: permanent_address
+TYPE: text
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: communication_address
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: aadhar_number
+TYPE: char(12)
+NULL: YES
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: pan_number
+TYPE: char(10)
+NULL: YES
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: passport_number
+TYPE: varchar(20)
+NULL: YES
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: father_name
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emergency_contact_relation
+TYPE: varchar(50)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emergency_contact
+TYPE: varchar(15)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: pf_number
+TYPE: varchar(22)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: esic_number
+TYPE: varchar(17)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: years_experience
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('Active','Inactive','Relieved')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: tl_id
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: profile_photo
+TYPE: longblob
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: profile_photo_mime
+TYPE: varchar(50)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: has_face_embedding
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: face_embedding
+TYPE: longtext
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: face_enrolled_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: reporting_to_employee_id
+TYPE: bigint
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Employee management related table
+
+
+
+==================================================
+TABLE: employee_pending_request
+==================================================
+
+COLUMN: request_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: first_name
+TYPE: varchar(50)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: mid_name
+TYPE: varchar(50)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_name
+TYPE: varchar(50)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: email_id
+TYPE: varchar(100)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: phone_number
+TYPE: varchar(15)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: date_of_birth
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: gender
+TYPE: enum('Male','Female','Other')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: department_id
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: role_id
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: date_of_joining
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: date_of_relieving
+TYPE: date
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: employment_type
+TYPE: enum('Permanent','Contract','Intern')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: work_type
+TYPE: enum('Full Time','Part Time')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: permanent_address
+TYPE: text
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: communication_address
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: aadhar_number
+TYPE: char(12)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: pan_number
+TYPE: char(10)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: passport_number
+TYPE: varchar(20)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: admin_approve
+TYPE: enum('PENDING','APPROVED','REJECTED')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: username
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: password
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: request_type
+TYPE: enum('NEW','UPDATE')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: edit_reason
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: reject_reason
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: father_name
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emergency_contact_relation
+TYPE: varchar(50)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emergency_contact
+TYPE: varchar(15)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: pf_number
+TYPE: varchar(22)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: esic_number
+TYPE: varchar(17)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: years_experience
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('Active','Inactive','Relieved')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: profile_photo
+TYPE: longblob
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: profile_photo_mime
+TYPE: varchar(50)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Employee management related table
+
+
+
+==================================================
+TABLE: employee_transfer_log
+==================================================
+
+COLUMN: id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: from_department_id
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: to_department_id
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: reason
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Employee management related table
+
+
+
+==================================================
+TABLE: expense_manage_master
+==================================================
+
+COLUMN: expense_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: exp_type
+TYPE: varchar(50)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: amount
+TYPE: decimal(10,2)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: date_when_done
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: date_created
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: date_updated
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('PENDING','APPROVED','REJECTED')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: reject_reason
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: done_by
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: more_details_about_exp
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: receipt_url
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: global_notification_logs
+==================================================
+
+COLUMN: id
+TYPE: bigint
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: notification_id
+TYPE: bigint
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: fcm_token
+TYPE: varchar(512)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: delivery_status
+TYPE: enum('pending','sent','delivered','failed')
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: failure_reason
+TYPE: varchar(500)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: sent_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: opened_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Notification system related table
+
+
+
+==================================================
+TABLE: global_notification_targets
+==================================================
+
+COLUMN: id
+TYPE: bigint
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: notification_id
+TYPE: bigint
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Notification system related table
+
+
+
+==================================================
+TABLE: global_notifications
+==================================================
+
+COLUMN: id
+TYPE: bigint
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: title
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: message
+TYPE: text
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: type
+TYPE: enum('general','maintenance','app_update','billing_reminder','emergency_alert')
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: scope
+TYPE: enum('all','selected','by_plan','trial','expired','by_version')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: scope_meta
+TYPE: json
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: image_url
+TYPE: varchar(512)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_by
+TYPE: varchar(64)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: scheduled_at
+TYPE: datetime
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: sent_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('draft','scheduled','sending','sent','cancelled','failed')
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: total_targets
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: sent_count
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: delivered_count
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: failed_count
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: opened_count
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: timestamp
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Notification system related table
+
+
+
+==================================================
+TABLE: holiday_master
+==================================================
+
+COLUMN: holiday_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: holiday_name
+TYPE: varchar(120)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: holiday_date
+TYPE: date
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: holiday_type
+TYPE: enum('Public','National','Optional','Office')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: description
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_recurring
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_by
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: leave_approval_flow
+==================================================
+
+COLUMN: flow_id
+TYPE: bigint
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: leave_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: approval_level
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: approver_employee_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: action
+TYPE: enum('Pending','Approved','Rejected')
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: action_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: remarks
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Leave management related table
+
+
+
+==================================================
+TABLE: leave_balance
+==================================================
+
+COLUMN: balance_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: leave_type
+TYPE: varchar(50)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: year
+TYPE: year
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: allocated_days
+TYPE: decimal(5,1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: used_days
+TYPE: decimal(5,1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: pending_days
+TYPE: decimal(5,1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: carry_forward
+TYPE: decimal(5,1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Leave management related table
+
+
+
+==================================================
+TABLE: leave_carry_forward_log
+==================================================
+
+COLUMN: log_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: leave_type
+TYPE: varchar(50)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: from_year
+TYPE: year
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: to_year
+TYPE: year
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: balance_before
+TYPE: decimal(5,1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: carried_days
+TYPE: decimal(5,1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: lapsed_days
+TYPE: decimal(5,1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: processed_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Leave management related table
+
+
+
+==================================================
+TABLE: leave_master
+==================================================
+
+COLUMN: leave_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: leave_type_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: leave_start_date
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: leave_end_date
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_half_day
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: half_day_period
+TYPE: enum('AM','PM')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('Pending','Approved','Rejected','Cancelled')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: reason
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: cancel_reason
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: number_of_days
+TYPE: decimal(4,1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: current_approval_level
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: current_approver_employee_id
+TYPE: bigint
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_action_by
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_action_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_action_remarks
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: final_status
+TYPE: enum('Pending','Approved','Rejected','Cancelled')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Leave management related table
+
+
+
+==================================================
+TABLE: leave_policy
+==================================================
+
+COLUMN: id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: leave_type
+TYPE: enum('Casual','Sick','Paid','Comp-Off')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: monthly_limit
+TYPE: decimal(3,1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_unlimited
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_dynamic
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_active
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: yearly_limit
+TYPE: decimal(5,1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: carry_forward_allowed
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: carry_forward_limit
+TYPE: decimal(5,1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: half_day_allowed
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: max_consecutive_days
+TYPE: decimal(4,1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: attachment_required
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: gender_restriction
+TYPE: enum('Male','Female','Any')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Leave management related table
+
+
+
+==================================================
+TABLE: leave_policy_flow
+==================================================
+
+COLUMN: policy_flow_id
+TYPE: bigint
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: leave_type_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: approval_level
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: approver_type
+TYPE: enum('REPORTING_MANAGER','DEPARTMENT_HEAD','HR','ADMIN','SPECIFIC_EMPLOYEE')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: approver_employee_id
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_mandatory
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Leave management related table
+
+
+
+==================================================
+TABLE: leave_type_master
+==================================================
+
+COLUMN: leave_type_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: leave_code
+TYPE: varchar(20)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: leave_name
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: max_days
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_paid
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: requires_approval
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: is_active
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Leave management related table
+
+
+
+==================================================
+TABLE: login_logs
+==================================================
+
+COLUMN: log_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: username
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: varchar(50)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: ip_address
+TYPE: varchar(50)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: device_info
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: failure_reason
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: login_time
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: login_master
+==================================================
+
+COLUMN: login_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: varchar(50)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: username
+TYPE: varchar(100)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: contact_number
+TYPE: varchar(20)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: password
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_first_login
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('Active','Inactive')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: password_updated_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: role_id
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: session_token
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: device_logged_in
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: failed_attempts
+TYPE: int
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: locked_until
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: last_login_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: session_device
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: reset_otp
+TYPE: varchar(10)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: reset_otp_expiry
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: force_logout
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: session_expires_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: fcm_token
+TYPE: varchar(512)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: notification_enabled
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: device_active
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: device_platform
+TYPE: varchar(20)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: fcm_updated_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: modules
+==================================================
+
+COLUMN: id
+TYPE: bigint unsigned
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: module_code
+TYPE: varchar(36)
+NULL: YES
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: module_name
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: notification_logs
+==================================================
+
+COLUMN: id
+TYPE: bigint
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: emp_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: title
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: body
+TYPE: text
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: reminder_type
+TYPE: enum('before_30_min','before_10_min','comp_off','leave','general')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: channel
+TYPE: enum('PUSH','EMAIL')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_read
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: read_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: sent_status
+TYPE: enum('SENT','FAILED','SKIPPED')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: failure_reason
+TYPE: varchar(500)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Notification system related table
+
+
+
+==================================================
+TABLE: plan_modules
+==================================================
+
+COLUMN: id
+TYPE: bigint unsigned
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: plan_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: module_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_included
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: plans
+==================================================
+
+COLUMN: plan_id
+TYPE: varchar(36)
+NULL: NO
+KEY: PRI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: plan_name
+TYPE: varchar(100)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: plan_code
+TYPE: varchar(50)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: max_users
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: price_monthly
+TYPE: decimal(10,2)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: price_yearly
+TYPE: decimal(10,2)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_active
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: trial_days
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: billing_cycle
+TYPE: enum('monthly','yearly','both')
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: role_master
+==================================================
+
+COLUMN: role_id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: role_name
+TYPE: varchar(50)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('Active','Inactive')
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Role and permission management
+
+
+
+==================================================
+TABLE: role_permissions
+==================================================
+
+COLUMN: perm_id
+TYPE: bigint unsigned
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: role_id
+TYPE: bigint unsigned
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: module_key
+TYPE: varchar(100)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: can_view
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: can_create
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: can_edit
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: can_delete
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: can_approve
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: can_configure
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Role and permission management
+
+
+
+==================================================
+TABLE: sites
+==================================================
+
+COLUMN: id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: site_name
+TYPE: varchar(100)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: polygon_json
+TYPE: text
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: start_date
+TYPE: date
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: end_date
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: timestamp
+NULL: YES
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: system_modules
+==================================================
+
+COLUMN: module_id
+TYPE: varchar(36)
+NULL: NO
+KEY: PRI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: module_key
+TYPE: varchar(100)
+NULL: NO
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: module_name
+TYPE: varchar(150)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: module_code
+TYPE: varchar(50)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: category
+TYPE: enum('core','advanced','premium')
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: description
+TYPE: text
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_active
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: sort_order
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: tenant_module_overrides
+==================================================
+
+COLUMN: id
+TYPE: bigint unsigned
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: module_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_enabled
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: overridden_by
+TYPE: varchar(36)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: reason
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: tenant_roles
+==================================================
+
+COLUMN: role_id
+TYPE: bigint unsigned
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: role_name
+TYPE: varchar(100)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: role_level
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_system
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_active
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+Role and permission management
+
+
+
+==================================================
+TABLE: tenant_settings
+==================================================
+
+COLUMN: id
+TYPE: bigint unsigned
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: setting_key
+TYPE: varchar(100)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: setting_value
+TYPE: text
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: setting_group
+TYPE: varchar(50)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: tenants
+==================================================
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: NO
+KEY: PRI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: company_name
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: company_code
+TYPE: varchar(50)
+NULL: YES
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: plan_id
+TYPE: varchar(36)
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: status
+TYPE: enum('trial','active','suspended','expired')
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: max_users
+TYPE: int
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: trial_ends_at
+TYPE: date
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: plan_starts_at
+TYPE: date
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: plan_ends_at
+TYPE: date
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: admin_email
+TYPE: varchar(255)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: timezone
+TYPE: varchar(100)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: hr_email
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: contact_number
+TYPE: varchar(20)
+NULL: YES
+KEY: UNI
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: company_address
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: domain_name
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: gst_number
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: contact_person
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_active
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: block_reason
+TYPE: varchar(255)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: blocked_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: blocked_by
+TYPE: varchar(100)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+
+
+==================================================
+TABLE: tracking_sessions
+==================================================
+
+COLUMN: id
+TYPE: int
+NULL: NO
+KEY: PRI
+EXTRA: auto_increment
+----------------------------------------
+
+COLUMN: tenant_id
+TYPE: varchar(36)
+NULL: YES
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: employee_id
+TYPE: int
+NULL: NO
+KEY: MUL
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: work_date
+TYPE: date
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: started_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: ended_at
+TYPE: datetime
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: end_reason
+TYPE: varchar(500)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: session_number
+TYPE: tinyint
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: is_late
+TYPE: tinyint(1)
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: late_minutes
+TYPE: smallint
+NULL: NO
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: created_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED
+----------------------------------------
+
+COLUMN: updated_at
+TYPE: datetime
+NULL: NO
+KEY: undefined
+EXTRA: DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+----------------------------------------
+
+COLUMN: late_hours_decimal
+TYPE: float
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: late_hours_text
+TYPE: varchar(20)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+COLUMN: location_verified
+TYPE: tinyint(1)
+NULL: YES
+KEY: undefined
+EXTRA: undefined
+----------------------------------------
+
+POSSIBLE PURPOSE:
+General application table
+
+

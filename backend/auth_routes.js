@@ -1192,4 +1192,5 @@ setInterval(
   30 * 60 * 1000,
 );
 
+router.appAdminSessions = appAdminSessions;
 module.exports = router;

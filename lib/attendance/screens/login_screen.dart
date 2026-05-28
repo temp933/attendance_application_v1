@@ -402,16 +402,23 @@ class _SignInTabState extends State<_SignInTab> {
         if (!mounted) return;
         FocusScope.of(context).unfocus();
 
-        // ✅ Correct keys matching backend response
+        final appAdminToken = body['token'] as String? ?? '';
+
+        // ✅ Set token in ApiConfig memory BEFORE navigating
+        ApiConfig.setToken(appAdminToken);
+
+        debugPrint(
+          '🔐 ApiConfig token set: ${appAdminToken.isEmpty ? "❌ EMPTY" : appAdminToken.substring(0, 20)}...',
+        );
+
         await AuthService.saveSession(
           loginId: (body['adminId'] as num?)?.toInt().toString() ?? '0',
           empId: '0',
           role: '6',
           userType: body['userType'] as String? ?? 'app_admin',
           username: body['username'] as String? ?? 'App_Admin',
-          sessionToken:
-              body['token'] as String? ?? '', // ← 'token' not 'sessionToken'
-          tenantId: 'global', // ← hardcoded, not in response
+          sessionToken: appAdminToken,
+          tenantId: 'global',
         );
 
         widget.onNavigate(

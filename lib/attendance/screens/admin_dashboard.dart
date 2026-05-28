@@ -60,7 +60,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   late int selectedIndex;
   bool isExpanded = false;
 
-
   @override
   void initState() {
     super.initState();
@@ -238,9 +237,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => NotificationScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => NotificationScreen()),
                   );
                 },
               ),

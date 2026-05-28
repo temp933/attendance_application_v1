@@ -78,7 +78,7 @@ class _AppAdminDashboardScreenState extends State<AppAdminDashboardScreen>
       AppAdminCreateCompanyScreen(), // 1
       AppAdminPlanManagementScreen(), // 2
       AppAdminOrgScreen(), // 3
-      // GlobalNotifyConsole(), // 4  
+      GlobalNotifyConsole(), // 4  
     ]);
   }
 
@@ -88,6 +88,7 @@ class _AppAdminDashboardScreenState extends State<AppAdminDashboardScreen>
     'Create Company', // 1
     'Plan Management', // 2
     'Organization Management', // 3
+    'Global Notifications', // 4
   ];
 
   // ── Rail items ─────────────────────────────────────────────────────────────
@@ -111,6 +112,11 @@ class _AppAdminDashboardScreenState extends State<AppAdminDashboardScreen>
       icon: Icon(Icons.local_post_office),
       selectedIcon: Icon(Icons.offline_share),
       label: Text('Organization Management'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.notifications_outlined),
+      selectedIcon: Icon(Icons.notifications),
+      label: Text('Global Notifications'),
     ),
   ];
   // ── Build ──────────────────────────────────────────────────────────────────
