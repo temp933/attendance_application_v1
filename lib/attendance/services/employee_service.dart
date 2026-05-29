@@ -228,66 +228,73 @@ class EmployeeService {
   static Future<List<Map<String, dynamic>>> fetchDepartments() async {
     final response = await http.get(
       Uri.parse('$baseUrl/departments'),
-      headers: ApiConfig.headers, // x-tenant-id is inside ApiConfig.headers
+      headers: ApiConfig.headers,
     );
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return List<Map<String, dynamic>>.from(data['data']);
+      final raw = data['data'];
+      if (raw is! List) return [];
+      return (raw as List).map((e) {
+        final m = Map<String, dynamic>.from(e as Map);
+        m['id'] ??= m['department_id'];
+        m['name'] ??= m['department_name'];
+        return m;
+      }).toList();
     } else {
       throw Exception("Failed to load departments");
     }
   }
 
   // ================= GET ROLES =================
-  static Future<List<Map<String, dynamic>>> fetchRoles({int? deptId}) async {
-    if (deptId != null) {
-      try {
-        final response = await http.get(
-          Uri.parse('$baseUrl/departments/$deptId/roles'),
-          headers: ApiConfig.headers,
-        );
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          final raw = data['data'];
-          if (raw is! List) return [];
-          return List<Map<String, dynamic>>.from(raw);
-        }
-      } catch (_) {}
-      return [];
-    }
-
-    // Fan-out: get all depts, collect their roles
+  // Fetch designations — optionally filtered by department
+  static Future<List<Map<String, dynamic>>> fetchDesignations({
+    int? deptId,
+  }) async {
     try {
-      final depts = await fetchDepartments();
-      final List<Map<String, dynamic>> allRoles = [];
-      final seen = <int>{};
-      for (final dept in depts) {
-        final id = dept['id'];
-        if (id == null) continue;
-        try {
-          final response = await http.get(
-            Uri.parse('$baseUrl/departments/$id/roles'),
-            headers: ApiConfig.headers,
-          );
-          if (response.statusCode == 200) {
-            final data = jsonDecode(response.body);
-            final raw = data['data'];
-            if (raw is! List) continue;
-            for (final role in List<Map<String, dynamic>>.from(raw)) {
-              final roleId = role['role_id'];
-              if (roleId != null && seen.add(roleId as int)) {
-                allRoles.add({...role, 'department_id': id});
-              }
-            }
-          }
-        } catch (_) {
-          continue;
-        }
+      final url = deptId != null
+          ? '$baseUrl/designations?department_id=$deptId'
+          : '$baseUrl/designations';
+      final response = await http.get(
+        Uri.parse(url),
+        headers: ApiConfig.headers,
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final raw = data['data'];
+        if (raw is! List) return [];
+        // Normalise: add 'id' key so FormDropdownMap works (backend returns designation_id)
+        return (raw as List).map((e) {
+          final m = Map<String, dynamic>.from(e as Map);
+          m['id'] ??= m['designation_id'];
+          m['name'] ??= m['designation_name'];
+          return m;
+        }).toList();
       }
-      return allRoles;
-    } catch (_) {
-      return [];
-    }
+    } catch (_) {}
+    return [];
+  }
+
+  // Fetch all roles (flat list — no dept filter needed)
+  static Future<List<Map<String, dynamic>>> fetchRoles() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/roles'),
+        headers: ApiConfig.headers,
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final raw = data['data'];
+        if (raw is! List) return [];
+        // Normalise: backend returns role_id / role_name
+        return (raw as List).map((e) {
+          final m = Map<String, dynamic>.from(e as Map);
+          m['id'] ??= m['role_id'];
+          m['name'] ??= m['role_name'];
+          return m;
+        }).toList();
+      }
+    } catch (_) {}
+    return [];
   }
 
   // ================= EDUCATION =================

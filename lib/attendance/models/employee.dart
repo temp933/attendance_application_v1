@@ -8,6 +8,8 @@ class Employee {
   final String? phone;
   final String? dob;
   final String? gender;
+  final int? designationId;
+  final String? designationName;
   final int? departmentId;
   final String? departmentName;
 
@@ -46,7 +48,7 @@ class Employee {
   final String? esicNumber;
   final int? yearsExperience;
   final List<Education>? educationList;
-  final int? tlId;
+  final int? reportingToEmployeeId;
   final String? requestType;
 
   Employee({
@@ -59,6 +61,8 @@ class Employee {
     this.phone,
     this.dob,
     this.gender,
+    this.designationId,
+    this.designationName,
     this.departmentId,
     this.departmentName,
     this.roleId,
@@ -89,7 +93,7 @@ class Employee {
     this.esicNumber,
     this.yearsExperience,
     this.educationList,
-    this.tlId,
+    this.reportingToEmployeeId,
     this.requestType,
   });
   // In employee.dart — add this method to the Employee class
@@ -124,7 +128,7 @@ class Employee {
       emergencyContact: emergencyContact,
       emergencyContactRelation: emergencyContactRelation,
       communicationAddress: communicationAddress,
-      tlId: tlId,
+      reportingToEmployeeId: reportingToEmployeeId,
       // overlay these two:
       adminApprove: adminApprove ?? this.adminApprove,
       requestId: requestId ?? this.requestId,
@@ -150,10 +154,14 @@ class Employee {
       phone: val('phone_number') ?? val('phone'),
       dob: val('date_of_birth') ?? val('dob'),
       gender: val('gender'),
+      designationId: json['designation_id'] == null
+          ? null
+          : int.tryParse(json['designation_id'].toString()),
+      designationName: json['designation_name']?.toString(),
       departmentId: json['department_id'] == null
           ? null
           : int.tryParse(json['department_id'].toString()),
-      departmentName: json['department_name'],
+      departmentName: json['department_name']?.toString(),
       roleId: json['role_id'] == null
           ? null
           : int.tryParse(json['role_id'].toString()),
@@ -190,9 +198,9 @@ class Employee {
           ? null
           : int.tryParse(json['years_experience'].toString()),
       educationList: eduList,
-      tlId: json['tl_id'] == null
+      reportingToEmployeeId: json['reporting_to_employee_id'] == null
           ? null
-          : int.tryParse(json['tl_id'].toString()),
+          : int.tryParse(json['reporting_to_employee_id'].toString()),
     );
   }
 }

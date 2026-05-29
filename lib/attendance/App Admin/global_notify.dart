@@ -1,11 +1,3012 @@
+// // import 'dart:convert';
+// // import 'package:flutter/material.dart';
+// // import 'package:http/http.dart' as http;
+// // import 'package:intl/intl.dart';
+// // import '../providers/api_config.dart';
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 1 — MODELS
+// // // ─────────────────────────────────────────────────────────────────────────────
+
+// // class GnNotification {
+// //   final int id;
+// //   final String title;
+// //   final String message;
+// //   final String type;
+// //   final String scope;
+// //   final String status;
+// //   final int totalTargets;
+// //   final int sentCount;
+// //   final int failedCount;
+// //   final int deliveredCount;
+// //   final int openedCount;
+// //   final String createdBy;
+// //   final DateTime createdAt;
+// //   final DateTime? sentAt;
+// //   final DateTime? scheduledAt;
+// //   final String? imageUrl;
+
+// //   GnNotification({
+// //     required this.id,
+// //     required this.title,
+// //     required this.message,
+// //     required this.type,
+// //     required this.scope,
+// //     required this.status,
+// //     required this.totalTargets,
+// //     required this.sentCount,
+// //     required this.failedCount,
+// //     required this.deliveredCount,
+// //     required this.openedCount,
+// //     required this.createdBy,
+// //     required this.createdAt,
+// //     this.sentAt,
+// //     this.scheduledAt,
+// //     this.imageUrl,
+// //   });
+
+// //   factory GnNotification.fromJson(Map<String, dynamic> j) => GnNotification(
+// //     id: _parseInt(j['id']),
+// //     title: j['title'] ?? '',
+// //     message: j['message'] ?? '',
+// //     type: j['type'] ?? 'general',
+// //     scope: j['scope'] ?? 'all',
+// //     status: j['status'] ?? 'draft',
+// //     totalTargets: _parseInt(j['total_targets']),
+// //     sentCount: _parseInt(j['sent_count']),
+// //     failedCount: _parseInt(j['failed_count']),
+// //     deliveredCount: _parseInt(j['delivered_count']),
+// //     openedCount: _parseInt(j['opened_count']),
+// //     createdBy: j['created_by'] ?? '',
+// //     createdAt: j['created_at'] != null
+// //         ? DateTime.tryParse(j['created_at']) ?? DateTime.now()
+// //         : DateTime.now(),
+// //     sentAt: j['sent_at'] != null ? DateTime.tryParse(j['sent_at']) : null,
+// //     scheduledAt: j['scheduled_at'] != null
+// //         ? DateTime.tryParse(j['scheduled_at'])
+// //         : null,
+// //     imageUrl: j['image_url'],
+// //   );
+
+// //   double get openRate => sentCount > 0 ? (openedCount / sentCount * 100) : 0.0;
+// //   double get deliveryRate =>
+// //       totalTargets > 0 ? (sentCount / totalTargets * 100) : 0.0;
+// // }
+
+// // class GnDashboardSummary {
+// //   final int totalNotifications;
+// //   final int totalSent;
+// //   final int totalDelivered;
+// //   final int totalFailed;
+// //   final int totalOpened;
+// //   final int scheduledCount;
+// //   final int sendingCount;
+// //   final double openRate;
+
+// //   GnDashboardSummary({
+// //     required this.totalNotifications,
+// //     required this.totalSent,
+// //     required this.totalDelivered,
+// //     required this.totalFailed,
+// //     required this.totalOpened,
+// //     required this.scheduledCount,
+// //     required this.sendingCount,
+// //     required this.openRate,
+// //   });
+
+// //   factory GnDashboardSummary.fromJson(Map<String, dynamic> j) =>
+// //       GnDashboardSummary(
+// //         totalNotifications: _parseInt(j['total_notifications']),
+// //         totalSent: _parseInt(j['total_sent']),
+// //         totalDelivered: _parseInt(j['total_delivered']),
+// //         totalFailed: _parseInt(j['total_failed']),
+// //         totalOpened: _parseInt(j['total_opened']),
+// //         scheduledCount: _parseInt(j['scheduled_count']),
+// //         sendingCount: _parseInt(j['sending_count']),
+// //         openRate: _parseDouble(j['open_rate']),
+// //       );
+// // }
+
+// // class GnTargetPreview {
+// //   final int totalEmployees;
+// //   final int totalOrgs;
+// //   final List<String> orgIds;
+
+// //   GnTargetPreview({
+// //     required this.totalEmployees,
+// //     required this.totalOrgs,
+// //     required this.orgIds,
+// //   });
+
+// //   factory GnTargetPreview.fromJson(Map<String, dynamic> j) => GnTargetPreview(
+// //     totalEmployees: j['total_employees'] ?? 0,
+// //     totalOrgs: j['total_orgs'] ?? 0,
+// //     orgIds: List<String>.from(j['org_ids'] ?? []),
+// //   );
+// // }
+
+// // class GnAnalyticsTrend {
+// //   final String date;
+// //   final int total;
+// //   final int sent;
+// //   final int failed;
+// //   final int opened;
+
+// //   GnAnalyticsTrend({
+// //     required this.date,
+// //     required this.total,
+// //     required this.sent,
+// //     required this.failed,
+// //     required this.opened,
+// //   });
+
+// //   factory GnAnalyticsTrend.fromJson(Map<String, dynamic> j) => GnAnalyticsTrend(
+// //     date: j['date'] ?? '',
+// //     total: j['total'] ?? 0,
+// //     sent: j['sent'] ?? 0,
+// //     failed: j['failed'] ?? 0,
+// //     opened: j['opened'] ?? 0,
+// //   );
+// // }
+
+// // class GnTypeBreakdown {
+// //   final String type;
+// //   final int total;
+// //   final int totalSent;
+// //   final int totalFailed;
+// //   final double openRate;
+
+// //   GnTypeBreakdown({
+// //     required this.type,
+// //     required this.total,
+// //     required this.totalSent,
+// //     required this.totalFailed,
+// //     required this.openRate,
+// //   });
+
+// //   factory GnTypeBreakdown.fromJson(Map<String, dynamic> j) => GnTypeBreakdown(
+// //     type: j['type'] ?? '',
+// //     total: j['total'] ?? 0,
+// //     totalSent: j['total_sent'] ?? 0,
+// //     totalFailed: j['total_failed'] ?? 0,
+// //     openRate: (j['open_rate'] ?? 0.0).toDouble(),
+// //   );
+// // }
+
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 2 — SERVICE
+// // // ─────────────────────────────────────────────────────────────────────────────
+
+// // class GnService {
+// //   final String baseUrl;
+// //   final String token;
+
+// //   const GnService({required this.baseUrl, required this.token});
+
+// //   String get _base => '$baseUrl/app-admin/notifications';
+
+// //   // Matches OrgService._headers exactly
+// //   Map<String, String> get _headers => {
+// //     'Content-Type': 'application/json',
+// //     'Authorization': 'Bearer $token',
+// //   };
+
+// //   Future<T> _get<T>(String path, T Function(dynamic) parse) async {
+// //     final res = await http.get(Uri.parse('$_base$path'), headers: _headers);
+// //     if (res.statusCode == 200) return parse(json.decode(res.body));
+// //     throw Exception('GET $path failed: ${res.statusCode}');
+// //   }
+
+// //   Future<T> _post<T>(
+// //     String path,
+// //     Map<String, dynamic> body,
+// //     T Function(dynamic) parse,
+// //   ) async {
+// //     final res = await http.post(
+// //       Uri.parse('$_base$path'),
+// //       headers: _headers,
+// //       body: json.encode(body),
+// //     );
+// //     if (res.statusCode == 200 || res.statusCode == 201) {
+// //       return parse(json.decode(res.body));
+// //     }
+// //     final err = json.decode(res.body);
+// //     throw Exception(err['message'] ?? 'POST $path failed');
+// //   }
+
+// //   Future<void> _patch(String path, [Map<String, dynamic>? body]) async {
+// //     final res = await http.patch(
+// //       Uri.parse('$_base$path'),
+// //       headers: _headers,
+// //       body: body != null ? json.encode(body) : null,
+// //     );
+// //     if (res.statusCode != 200) {
+// //       final err = json.decode(res.body);
+// //       throw Exception(err['message'] ?? 'PATCH $path failed');
+// //     }
+// //   }
+
+// //   Future<Map<String, dynamic>> dashboard() => _get('/dashboard', (d) => d);
+
+// //   Future<Map<String, dynamic>> history({
+// //     int page = 1,
+// //     int limit = 20,
+// //     String? type,
+// //     String? status,
+// //     String? tenantId,
+// //     String? dateFrom,
+// //     String? dateTo,
+// //     String? search,
+// //   }) async {
+// //     final q = <String, String>{
+// //       'page': '$page',
+// //       'limit': '$limit',
+// //       if (type != null) 'type': type,
+// //       if (status != null) 'status': status,
+// //       if (tenantId != null) 'tenant_id': tenantId,
+// //       if (dateFrom != null) 'date_from': dateFrom,
+// //       if (dateTo != null) 'date_to': dateTo,
+// //       if (search != null) 'search': search,
+// //     };
+// //     final uri = Uri.parse('$_base/history').replace(queryParameters: q);
+// //     final res = await http.get(uri, headers: _headers);
+// //     if (res.statusCode == 200) return json.decode(res.body);
+// //     throw Exception('history failed: ${res.statusCode}');
+// //   }
+
+// //   Future<Map<String, dynamic>> send({
+// //     required String title,
+// //     required String message,
+// //     required String type,
+// //     required String scope,
+// //     Map<String, dynamic>? scopeMeta,
+// //     String? imageUrl,
+// //     String? scheduledAt,
+// //   }) => _post('/send', {
+// //     'title': title,
+// //     'message': message,
+// //     'type': type,
+// //     'scope': scope,
+// //     if (scopeMeta != null) 'scope_meta': scopeMeta,
+// //     if (imageUrl != null) 'image_url': imageUrl,
+// //     if (scheduledAt != null) 'scheduled_at': scheduledAt,
+// //   }, (d) => d);
+
+// //   Future<Map<String, dynamic>> detail(int id) => _get('/$id', (d) => d);
+
+// //   Future<void> cancel(int id) => _patch('/$id/cancel');
+
+// //   Future<void> reschedule(int id, String scheduledAt) =>
+// //       _patch('/$id/reschedule', {'scheduled_at': scheduledAt});
+
+// //   Future<Map<String, dynamic>> retry(int id) =>
+// //       _post('/$id/retry', {}, (d) => d);
+
+// //   Future<List<GnNotification>> scheduled() => _get(
+// //     '/scheduled/upcoming',
+// //     (d) => (d['data'] as List).map((e) => GnNotification.fromJson(e)).toList(),
+// //   );
+
+// //   Future<Map<String, dynamic>> analytics() =>
+// //       _get('/analytics/summary', (d) => d);
+
+// //   Future<GnTargetPreview> previewTargets({
+// //     required String scope,
+// //     Map<String, dynamic>? scopeMeta,
+// //   }) => _post('/preview-targets', {
+// //     'scope': scope,
+// //     if (scopeMeta != null) 'scope_meta': scopeMeta,
+// //   }, (d) => GnTargetPreview.fromJson(d));
+// // }
+
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 3 — THEME CONSTANTS (private)
+// // // ─────────────────────────────────────────────────────────────────────────────
+
+// // const _bg = Color(0xFF0A0E1A);
+// // const _surface = Color(0xFF111827);
+// // const _surfaceEl = Color(0xFF162032);
+// // const _border = Color(0xFF1E2D45);
+// // const _accent = Color(0xFF3B82F6);
+// // const _success = Color(0xFF10B981);
+// // const _warning = Color(0xFFF59E0B);
+// // const _error = Color(0xFFEF4444);
+// // const _purple = Color(0xFF8B5CF6);
+// // const _cyan = Color(0xFF06B6D4);
+// // const _textPri = Color(0xFFF1F5F9);
+// // const _textSec = Color(0xFF94A3B8);
+// // const _textMut = Color(0xFF475569);
+
+// // Color _statusColor(String s) {
+// //   switch (s.toLowerCase()) {
+// //     case 'sent':
+// //       return _success;
+// //     case 'sending':
+// //       return _accent;
+// //     case 'scheduled':
+// //       return _warning;
+// //     case 'failed':
+// //       return _error;
+// //     case 'cancelled':
+// //       return _textMut;
+// //     case 'draft':
+// //       return _purple;
+// //     default:
+// //       return _textSec;
+// //   }
+// // }
+
+// // Color _typeColor(String t) {
+// //   switch (t.toLowerCase()) {
+// //     case 'general':
+// //       return _accent;
+// //     case 'maintenance':
+// //       return _warning;
+// //     case 'app_update':
+// //       return _cyan;
+// //     case 'billing_reminder':
+// //       return _purple;
+// //     case 'emergency_alert':
+// //       return _error;
+// //     default:
+// //       return _textSec;
+// //   }
+// // }
+
+// // String _typeLabel(String t) {
+// //   switch (t) {
+// //     case 'general':
+// //       return 'General';
+// //     case 'maintenance':
+// //       return 'Maintenance';
+// //     case 'app_update':
+// //       return 'App Update';
+// //     case 'billing_reminder':
+// //       return 'Billing Reminder';
+// //     case 'emergency_alert':
+// //       return 'Emergency Alert';
+// //     default:
+// //       return t;
+// //   }
+// // }
+
+// // IconData _typeIcon(String t) {
+// //   switch (t) {
+// //     case 'general':
+// //       return Icons.campaign_outlined;
+// //     case 'maintenance':
+// //       return Icons.build_outlined;
+// //     case 'app_update':
+// //       return Icons.system_update_alt_outlined;
+// //     case 'billing_reminder':
+// //       return Icons.receipt_long_outlined;
+// //     case 'emergency_alert':
+// //       return Icons.warning_amber_rounded;
+// //     default:
+// //       return Icons.notifications_outlined;
+// //   }
+// // }
+
+// // String _scopeLabel(String s) {
+// //   switch (s) {
+// //     case 'all':
+// //       return 'All Organizations';
+// //     case 'selected':
+// //       return 'Selected Organizations';
+// //     case 'by_plan':
+// //       return 'By Plan';
+// //     case 'trial':
+// //       return 'Trial Organizations';
+// //     case 'expired':
+// //       return 'Expired Subscriptions';
+// //     case 'by_version':
+// //       return 'By App Version';
+// //     default:
+// //       return s;
+// //   }
+// // }
+
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 4 — PRIVATE WIDGETS
+// // // ─────────────────────────────────────────────────────────────────────────────
+
+// // class _Card extends StatelessWidget {
+// //   final Widget child;
+// //   final EdgeInsets? padding;
+// //   final VoidCallback? onTap;
+// //   final Color? borderColor;
+// //   final Color? bgColor;
+
+// //   const _Card({
+// //     required this.child,
+// //     this.padding,
+// //     this.onTap,
+// //     this.borderColor,
+// //     this.bgColor,
+// //   });
+
+// //   @override
+// //   Widget build(BuildContext context) => GestureDetector(
+// //     onTap: onTap,
+// //     child: Container(
+// //       padding: padding ?? const EdgeInsets.all(16),
+// //       decoration: BoxDecoration(
+// //         color: bgColor ?? _surfaceEl,
+// //         borderRadius: BorderRadius.circular(12),
+// //         border: Border.all(color: borderColor ?? _border),
+// //       ),
+// //       child: child,
+// //     ),
+// //   );
+// // }
+
+// // class _StatCard extends StatelessWidget {
+// //   final String label;
+// //   final String value;
+// //   final IconData icon;
+// //   final Color color;
+// //   final String? sub;
+
+// //   const _StatCard({
+// //     required this.label,
+// //     required this.value,
+// //     required this.icon,
+// //     required this.color,
+// //     this.sub,
+// //   });
+
+// //   @override
+// //   Widget build(BuildContext context) => _Card(
+// //     borderColor: color.withValues(alpha: 0.25),
+// //     child: Column(
+// //       crossAxisAlignment: CrossAxisAlignment.start,
+// //       children: [
+// //         Row(
+// //           children: [
+// //             Container(
+// //               padding: const EdgeInsets.all(7),
+// //               decoration: BoxDecoration(
+// //                 color: color.withValues(alpha: 0.15),
+// //                 borderRadius: BorderRadius.circular(8),
+// //               ),
+// //               child: Icon(icon, color: color, size: 16),
+// //             ),
+// //             const Spacer(),
+// //             if (sub != null)
+// //               Text(
+// //                 sub!,
+// //                 style: TextStyle(
+// //                   color: color,
+// //                   fontSize: 11,
+// //                   fontWeight: FontWeight.w600,
+// //                 ),
+// //               ),
+// //           ],
+// //         ),
+// //         const SizedBox(height: 12),
+// //         Text(
+// //           value,
+// //           style: const TextStyle(
+// //             color: _textPri,
+// //             fontSize: 24,
+// //             fontWeight: FontWeight.w800,
+// //           ),
+// //         ),
+// //         const SizedBox(height: 2),
+// //         Text(label, style: const TextStyle(color: _textSec, fontSize: 12)),
+// //       ],
+// //     ),
+// //   );
+// // }
+
+// // class _StatusChip extends StatelessWidget {
+// //   final String status;
+// //   const _StatusChip(this.status);
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     final c = _statusColor(status);
+// //     return Container(
+// //       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+// //       decoration: BoxDecoration(
+// //         color: c.withValues(alpha: 0.12),
+// //         borderRadius: BorderRadius.circular(20),
+// //         border: Border.all(color: c.withValues(alpha: 0.3)),
+// //       ),
+// //       child: Row(
+// //         mainAxisSize: MainAxisSize.min,
+// //         children: [
+// //           Container(
+// //             width: 5,
+// //             height: 5,
+// //             decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+// //           ),
+// //           const SizedBox(width: 5),
+// //           Text(
+// //             status.toUpperCase(),
+// //             style: TextStyle(
+// //               color: c,
+// //               fontSize: 9,
+// //               fontWeight: FontWeight.w800,
+// //               letterSpacing: 0.6,
+// //             ),
+// //           ),
+// //         ],
+// //       ),
+// //     );
+// //   }
+// // }
+
+// // class _TypeChip extends StatelessWidget {
+// //   final String type;
+// //   const _TypeChip(this.type);
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     final c = _typeColor(type);
+// //     return Container(
+// //       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+// //       decoration: BoxDecoration(
+// //         color: c.withValues(alpha: 0.1),
+// //         borderRadius: BorderRadius.circular(6),
+// //       ),
+// //       child: Row(
+// //         mainAxisSize: MainAxisSize.min,
+// //         children: [
+// //           Icon(_typeIcon(type), color: c, size: 11),
+// //           const SizedBox(width: 4),
+// //           Text(
+// //             _typeLabel(type),
+// //             style: TextStyle(
+// //               color: c,
+// //               fontSize: 11,
+// //               fontWeight: FontWeight.w600,
+// //             ),
+// //           ),
+// //         ],
+// //       ),
+// //     );
+// //   }
+// // }
+
+// // class _SectionHeader extends StatelessWidget {
+// //   final String title;
+// //   const _SectionHeader(this.title);
+
+// //   @override
+// //   Widget build(BuildContext context) => Row(
+// //     children: [
+// //       Container(
+// //         width: 3,
+// //         height: 16,
+// //         decoration: BoxDecoration(
+// //           color: _accent,
+// //           borderRadius: BorderRadius.circular(2),
+// //         ),
+// //       ),
+// //       const SizedBox(width: 8),
+// //       Text(
+// //         title,
+// //         style: const TextStyle(
+// //           color: _textPri,
+// //           fontSize: 14,
+// //           fontWeight: FontWeight.w700,
+// //         ),
+// //       ),
+// //     ],
+// //   );
+// // }
+
+// // class _StatPill extends StatelessWidget {
+// //   final IconData icon;
+// //   final String value;
+// //   final Color color;
+// //   const _StatPill({
+// //     required this.icon,
+// //     required this.value,
+// //     required this.color,
+// //   });
+
+// //   @override
+// //   Widget build(BuildContext context) => Row(
+// //     mainAxisSize: MainAxisSize.min,
+// //     children: [
+// //       Icon(icon, color: color, size: 11),
+// //       const SizedBox(width: 3),
+// //       Text(
+// //         value,
+// //         style: TextStyle(
+// //           color: color,
+// //           fontSize: 11,
+// //           fontWeight: FontWeight.w600,
+// //         ),
+// //       ),
+// //     ],
+// //   );
+// // }
+
+// // class _NotifTile extends StatelessWidget {
+// //   final GnNotification n;
+// //   final VoidCallback? onTap;
+// //   const _NotifTile(this.n, {this.onTap});
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     final fmt = DateFormat('MMM d · h:mm a');
+// //     return _Card(
+// //       onTap: onTap,
+// //       padding: const EdgeInsets.all(14),
+// //       child: Column(
+// //         crossAxisAlignment: CrossAxisAlignment.start,
+// //         children: [
+// //           Row(
+// //             children: [
+// //               Expanded(
+// //                 child: Text(
+// //                   n.title,
+// //                   style: const TextStyle(
+// //                     color: _textPri,
+// //                     fontSize: 14,
+// //                     fontWeight: FontWeight.w600,
+// //                   ),
+// //                   maxLines: 1,
+// //                   overflow: TextOverflow.ellipsis,
+// //                 ),
+// //               ),
+// //               const SizedBox(width: 8),
+// //               _StatusChip(n.status),
+// //             ],
+// //           ),
+// //           const SizedBox(height: 5),
+// //           Text(
+// //             n.message,
+// //             style: const TextStyle(color: _textSec, fontSize: 13),
+// //             maxLines: 2,
+// //             overflow: TextOverflow.ellipsis,
+// //           ),
+// //           const SizedBox(height: 10),
+// //           Row(
+// //             children: [
+// //               _TypeChip(n.type),
+// //               const SizedBox(width: 8),
+// //               Container(
+// //                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+// //                 decoration: BoxDecoration(
+// //                   color: _border,
+// //                   borderRadius: BorderRadius.circular(5),
+// //                 ),
+// //                 child: Text(
+// //                   _scopeLabel(n.scope),
+// //                   style: const TextStyle(color: _textMut, fontSize: 10),
+// //                 ),
+// //               ),
+// //               const Spacer(),
+// //               if (n.status == 'sent') ...[
+// //                 _StatPill(
+// //                   icon: Icons.send_outlined,
+// //                   value: _fmt(n.sentCount),
+// //                   color: _success,
+// //                 ),
+// //                 const SizedBox(width: 8),
+// //                 _StatPill(
+// //                   icon: Icons.error_outline,
+// //                   value: _fmt(n.failedCount),
+// //                   color: _error,
+// //                 ),
+// //                 const SizedBox(width: 8),
+// //                 _StatPill(
+// //                   icon: Icons.visibility_outlined,
+// //                   value: '${n.openRate.toStringAsFixed(1)}%',
+// //                   color: _cyan,
+// //                 ),
+// //               ],
+// //             ],
+// //           ),
+// //           const SizedBox(height: 8),
+// //           Text(
+// //             n.scheduledAt != null
+// //                 ? 'Scheduled: ${fmt.format(n.scheduledAt!)}'
+// //                 : n.sentAt != null
+// //                 ? 'Sent: ${fmt.format(n.sentAt!)}'
+// //                 : 'Created: ${fmt.format(n.createdAt)}',
+// //             style: const TextStyle(color: _textMut, fontSize: 11),
+// //           ),
+// //         ],
+// //       ),
+// //     );
+// //   }
+// // }
+
+// // String _fmt(int n) {
+// //   if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+// //   if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+// //   return '$n';
+// // }
+
+// // class _ProgressRow extends StatelessWidget {
+// //   final String label;
+// //   final int value;
+// //   final int total;
+// //   final Color color;
+// //   const _ProgressRow({
+// //     required this.label,
+// //     required this.value,
+// //     required this.total,
+// //     required this.color,
+// //   });
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     final pct = total > 0 ? value / total : 0.0;
+// //     return Padding(
+// //       padding: const EdgeInsets.only(bottom: 12),
+// //       child: Column(
+// //         crossAxisAlignment: CrossAxisAlignment.start,
+// //         children: [
+// //           Row(
+// //             children: [
+// //               Text(
+// //                 label,
+// //                 style: const TextStyle(color: _textSec, fontSize: 12),
+// //               ),
+// //               const Spacer(),
+// //               Text(
+// //                 '$value / $total',
+// //                 style: TextStyle(
+// //                   color: color,
+// //                   fontSize: 12,
+// //                   fontWeight: FontWeight.w600,
+// //                 ),
+// //               ),
+// //             ],
+// //           ),
+// //           const SizedBox(height: 5),
+// //           ClipRRect(
+// //             borderRadius: BorderRadius.circular(3),
+// //             child: LinearProgressIndicator(
+// //               value: pct.clamp(0.0, 1.0),
+// //               backgroundColor: _border,
+// //               valueColor: AlwaysStoppedAnimation<Color>(color),
+// //               minHeight: 5,
+// //             ),
+// //           ),
+// //         ],
+// //       ),
+// //     );
+// //   }
+// // }
+
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 5 — MAIN CONSOLE (entry point)
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // Add this helper at the top of the file (outside any class)
+// // int _parseInt(dynamic v) => v == null ? 0 : int.tryParse(v.toString()) ?? 0;
+// // double _parseDouble(dynamic v) =>
+// //     v == null ? 0.0 : double.tryParse(v.toString()) ?? 0.0;
+
+// // /// Drop this widget anywhere in your existing app.
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 5 — MAIN CONSOLE (updated: no loadFromPrefs gate, mirrors
+// // //             AppAdminOrgScreen's lazy `late final _service = ...` pattern)
+// // // ─────────────────────────────────────────────────────────────────────────────
+
+// // class GlobalNotifyConsole extends StatefulWidget {
+// //   const GlobalNotifyConsole({super.key});
+
+// //   @override
+// //   State<GlobalNotifyConsole> createState() => _GlobalNotifyConsoleState();
+// // }
+
+// // class _GlobalNotifyConsoleState extends State<GlobalNotifyConsole> {
+// //   late final GnService _svc;
+
+// //   int _tab = 0;
+// //   bool _ready = false;
+
+// //   @override
+// //   void initState() {
+// //     super.initState();
+// //     _svc = GnService(baseUrl: ApiConfig.baseUrl, token: ApiConfig.getToken());
+// //     WidgetsBinding.instance.addPostFrameCallback((_) {
+// //       if (mounted) setState(() => _ready = true);
+// //     });
+// //   }
+
+// //   static const _tabs = [
+// //     (icon: Icons.dashboard_outlined, label: 'Overview'),
+// //     (icon: Icons.send_outlined, label: 'Send'),
+// //     (icon: Icons.history_outlined, label: 'History'),
+// //     (icon: Icons.schedule_outlined, label: 'Scheduled'),
+// //     (icon: Icons.bar_chart_outlined, label: 'Analytics'),
+// //   ];
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     if (!_ready) {
+// //       return Theme(
+// //         data: _buildTheme(),
+// //         child: const Scaffold(
+// //           backgroundColor: _bg,
+// //           body: Center(
+// //             child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
+// //           ),
+// //         ),
+// //       );
+// //     }
+
+// //     final screens = [
+// //       _OverviewScreen(svc: _svc),
+// //       _SendScreen(svc: _svc),
+// //       _HistoryScreen(svc: _svc),
+// //       _ScheduledScreen(svc: _svc),
+// //       _AnalyticsScreen(svc: _svc),
+// //     ];
+
+// //     return Theme(
+// //       data: _buildTheme(),
+// //       child: Scaffold(
+// //         backgroundColor: _bg,
+// //         appBar: AppBar(
+// //           backgroundColor: _surface,
+// //           elevation: 0,
+// //           title: Row(
+// //             children: [
+// //               Container(
+// //                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+// //                 decoration: BoxDecoration(
+// //                   color: _accent.withValues(alpha: 0.15),
+// //                   borderRadius: BorderRadius.circular(6),
+// //                 ),
+// //                 child: const Icon(Icons.bolt, color: _accent, size: 16),
+// //               ),
+// //               const SizedBox(width: 10),
+// //               const Text(
+// //                 'Global Notifications',
+// //                 style: TextStyle(
+// //                   color: _textPri,
+// //                   fontSize: 16,
+// //                   fontWeight: FontWeight.w700,
+// //                 ),
+// //               ),
+// //               const SizedBox(width: 8),
+// //               Container(
+// //                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+// //                 decoration: BoxDecoration(
+// //                   color: _purple.withValues(alpha: 0.2),
+// //                   borderRadius: BorderRadius.circular(4),
+// //                 ),
+// //                 child: const Text(
+// //                   'SUPER ADMIN',
+// //                   style: TextStyle(
+// //                     color: _purple,
+// //                     fontSize: 9,
+// //                     fontWeight: FontWeight.w800,
+// //                     letterSpacing: 0.5,
+// //                   ),
+// //                 ),
+// //               ),
+// //             ],
+// //           ),
+// //           bottom: PreferredSize(
+// //             preferredSize: const Size.fromHeight(46),
+// //             child: Container(
+// //               color: _surface,
+// //               child: SingleChildScrollView(
+// //                 scrollDirection: Axis.horizontal,
+// //                 padding: const EdgeInsets.symmetric(horizontal: 12),
+// //                 child: Row(
+// //                   children: List.generate(_tabs.length, (i) {
+// //                     final t = _tabs[i];
+// //                     final sel = _tab == i;
+// //                     return GestureDetector(
+// //                       onTap: () => setState(() => _tab = i),
+// //                       child: Container(
+// //                         margin: const EdgeInsets.only(right: 4, bottom: 6),
+// //                         padding: const EdgeInsets.symmetric(
+// //                           horizontal: 14,
+// //                           vertical: 7,
+// //                         ),
+// //                         decoration: BoxDecoration(
+// //                           color: sel
+// //                               ? _accent.withValues(alpha: 0.15)
+// //                               : Colors.transparent,
+// //                           borderRadius: BorderRadius.circular(8),
+// //                           border: Border.all(
+// //                             color: sel
+// //                                 ? _accent.withValues(alpha: 0.4)
+// //                                 : Colors.transparent,
+// //                           ),
+// //                         ),
+// //                         child: Row(
+// //                           children: [
+// //                             Icon(
+// //                               t.icon,
+// //                               size: 14,
+// //                               color: sel ? _accent : _textMut,
+// //                             ),
+// //                             const SizedBox(width: 6),
+// //                             Text(
+// //                               t.label,
+// //                               style: TextStyle(
+// //                                 color: sel ? _accent : _textMut,
+// //                                 fontSize: 13,
+// //                                 fontWeight: sel
+// //                                     ? FontWeight.w600
+// //                                     : FontWeight.w400,
+// //                               ),
+// //                             ),
+// //                           ],
+// //                         ),
+// //                       ),
+// //                     );
+// //                   }),
+// //                 ),
+// //               ),
+// //             ),
+// //           ),
+// //         ),
+// //         body: IndexedStack(index: _tab, children: screens),
+// //       ),
+// //     );
+// //   }
+// // }
+
+// // ThemeData _buildTheme() => ThemeData(
+// //   scaffoldBackgroundColor: _bg,
+// //   colorScheme: const ColorScheme.dark(
+// //     primary: _accent,
+// //     surface: _surface,
+// //     error: _error,
+// //   ),
+// //   inputDecorationTheme: InputDecorationTheme(
+// //     filled: true,
+// //     fillColor: _surfaceEl,
+// //     border: OutlineInputBorder(
+// //       borderRadius: BorderRadius.circular(10),
+// //       borderSide: const BorderSide(color: _border),
+// //     ),
+// //     enabledBorder: OutlineInputBorder(
+// //       borderRadius: BorderRadius.circular(10),
+// //       borderSide: const BorderSide(color: _border),
+// //     ),
+// //     focusedBorder: OutlineInputBorder(
+// //       borderRadius: BorderRadius.circular(10),
+// //       borderSide: const BorderSide(color: _accent, width: 1.5),
+// //     ),
+// //     labelStyle: const TextStyle(color: _textSec),
+// //     hintStyle: const TextStyle(color: _textMut),
+// //     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+// //   ),
+// //   elevatedButtonTheme: ElevatedButtonThemeData(
+// //     style: ElevatedButton.styleFrom(
+// //       backgroundColor: _accent,
+// //       foregroundColor: Colors.white,
+// //       elevation: 0,
+// //       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+// //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+// //       textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+// //     ),
+// //   ),
+// //   dividerColor: _border,
+// // );
+
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 6 — OVERVIEW SCREEN
+// // // ─────────────────────────────────────────────────────────────────────────────
+
+// // class _OverviewScreen extends StatefulWidget {
+// //   final GnService svc;
+// //   const _OverviewScreen({required this.svc});
+
+// //   @override
+// //   State<_OverviewScreen> createState() => _OverviewScreenState();
+// // }
+
+// // class _OverviewScreenState extends State<_OverviewScreen> {
+// //   GnDashboardSummary? _summary;
+// //   List<GnNotification> _recent = [];
+// //   bool _loading = true;
+// //   // FIXED: renamed from _error to _errMsg to avoid shadowing the Color constant
+// //   String? _errMsg;
+
+// //   @override
+// //   void initState() {
+// //     super.initState();
+// //     _load();
+// //   }
+
+// //   Future<void> _load() async {
+// //     setState(() {
+// //       _loading = true;
+// //       _errMsg = null;
+// //     });
+// //     try {
+// //       final data = await widget.svc.dashboard();
+// //       setState(() {
+// //         _summary = GnDashboardSummary.fromJson(data['summary']);
+// //         _recent = (data['recent'] as List)
+// //             .map((e) => GnNotification.fromJson(e))
+// //             .toList();
+// //         _loading = false;
+// //       });
+// //     } catch (e) {
+// //       setState(() {
+// //         _errMsg = e.toString();
+// //         _loading = false;
+// //       });
+// //     }
+// //   }
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     if (_loading) {
+// //       return const Center(
+// //         child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
+// //       );
+// //     }
+// //     if (_errMsg != null) {
+// //       return Center(
+// //         child: Column(
+// //           mainAxisSize: MainAxisSize.min,
+// //           children: [
+// //             const Icon(Icons.cloud_off_outlined, color: _textMut, size: 40),
+// //             const SizedBox(height: 12),
+// //             Text(
+// //               _errMsg!,
+// //               style: const TextStyle(color: _textSec),
+// //               textAlign: TextAlign.center,
+// //             ),
+// //             const SizedBox(height: 16),
+// //             ElevatedButton(onPressed: _load, child: const Text('Retry')),
+// //           ],
+// //         ),
+// //       );
+// //     }
+// //     final s = _summary!;
+// //     return RefreshIndicator(
+// //       onRefresh: _load,
+// //       color: _accent,
+// //       backgroundColor: _surfaceEl,
+// //       child: ListView(
+// //         padding: const EdgeInsets.all(16),
+// //         children: [
+// //           GridView.count(
+// //             crossAxisCount: 2,
+// //             crossAxisSpacing: 10,
+// //             mainAxisSpacing: 10,
+// //             shrinkWrap: true,
+// //             physics: const NeverScrollableScrollPhysics(),
+// //             childAspectRatio: 1.55,
+// //             children: [
+// //               _StatCard(
+// //                 label: 'Total Sent',
+// //                 value: _fmt(s.totalSent),
+// //                 icon: Icons.send_outlined,
+// //                 color: _accent,
+// //               ),
+// //               _StatCard(
+// //                 label: 'Delivered',
+// //                 value: _fmt(s.totalDelivered),
+// //                 icon: Icons.mark_email_read_outlined,
+// //                 color: _success,
+// //               ),
+// //               _StatCard(
+// //                 label: 'Failed',
+// //                 value: _fmt(s.totalFailed),
+// //                 icon: Icons.error_outline,
+// //                 color: _error,
+// //               ),
+// //               _StatCard(
+// //                 label: 'Open Rate',
+// //                 value: '${s.openRate.toStringAsFixed(1)}%',
+// //                 icon: Icons.visibility_outlined,
+// //                 color: _cyan,
+// //                 sub: '${_fmt(s.totalOpened)} opens',
+// //               ),
+// //             ],
+// //           ),
+// //           const SizedBox(height: 10),
+// //           Row(
+// //             children: [
+// //               Expanded(
+// //                 child: _Card(
+// //                   borderColor: _warning.withValues(alpha: 0.3),
+// //                   child: Row(
+// //                     children: [
+// //                       Container(
+// //                         padding: const EdgeInsets.all(7),
+// //                         decoration: BoxDecoration(
+// //                           color: _warning.withValues(alpha: 0.15),
+// //                           borderRadius: BorderRadius.circular(8),
+// //                         ),
+// //                         child: const Icon(
+// //                           Icons.schedule_outlined,
+// //                           color: _warning,
+// //                           size: 16,
+// //                         ),
+// //                       ),
+// //                       const SizedBox(width: 10),
+// //                       Column(
+// //                         crossAxisAlignment: CrossAxisAlignment.start,
+// //                         children: [
+// //                           Text(
+// //                             _fmt(s.scheduledCount),
+// //                             style: const TextStyle(
+// //                               color: _textPri,
+// //                               fontSize: 20,
+// //                               fontWeight: FontWeight.w700,
+// //                             ),
+// //                           ),
+// //                           const Text(
+// //                             'Scheduled',
+// //                             style: TextStyle(color: _textSec, fontSize: 11),
+// //                           ),
+// //                         ],
+// //                       ),
+// //                     ],
+// //                   ),
+// //                 ),
+// //               ),
+// //               const SizedBox(width: 10),
+// //               Expanded(
+// //                 child: _Card(
+// //                   borderColor: _purple.withValues(alpha: 0.3),
+// //                   child: Row(
+// //                     children: [
+// //                       Container(
+// //                         padding: const EdgeInsets.all(7),
+// //                         decoration: BoxDecoration(
+// //                           color: _purple.withValues(alpha: 0.15),
+// //                           borderRadius: BorderRadius.circular(8),
+// //                         ),
+// //                         child: const Icon(
+// //                           Icons.all_inbox_outlined,
+// //                           color: _purple,
+// //                           size: 16,
+// //                         ),
+// //                       ),
+// //                       const SizedBox(width: 10),
+// //                       Column(
+// //                         crossAxisAlignment: CrossAxisAlignment.start,
+// //                         children: [
+// //                           Text(
+// //                             _fmt(s.totalNotifications),
+// //                             style: const TextStyle(
+// //                               color: _textPri,
+// //                               fontSize: 20,
+// //                               fontWeight: FontWeight.w700,
+// //                             ),
+// //                           ),
+// //                           const Text(
+// //                             'Total Notifs',
+// //                             style: TextStyle(color: _textSec, fontSize: 11),
+// //                           ),
+// //                         ],
+// //                       ),
+// //                     ],
+// //                   ),
+// //                 ),
+// //               ),
+// //             ],
+// //           ),
+// //           const SizedBox(height: 20),
+// //           _SectionHeader('Recent Notifications'),
+// //           const SizedBox(height: 12),
+// //           if (_recent.isEmpty)
+// //             const Padding(
+// //               padding: EdgeInsets.symmetric(vertical: 24),
+// //               child: Center(
+// //                 child: Text(
+// //                   'No notifications yet',
+// //                   style: TextStyle(color: _textMut),
+// //                 ),
+// //               ),
+// //             )
+// //           else
+// //             ..._recent.map(
+// //               (n) => Padding(
+// //                 padding: const EdgeInsets.only(bottom: 10),
+// //                 child: _NotifTile(n, onTap: () => _openDetail(context, n.id)),
+// //               ),
+// //             ),
+// //         ],
+// //       ),
+// //     );
+// //   }
+
+// //   void _openDetail(BuildContext ctx, int id) => Navigator.push(
+// //     ctx,
+// //     MaterialPageRoute(
+// //       builder: (_) => _DetailScreen(svc: widget.svc, id: id),
+// //     ),
+// //   );
+// // }
+
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 7 — SEND SCREEN
+// // // ─────────────────────────────────────────────────────────────────────────────
+
+// // class _SendScreen extends StatefulWidget {
+// //   final GnService svc;
+// //   const _SendScreen({required this.svc});
+
+// //   @override
+// //   State<_SendScreen> createState() => _SendScreenState();
+// // }
+
+// // class _SendScreenState extends State<_SendScreen> {
+// //   final _titleCtrl = TextEditingController();
+// //   final _msgCtrl = TextEditingController();
+// //   final _imgCtrl = TextEditingController();
+// //   final _tenantCtrl = TextEditingController();
+// //   final _planCtrl = TextEditingController();
+// //   final _versionCtrl = TextEditingController();
+
+// //   String _type = 'general';
+// //   String _scope = 'all';
+// //   bool _schedule = false;
+// //   DateTime? _scheduledAt;
+
+// //   bool _sending = false;
+// //   GnTargetPreview? _preview;
+// //   bool _previewing = false;
+
+// //   final _types = [
+// //     'general',
+// //     'maintenance',
+// //     'app_update',
+// //     'billing_reminder',
+// //     'emergency_alert',
+// //   ];
+// //   final _scopes = [
+// //     'all',
+// //     'selected',
+// //     'by_plan',
+// //     'trial',
+// //     'expired',
+// //     'by_version',
+// //   ];
+
+// //   Map<String, dynamic>? get _scopeMeta {
+// //     switch (_scope) {
+// //       case 'selected':
+// //         final ids = _tenantCtrl.text
+// //             .split(',')
+// //             .map((e) => e.trim())
+// //             .where((e) => e.isNotEmpty)
+// //             .toList();
+// //         return ids.isEmpty ? null : {'tenant_ids': ids};
+// //       case 'by_plan':
+// //         final p = _planCtrl.text.trim();
+// //         return p.isEmpty ? null : {'plan_id': p};
+// //       case 'by_version':
+// //         final v = _versionCtrl.text.trim();
+// //         return v.isEmpty ? null : {'version_string': v};
+// //       default:
+// //         return null;
+// //     }
+// //   }
+
+// //   Future<void> _doPreview() async {
+// //     setState(() => _previewing = true);
+// //     try {
+// //       final p = await widget.svc.previewTargets(
+// //         scope: _scope,
+// //         scopeMeta: _scopeMeta,
+// //       );
+// //       setState(() => _preview = p);
+// //     } catch (e) {
+// //       _snack('Preview failed: $e');
+// //     } finally {
+// //       setState(() => _previewing = false);
+// //     }
+// //   }
+
+// //   Future<void> _doSend() async {
+// //     if (_titleCtrl.text.trim().isEmpty || _msgCtrl.text.trim().isEmpty) {
+// //       _snack('Title and message are required');
+// //       return;
+// //     }
+// //     setState(() => _sending = true);
+// //     try {
+// //       await widget.svc.send(
+// //         title: _titleCtrl.text.trim(),
+// //         message: _msgCtrl.text.trim(),
+// //         type: _type,
+// //         scope: _scope,
+// //         scopeMeta: _scopeMeta,
+// //         imageUrl: _imgCtrl.text.trim().isEmpty ? null : _imgCtrl.text.trim(),
+// //         scheduledAt: _schedule && _scheduledAt != null
+// //             ? _scheduledAt!.toIso8601String()
+// //             : null,
+// //       );
+// //       _snack(
+// //         _schedule
+// //             ? 'Notification scheduled!'
+// //             : 'Notification queued for sending!',
+// //         isSuccess: true,
+// //       );
+// //       _titleCtrl.clear();
+// //       _msgCtrl.clear();
+// //       _imgCtrl.clear();
+// //       setState(() {
+// //         _preview = null;
+// //         _schedule = false;
+// //         _scheduledAt = null;
+// //       });
+// //     } catch (e) {
+// //       _snack('Failed: $e');
+// //     } finally {
+// //       setState(() => _sending = false);
+// //     }
+// //   }
+
+// //   void _snack(String msg, {bool isSuccess = false}) {
+// //     if (!mounted) return;
+// //     ScaffoldMessenger.of(context).showSnackBar(
+// //       SnackBar(
+// //         content: Text(msg),
+// //         backgroundColor: isSuccess ? _success : _error,
+// //         behavior: SnackBarBehavior.floating,
+// //         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+// //       ),
+// //     );
+// //   }
+
+// //   Future<void> _pickSchedule() async {
+// //     final now = DateTime.now();
+// //     final date = await showDatePicker(
+// //       context: context,
+// //       initialDate: now.add(const Duration(hours: 1)),
+// //       firstDate: now,
+// //       lastDate: now.add(const Duration(days: 365)),
+// //       builder: (ctx, child) => Theme(
+// //         data: ThemeData.dark().copyWith(
+// //           colorScheme: const ColorScheme.dark(primary: _accent),
+// //         ),
+// //         child: child!,
+// //       ),
+// //     );
+// //     if (date == null) return;
+// //     if (!mounted) return;
+// //     final time = await showTimePicker(
+// //       context: context,
+// //       initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
+// //       builder: (ctx, child) => Theme(
+// //         data: ThemeData.dark().copyWith(
+// //           colorScheme: const ColorScheme.dark(primary: _accent),
+// //         ),
+// //         child: child!,
+// //       ),
+// //     );
+// //     if (time == null) return;
+// //     setState(
+// //       () => _scheduledAt = DateTime(
+// //         date.year,
+// //         date.month,
+// //         date.day,
+// //         time.hour,
+// //         time.minute,
+// //       ),
+// //     );
+// //   }
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     return Stack(
+// //       children: [
+// //         ListView(
+// //           padding: const EdgeInsets.all(16),
+// //           children: [
+// //             _SectionHeader('Notification Type'),
+// //             const SizedBox(height: 10),
+// //             SizedBox(
+// //               height: 44,
+// //               child: ListView.separated(
+// //                 scrollDirection: Axis.horizontal,
+// //                 itemCount: _types.length,
+// //                 separatorBuilder: (_, _) => const SizedBox(width: 8),
+// //                 itemBuilder: (_, i) {
+// //                   final t = _types[i];
+// //                   final sel = _type == t;
+// //                   final c = _typeColor(t);
+// //                   return GestureDetector(
+// //                     onTap: () => setState(() => _type = t),
+// //                     child: AnimatedContainer(
+// //                       duration: const Duration(milliseconds: 180),
+// //                       padding: const EdgeInsets.symmetric(
+// //                         horizontal: 14,
+// //                         vertical: 10,
+// //                       ),
+// //                       decoration: BoxDecoration(
+// //                         color: sel ? c.withValues(alpha: 0.15) : _surfaceEl,
+// //                         borderRadius: BorderRadius.circular(10),
+// //                         border: Border.all(
+// //                           color: sel ? c.withValues(alpha: 0.5) : _border,
+// //                         ),
+// //                       ),
+// //                       child: Row(
+// //                         children: [
+// //                           Icon(
+// //                             _typeIcon(t),
+// //                             color: sel ? c : _textMut,
+// //                             size: 14,
+// //                           ),
+// //                           const SizedBox(width: 6),
+// //                           Text(
+// //                             _typeLabel(t),
+// //                             style: TextStyle(
+// //                               color: sel ? c : _textMut,
+// //                               fontSize: 12,
+// //                               fontWeight: sel
+// //                                   ? FontWeight.w600
+// //                                   : FontWeight.w400,
+// //                             ),
+// //                           ),
+// //                         ],
+// //                       ),
+// //                     ),
+// //                   );
+// //                 },
+// //               ),
+// //             ),
+// //             const SizedBox(height: 18),
+// //             _SectionHeader('Target Audience'),
+// //             const SizedBox(height: 10),
+// //             Wrap(
+// //               spacing: 8,
+// //               runSpacing: 8,
+// //               children: _scopes.map((s) {
+// //                 final sel = _scope == s;
+// //                 return GestureDetector(
+// //                   onTap: () => setState(() {
+// //                     _scope = s;
+// //                     _preview = null;
+// //                   }),
+// //                   child: AnimatedContainer(
+// //                     duration: const Duration(milliseconds: 150),
+// //                     padding: const EdgeInsets.symmetric(
+// //                       horizontal: 12,
+// //                       vertical: 7,
+// //                     ),
+// //                     decoration: BoxDecoration(
+// //                       color: sel ? _accent.withValues(alpha: 0.15) : _surfaceEl,
+// //                       borderRadius: BorderRadius.circular(8),
+// //                       border: Border.all(
+// //                         color: sel ? _accent.withValues(alpha: 0.5) : _border,
+// //                       ),
+// //                     ),
+// //                     child: Text(
+// //                       _scopeLabel(s),
+// //                       style: TextStyle(
+// //                         color: sel ? _accent : _textSec,
+// //                         fontSize: 12,
+// //                         fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
+// //                       ),
+// //                     ),
+// //                   ),
+// //                 );
+// //               }).toList(),
+// //             ),
+// //             const SizedBox(height: 12),
+// //             if (_scope == 'selected') ...[
+// //               TextField(
+// //                 controller: _tenantCtrl,
+// //                 style: const TextStyle(color: _textPri, fontSize: 13),
+// //                 decoration: const InputDecoration(
+// //                   labelText: 'Tenant IDs (comma separated)',
+// //                   hintText: 'TENANT1, TENANT2, ...',
+// //                   prefixIcon: Icon(
+// //                     Icons.business_outlined,
+// //                     color: _textMut,
+// //                     size: 18,
+// //                   ),
+// //                 ),
+// //               ),
+// //               const SizedBox(height: 10),
+// //             ],
+// //             if (_scope == 'by_plan') ...[
+// //               TextField(
+// //                 controller: _planCtrl,
+// //                 style: const TextStyle(color: _textPri, fontSize: 13),
+// //                 decoration: const InputDecoration(
+// //                   labelText: 'Plan ID',
+// //                   hintText: 'e.g. plan-pro-monthly',
+// //                   prefixIcon: Icon(
+// //                     Icons.card_membership_outlined,
+// //                     color: _textMut,
+// //                     size: 18,
+// //                   ),
+// //                 ),
+// //               ),
+// //               const SizedBox(height: 10),
+// //             ],
+// //             if (_scope == 'by_version') ...[
+// //               TextField(
+// //                 controller: _versionCtrl,
+// //                 style: const TextStyle(color: _textPri, fontSize: 13),
+// //                 decoration: const InputDecoration(
+// //                   labelText: 'App Version',
+// //                   hintText: 'e.g. 2.4.0',
+// //                   prefixIcon: Icon(
+// //                     Icons.phone_android_outlined,
+// //                     color: _textMut,
+// //                     size: 18,
+// //                   ),
+// //                 ),
+// //               ),
+// //               const SizedBox(height: 10),
+// //             ],
+// //             Align(
+// //               alignment: Alignment.centerLeft,
+// //               child: TextButton.icon(
+// //                 onPressed: _previewing ? null : _doPreview,
+// //                 icon: _previewing
+// //                     ? const SizedBox(
+// //                         width: 14,
+// //                         height: 14,
+// //                         child: CircularProgressIndicator(
+// //                           color: _accent,
+// //                           strokeWidth: 2,
+// //                         ),
+// //                       )
+// //                     : const Icon(
+// //                         Icons.visibility_outlined,
+// //                         color: _accent,
+// //                         size: 16,
+// //                       ),
+// //                 label: const Text(
+// //                   'Preview audience',
+// //                   style: TextStyle(color: _accent, fontSize: 13),
+// //                 ),
+// //               ),
+// //             ),
+// //             if (_preview != null) ...[
+// //               _Card(
+// //                 borderColor: _accent.withValues(alpha: 0.3),
+// //                 bgColor: _accent.withValues(alpha: 0.06),
+// //                 padding: const EdgeInsets.symmetric(
+// //                   horizontal: 14,
+// //                   vertical: 10,
+// //                 ),
+// //                 child: Row(
+// //                   children: [
+// //                     const Icon(Icons.people_outline, color: _accent, size: 18),
+// //                     const SizedBox(width: 10),
+// //                     RichText(
+// //                       text: TextSpan(
+// //                         style: const TextStyle(color: _textSec, fontSize: 13),
+// //                         children: [
+// //                           TextSpan(
+// //                             text: '${_fmt(_preview!.totalEmployees)} employees',
+// //                             style: const TextStyle(
+// //                               color: _accent,
+// //                               fontWeight: FontWeight.w700,
+// //                             ),
+// //                           ),
+// //                           const TextSpan(text: ' across '),
+// //                           TextSpan(
+// //                             text: '${_preview!.totalOrgs} organizations',
+// //                             style: const TextStyle(
+// //                               color: _accent,
+// //                               fontWeight: FontWeight.w700,
+// //                             ),
+// //                           ),
+// //                           const TextSpan(text: ' will be targeted'),
+// //                         ],
+// //                       ),
+// //                     ),
+// //                   ],
+// //                 ),
+// //               ),
+// //               const SizedBox(height: 10),
+// //             ],
+// //             const SizedBox(height: 8),
+// //             _SectionHeader('Content'),
+// //             const SizedBox(height: 10),
+// //             TextField(
+// //               controller: _titleCtrl,
+// //               style: const TextStyle(color: _textPri, fontSize: 14),
+// //               decoration: const InputDecoration(
+// //                 labelText: 'Notification Title *',
+// //                 hintText: 'e.g. Scheduled Maintenance Tonight',
+// //                 prefixIcon: Icon(
+// //                   Icons.title_outlined,
+// //                   color: _textMut,
+// //                   size: 18,
+// //                 ),
+// //               ),
+// //             ),
+// //             const SizedBox(height: 10),
+// //             TextField(
+// //               controller: _msgCtrl,
+// //               minLines: 3,
+// //               maxLines: 6,
+// //               style: const TextStyle(color: _textPri, fontSize: 13),
+// //               decoration: const InputDecoration(
+// //                 labelText: 'Message *',
+// //                 hintText: 'Write your notification body here...',
+// //                 alignLabelWithHint: true,
+// //                 prefixIcon: Padding(
+// //                   padding: EdgeInsets.only(bottom: 40),
+// //                   child: Icon(Icons.notes_outlined, color: _textMut, size: 18),
+// //                 ),
+// //               ),
+// //             ),
+// //             const SizedBox(height: 10),
+// //             TextField(
+// //               controller: _imgCtrl,
+// //               style: const TextStyle(color: _textPri, fontSize: 13),
+// //               decoration: const InputDecoration(
+// //                 labelText: 'Image / Banner URL (optional)',
+// //                 hintText: 'https://...',
+// //                 prefixIcon: Icon(
+// //                   Icons.image_outlined,
+// //                   color: _textMut,
+// //                   size: 18,
+// //                 ),
+// //               ),
+// //             ),
+// //             const SizedBox(height: 18),
+// //             _Card(
+// //               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+// //               child: Row(
+// //                 children: [
+// //                   const Icon(
+// //                     Icons.schedule_outlined,
+// //                     color: _warning,
+// //                     size: 18,
+// //                   ),
+// //                   const SizedBox(width: 10),
+// //                   const Text(
+// //                     'Schedule for later',
+// //                     style: TextStyle(color: _textPri, fontSize: 13),
+// //                   ),
+// //                   const Spacer(),
+// //                   Switch(
+// //                     value: _schedule,
+// //                     activeThumbColor: _accent,
+// //                     onChanged: (v) => setState(() => _schedule = v),
+// //                   ),
+// //                 ],
+// //               ),
+// //             ),
+// //             if (_schedule) ...[
+// //               const SizedBox(height: 8),
+// //               GestureDetector(
+// //                 onTap: _pickSchedule,
+// //                 child: _Card(
+// //                   borderColor: _warning.withValues(alpha: 0.4),
+// //                   bgColor: _warning.withValues(alpha: 0.06),
+// //                   padding: const EdgeInsets.symmetric(
+// //                     horizontal: 14,
+// //                     vertical: 12,
+// //                   ),
+// //                   child: Row(
+// //                     children: [
+// //                       const Icon(
+// //                         Icons.calendar_month_outlined,
+// //                         color: _warning,
+// //                         size: 18,
+// //                       ),
+// //                       const SizedBox(width: 10),
+// //                       Text(
+// //                         _scheduledAt != null
+// //                             ? DateFormat(
+// //                                 'MMM d, yyyy  h:mm a',
+// //                               ).format(_scheduledAt!)
+// //                             : 'Tap to pick date & time',
+// //                         style: TextStyle(
+// //                           color: _scheduledAt != null ? _textPri : _textMut,
+// //                           fontSize: 13,
+// //                         ),
+// //                       ),
+// //                       const Spacer(),
+// //                       const Icon(
+// //                         Icons.arrow_forward_ios,
+// //                         color: _textMut,
+// //                         size: 14,
+// //                       ),
+// //                     ],
+// //                   ),
+// //                 ),
+// //               ),
+// //             ],
+// //             const SizedBox(height: 24),
+// //             if (_type == 'emergency_alert')
+// //               _Card(
+// //                 borderColor: _error.withValues(alpha: 0.4),
+// //                 bgColor: _error.withValues(alpha: 0.06),
+// //                 padding: const EdgeInsets.symmetric(
+// //                   horizontal: 14,
+// //                   vertical: 10,
+// //                 ),
+// //                 child: const Row(
+// //                   children: [
+// //                     Icon(Icons.warning_amber_rounded, color: _error, size: 18),
+// //                     SizedBox(width: 10),
+// //                     Expanded(
+// //                       child: Text(
+// //                         'Emergency alerts are delivered with high priority and may override DND settings.',
+// //                         style: TextStyle(color: _error, fontSize: 12),
+// //                       ),
+// //                     ),
+// //                   ],
+// //                 ),
+// //               ),
+// //             if (_type == 'emergency_alert') const SizedBox(height: 16),
+// //             SizedBox(
+// //               width: double.infinity,
+// //               child: ElevatedButton.icon(
+// //                 onPressed: _sending ? null : _doSend,
+// //                 icon: _sending
+// //                     ? const SizedBox(
+// //                         width: 16,
+// //                         height: 16,
+// //                         child: CircularProgressIndicator(
+// //                           color: Colors.white,
+// //                           strokeWidth: 2,
+// //                         ),
+// //                       )
+// //                     : Icon(
+// //                         _schedule
+// //                             ? Icons.schedule_send_outlined
+// //                             : Icons.send_outlined,
+// //                       ),
+// //                 label: Text(_schedule ? 'Schedule Notification' : 'Send Now'),
+// //                 style: ElevatedButton.styleFrom(
+// //                   backgroundColor: _type == 'emergency_alert'
+// //                       ? _error
+// //                       : _accent,
+// //                 ),
+// //               ),
+// //             ),
+// //             const SizedBox(height: 30),
+// //           ],
+// //         ),
+// //         if (_sending)
+// //           Positioned.fill(
+// //             child: Container(
+// //               color: Colors.black.withValues(alpha: 0.4),
+// //               child: const Center(
+// //                 child: CircularProgressIndicator(
+// //                   color: _accent,
+// //                   strokeWidth: 2,
+// //                 ),
+// //               ),
+// //             ),
+// //           ),
+// //       ],
+// //     );
+// //   }
+
+// //   @override
+// //   void dispose() {
+// //     _titleCtrl.dispose();
+// //     _msgCtrl.dispose();
+// //     _imgCtrl.dispose();
+// //     _tenantCtrl.dispose();
+// //     _planCtrl.dispose();
+// //     _versionCtrl.dispose();
+// //     super.dispose();
+// //   }
+// // }
+
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 8 — HISTORY SCREEN
+// // // ─────────────────────────────────────────────────────────────────────────────
+
+// // class _HistoryScreen extends StatefulWidget {
+// //   final GnService svc;
+// //   const _HistoryScreen({required this.svc});
+
+// //   @override
+// //   State<_HistoryScreen> createState() => _HistoryScreenState();
+// // }
+
+// // class _HistoryScreenState extends State<_HistoryScreen> {
+// //   List<GnNotification> _items = [];
+// //   bool _loading = true;
+// //   // FIXED: renamed from _error to _errMsg
+// //   String? _errMsg;
+// //   int _page = 1;
+// //   int _total = 0;
+// //   static const _limit = 20;
+
+// //   String? _filterType;
+// //   String? _filterStatus;
+// //   final _searchCtrl = TextEditingController();
+
+// //   @override
+// //   void initState() {
+// //     super.initState();
+// //     _load();
+// //   }
+
+// //   Future<void> _load({bool reset = false}) async {
+// //     if (reset) _page = 1;
+// //     setState(() {
+// //       _loading = true;
+// //       _errMsg = null;
+// //     });
+// //     try {
+// //       final data = await widget.svc.history(
+// //         page: _page,
+// //         limit: _limit,
+// //         type: _filterType,
+// //         status: _filterStatus,
+// //         search: _searchCtrl.text.trim().isEmpty
+// //             ? null
+// //             : _searchCtrl.text.trim(),
+// //       );
+// //       setState(() {
+// //         _total = data['total'] ?? 0;
+// //         _items = (data['data'] as List)
+// //             .map((e) => GnNotification.fromJson(e))
+// //             .toList();
+// //         _loading = false;
+// //       });
+// //     } catch (e) {
+// //       setState(() {
+// //         _errMsg = e.toString();
+// //         _loading = false;
+// //       });
+// //     }
+// //   }
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     final totalPages = (_total / _limit).ceil();
+// //     return Column(
+// //       children: [
+// //         Container(
+// //           color: _surface,
+// //           padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+// //           child: Column(
+// //             children: [
+// //               TextField(
+// //                 controller: _searchCtrl,
+// //                 onSubmitted: (_) => _load(reset: true),
+// //                 style: const TextStyle(color: _textPri, fontSize: 13),
+// //                 decoration: InputDecoration(
+// //                   hintText: 'Search by title...',
+// //                   prefixIcon: const Icon(
+// //                     Icons.search,
+// //                     color: _textMut,
+// //                     size: 18,
+// //                   ),
+// //                   suffixIcon: _searchCtrl.text.isNotEmpty
+// //                       ? IconButton(
+// //                           icon: const Icon(
+// //                             Icons.close,
+// //                             color: _textMut,
+// //                             size: 16,
+// //                           ),
+// //                           onPressed: () {
+// //                             _searchCtrl.clear();
+// //                             _load(reset: true);
+// //                           },
+// //                         )
+// //                       : null,
+// //                   isDense: true,
+// //                 ),
+// //               ),
+// //               const SizedBox(height: 8),
+// //               SingleChildScrollView(
+// //                 scrollDirection: Axis.horizontal,
+// //                 child: Row(
+// //                   children: [
+// //                     _FilterChip(
+// //                       label: 'All Types',
+// //                       selected: _filterType == null,
+// //                       onTap: () => setState(() => _filterType = null),
+// //                     ),
+// //                     ...[
+// //                       'general',
+// //                       'maintenance',
+// //                       'app_update',
+// //                       'billing_reminder',
+// //                       'emergency_alert',
+// //                     ].map(
+// //                       (t) => _FilterChip(
+// //                         label: _typeLabel(t),
+// //                         selected: _filterType == t,
+// //                         color: _typeColor(t),
+// //                         onTap: () => setState(
+// //                           () => _filterType = _filterType == t ? null : t,
+// //                         ),
+// //                       ),
+// //                     ),
+// //                     const SizedBox(width: 12),
+// //                     _FilterChip(
+// //                       label: 'All Status',
+// //                       selected: _filterStatus == null,
+// //                       onTap: () => setState(() => _filterStatus = null),
+// //                     ),
+// //                     ...['sent', 'scheduled', 'failed', 'sending'].map(
+// //                       (s) => _FilterChip(
+// //                         label: s.capitalize(),
+// //                         selected: _filterStatus == s,
+// //                         color: _statusColor(s),
+// //                         onTap: () => setState(
+// //                           () => _filterStatus = _filterStatus == s ? null : s,
+// //                         ),
+// //                       ),
+// //                     ),
+// //                   ],
+// //                 ),
+// //               ),
+// //               const SizedBox(height: 6),
+// //               SizedBox(
+// //                 width: double.infinity,
+// //                 child: ElevatedButton(
+// //                   onPressed: () => _load(reset: true),
+// //                   style: ElevatedButton.styleFrom(
+// //                     padding: const EdgeInsets.symmetric(vertical: 9),
+// //                     backgroundColor: _surfaceEl,
+// //                     foregroundColor: _textPri,
+// //                   ),
+// //                   child: const Text(
+// //                     'Apply Filters',
+// //                     style: TextStyle(fontSize: 13),
+// //                   ),
+// //                 ),
+// //               ),
+// //             ],
+// //           ),
+// //         ),
+// //         Expanded(
+// //           child: _loading
+// //               ? const Center(
+// //                   child: CircularProgressIndicator(
+// //                     color: _accent,
+// //                     strokeWidth: 2,
+// //                   ),
+// //                 )
+// //               : _errMsg != null
+// //               ? Center(
+// //                   child: Text(
+// //                     _errMsg!,
+// //                     style: const TextStyle(color: _textSec),
+// //                   ),
+// //                 )
+// //               : _items.isEmpty
+// //               ? const Center(
+// //                   child: Text(
+// //                     'No notifications found',
+// //                     style: TextStyle(color: _textMut),
+// //                   ),
+// //                 )
+// //               : ListView.separated(
+// //                   padding: const EdgeInsets.all(14),
+// //                   itemCount: _items.length,
+// //                   separatorBuilder: (_, _) => const SizedBox(height: 8),
+// //                   itemBuilder: (ctx, i) => _NotifTile(
+// //                     _items[i],
+// //                     onTap: () => Navigator.push(
+// //                       ctx,
+// //                       MaterialPageRoute(
+// //                         builder: (_) =>
+// //                             _DetailScreen(svc: widget.svc, id: _items[i].id),
+// //                       ),
+// //                     ),
+// //                   ),
+// //                 ),
+// //         ),
+// //         if (!_loading && _total > _limit)
+// //           Container(
+// //             color: _surface,
+// //             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+// //             child: Row(
+// //               children: [
+// //                 Text(
+// //                   '$_total results',
+// //                   style: const TextStyle(color: _textMut, fontSize: 12),
+// //                 ),
+// //                 const Spacer(),
+// //                 IconButton(
+// //                   icon: const Icon(Icons.chevron_left, color: _textSec),
+// //                   onPressed: _page > 1
+// //                       ? () {
+// //                           _page--;
+// //                           _load();
+// //                         }
+// //                       : null,
+// //                 ),
+// //                 Text(
+// //                   '$_page / $totalPages',
+// //                   style: const TextStyle(color: _textPri, fontSize: 13),
+// //                 ),
+// //                 IconButton(
+// //                   icon: const Icon(Icons.chevron_right, color: _textSec),
+// //                   onPressed: _page < totalPages
+// //                       ? () {
+// //                           _page++;
+// //                           _load();
+// //                         }
+// //                       : null,
+// //                 ),
+// //               ],
+// //             ),
+// //           ),
+// //       ],
+// //     );
+// //   }
+
+// //   @override
+// //   void dispose() {
+// //     _searchCtrl.dispose();
+// //     super.dispose();
+// //   }
+// // }
+
+// // class _FilterChip extends StatelessWidget {
+// //   final String label;
+// //   final bool selected;
+// //   final Color? color;
+// //   final VoidCallback? onTap;
+
+// //   const _FilterChip({
+// //     required this.label,
+// //     required this.selected,
+// //     this.color,
+// //     this.onTap,
+// //   });
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     final c = color ?? _accent;
+// //     return GestureDetector(
+// //       onTap: onTap,
+// //       child: Container(
+// //         margin: const EdgeInsets.only(right: 6),
+// //         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+// //         decoration: BoxDecoration(
+// //           color: selected ? c.withValues(alpha: 0.15) : _surfaceEl,
+// //           borderRadius: BorderRadius.circular(20),
+// //           border: Border.all(
+// //             color: selected ? c.withValues(alpha: 0.5) : _border,
+// //           ),
+// //         ),
+// //         child: Text(
+// //           label,
+// //           style: TextStyle(
+// //             color: selected ? c : _textMut,
+// //             fontSize: 11,
+// //             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+// //           ),
+// //         ),
+// //       ),
+// //     );
+// //   }
+// // }
+
+// // extension _StrExt on String {
+// //   String capitalize() => isEmpty ? this : this[0].toUpperCase() + substring(1);
+// // }
+
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 9 — SCHEDULED SCREEN
+// // // ─────────────────────────────────────────────────────────────────────────────
+
+// // class _ScheduledScreen extends StatefulWidget {
+// //   final GnService svc;
+// //   const _ScheduledScreen({required this.svc});
+
+// //   @override
+// //   State<_ScheduledScreen> createState() => _ScheduledScreenState();
+// // }
+
+// // class _ScheduledScreenState extends State<_ScheduledScreen> {
+// //   List<GnNotification> _items = [];
+// //   bool _loading = true;
+
+// //   @override
+// //   void initState() {
+// //     super.initState();
+// //     _load();
+// //   }
+
+// //   Future<void> _load() async {
+// //     setState(() => _loading = true);
+// //     try {
+// //       final items = await widget.svc.scheduled();
+// //       setState(() {
+// //         _items = items;
+// //         _loading = false;
+// //       });
+// //     } catch (_) {
+// //       setState(() => _loading = false);
+// //     }
+// //   }
+
+// //   Future<void> _cancel(int id) async {
+// //     final ok = await showDialog<bool>(
+// //       context: context,
+// //       builder: (ctx) => AlertDialog(
+// //         backgroundColor: _surfaceEl,
+// //         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+// //         title: const Text(
+// //           'Cancel Notification',
+// //           style: TextStyle(color: _textPri, fontSize: 16),
+// //         ),
+// //         content: const Text(
+// //           'Are you sure you want to cancel this scheduled notification?',
+// //           style: TextStyle(color: _textSec, fontSize: 14),
+// //         ),
+// //         actions: [
+// //           TextButton(
+// //             onPressed: () => Navigator.pop(ctx, false),
+// //             child: const Text('Keep', style: TextStyle(color: _textSec)),
+// //           ),
+// //           ElevatedButton(
+// //             onPressed: () => Navigator.pop(ctx, true),
+// //             style: ElevatedButton.styleFrom(backgroundColor: _error),
+// //             child: const Text('Cancel Notif'),
+// //           ),
+// //         ],
+// //       ),
+// //     );
+// //     if (ok != true) return;
+// //     try {
+// //       await widget.svc.cancel(id);
+// //       if (!mounted) return;
+// //       _snack('Notification cancelled', isSuccess: true);
+// //       _load();
+// //     } catch (e) {
+// //       if (!mounted) return;
+// //       _snack('Failed: $e');
+// //     }
+// //   }
+
+// //   Future<void> _reschedule(GnNotification n) async {
+// //     DateTime? picked = n.scheduledAt;
+// //     final date = await showDatePicker(
+// //       context: context,
+// //       initialDate: picked ?? DateTime.now().add(const Duration(hours: 1)),
+// //       firstDate: DateTime.now(),
+// //       lastDate: DateTime.now().add(const Duration(days: 365)),
+// //       builder: (ctx, child) => Theme(
+// //         data: ThemeData.dark().copyWith(
+// //           colorScheme: const ColorScheme.dark(primary: _accent),
+// //         ),
+// //         child: child!,
+// //       ),
+// //     );
+// //     if (date == null) return;
+// //     if (!mounted) return;
+// //     final time = await showTimePicker(
+// //       context: context,
+// //       initialTime: picked != null
+// //           ? TimeOfDay.fromDateTime(picked)
+// //           : const TimeOfDay(hour: 9, minute: 0),
+// //       builder: (ctx, child) => Theme(
+// //         data: ThemeData.dark().copyWith(
+// //           colorScheme: const ColorScheme.dark(primary: _accent),
+// //         ),
+// //         child: child!,
+// //       ),
+// //     );
+// //     if (time == null) return;
+// //     final newDt = DateTime(
+// //       date.year,
+// //       date.month,
+// //       date.day,
+// //       time.hour,
+// //       time.minute,
+// //     );
+// //     try {
+// //       await widget.svc.reschedule(n.id, newDt.toIso8601String());
+// //       if (!mounted) return;
+// //       _snack(
+// //         'Rescheduled to ${DateFormat('MMM d, h:mm a').format(newDt)}',
+// //         isSuccess: true,
+// //       );
+// //       _load();
+// //     } catch (e) {
+// //       if (!mounted) return;
+// //       _snack('Failed: $e');
+// //     }
+// //   }
+
+// //   void _snack(String msg, {bool isSuccess = false}) {
+// //     if (!mounted) return;
+// //     ScaffoldMessenger.of(context).showSnackBar(
+// //       SnackBar(
+// //         content: Text(msg),
+// //         backgroundColor: isSuccess ? _success : _error,
+// //         behavior: SnackBarBehavior.floating,
+// //         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+// //       ),
+// //     );
+// //   }
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     if (_loading) {
+// //       return const Center(
+// //         child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
+// //       );
+// //     }
+// //     if (_items.isEmpty) {
+// //       return const Center(
+// //         child: Column(
+// //           mainAxisSize: MainAxisSize.min,
+// //           children: [
+// //             Icon(Icons.schedule_outlined, color: _textMut, size: 40),
+// //             SizedBox(height: 12),
+// //             Text(
+// //               'No scheduled notifications',
+// //               style: TextStyle(color: _textMut),
+// //             ),
+// //           ],
+// //         ),
+// //       );
+// //     }
+// //     return RefreshIndicator(
+// //       onRefresh: _load,
+// //       color: _accent,
+// //       backgroundColor: _surfaceEl,
+// //       child: ListView.separated(
+// //         padding: const EdgeInsets.all(14),
+// //         itemCount: _items.length,
+// //         separatorBuilder: (_, _) => const SizedBox(height: 10),
+// //         itemBuilder: (_, i) {
+// //           final n = _items[i];
+// //           final fmt = DateFormat('MMM d, yyyy  ·  h:mm a');
+// //           return _Card(
+// //             borderColor: _warning.withValues(alpha: 0.3),
+// //             child: Column(
+// //               crossAxisAlignment: CrossAxisAlignment.start,
+// //               children: [
+// //                 Row(
+// //                   children: [
+// //                     Expanded(
+// //                       child: Text(
+// //                         n.title,
+// //                         style: const TextStyle(
+// //                           color: _textPri,
+// //                           fontSize: 14,
+// //                           fontWeight: FontWeight.w600,
+// //                         ),
+// //                         maxLines: 1,
+// //                         overflow: TextOverflow.ellipsis,
+// //                       ),
+// //                     ),
+// //                     _TypeChip(n.type),
+// //                   ],
+// //                 ),
+// //                 const SizedBox(height: 4),
+// //                 Text(
+// //                   n.message,
+// //                   style: const TextStyle(color: _textSec, fontSize: 12),
+// //                   maxLines: 2,
+// //                   overflow: TextOverflow.ellipsis,
+// //                 ),
+// //                 const SizedBox(height: 10),
+// //                 Container(
+// //                   padding: const EdgeInsets.symmetric(
+// //                     horizontal: 10,
+// //                     vertical: 6,
+// //                   ),
+// //                   decoration: BoxDecoration(
+// //                     color: _warning.withValues(alpha: 0.08),
+// //                     borderRadius: BorderRadius.circular(7),
+// //                     border: Border.all(color: _warning.withValues(alpha: 0.25)),
+// //                   ),
+// //                   child: Row(
+// //                     children: [
+// //                       const Icon(
+// //                         Icons.schedule_outlined,
+// //                         color: _warning,
+// //                         size: 14,
+// //                       ),
+// //                       const SizedBox(width: 6),
+// //                       Text(
+// //                         n.scheduledAt != null
+// //                             ? fmt.format(n.scheduledAt!)
+// //                             : '—',
+// //                         style: const TextStyle(
+// //                           color: _warning,
+// //                           fontSize: 12,
+// //                           fontWeight: FontWeight.w600,
+// //                         ),
+// //                       ),
+// //                     ],
+// //                   ),
+// //                 ),
+// //                 const SizedBox(height: 10),
+// //                 Row(
+// //                   children: [
+// //                     Container(
+// //                       padding: const EdgeInsets.symmetric(
+// //                         horizontal: 8,
+// //                         vertical: 4,
+// //                       ),
+// //                       decoration: BoxDecoration(
+// //                         color: _border,
+// //                         borderRadius: BorderRadius.circular(5),
+// //                       ),
+// //                       child: Text(
+// //                         _scopeLabel(n.scope),
+// //                         style: const TextStyle(color: _textSec, fontSize: 11),
+// //                       ),
+// //                     ),
+// //                     const Spacer(),
+// //                     TextButton.icon(
+// //                       onPressed: () => _reschedule(n),
+// //                       icon: const Icon(
+// //                         Icons.edit_calendar_outlined,
+// //                         size: 14,
+// //                         color: _accent,
+// //                       ),
+// //                       label: const Text(
+// //                         'Reschedule',
+// //                         style: TextStyle(color: _accent, fontSize: 12),
+// //                       ),
+// //                       style: TextButton.styleFrom(
+// //                         padding: const EdgeInsets.symmetric(
+// //                           horizontal: 10,
+// //                           vertical: 5,
+// //                         ),
+// //                       ),
+// //                     ),
+// //                     const SizedBox(width: 4),
+// //                     TextButton.icon(
+// //                       onPressed: () => _cancel(n.id),
+// //                       icon: const Icon(
+// //                         Icons.cancel_outlined,
+// //                         size: 14,
+// //                         color: _error,
+// //                       ),
+// //                       label: const Text(
+// //                         'Cancel',
+// //                         style: TextStyle(color: _error, fontSize: 12),
+// //                       ),
+// //                       style: TextButton.styleFrom(
+// //                         padding: const EdgeInsets.symmetric(
+// //                           horizontal: 10,
+// //                           vertical: 5,
+// //                         ),
+// //                       ),
+// //                     ),
+// //                   ],
+// //                 ),
+// //               ],
+// //             ),
+// //           );
+// //         },
+// //       ),
+// //     );
+// //   }
+// // }
+
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 10 — ANALYTICS SCREEN
+// // // ─────────────────────────────────────────────────────────────────────────────
+
+// // class _AnalyticsScreen extends StatefulWidget {
+// //   final GnService svc;
+// //   const _AnalyticsScreen({required this.svc});
+
+// //   @override
+// //   State<_AnalyticsScreen> createState() => _AnalyticsScreenState();
+// // }
+
+// // class _AnalyticsScreenState extends State<_AnalyticsScreen> {
+// //   List<GnAnalyticsTrend> _trend = [];
+// //   List<GnTypeBreakdown> _byType = [];
+// //   bool _loading = true;
+// //   // FIXED: renamed from _error to _errMsg
+// //   String? _errMsg;
+
+// //   @override
+// //   void initState() {
+// //     super.initState();
+// //     _load();
+// //   }
+
+// //   Future<void> _load() async {
+// //     setState(() {
+// //       _loading = true;
+// //       _errMsg = null;
+// //     });
+// //     try {
+// //       final data = await widget.svc.analytics();
+// //       setState(() {
+// //         _trend = (data['trend'] as List)
+// //             .map((e) => GnAnalyticsTrend.fromJson(e))
+// //             .toList();
+// //         _byType = (data['by_type'] as List)
+// //             .map((e) => GnTypeBreakdown.fromJson(e))
+// //             .toList();
+// //         _loading = false;
+// //       });
+// //     } catch (e) {
+// //       setState(() {
+// //         _errMsg = e.toString();
+// //         _loading = false;
+// //       });
+// //     }
+// //   }
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     if (_loading) {
+// //       return const Center(
+// //         child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
+// //       );
+// //     }
+// //     if (_errMsg != null) {
+// //       return Center(
+// //         child: Column(
+// //           mainAxisSize: MainAxisSize.min,
+// //           children: [
+// //             Text(_errMsg!, style: const TextStyle(color: _textSec)),
+// //             const SizedBox(height: 12),
+// //             ElevatedButton(onPressed: _load, child: const Text('Retry')),
+// //           ],
+// //         ),
+// //       );
+// //     }
+// //     return RefreshIndicator(
+// //       onRefresh: _load,
+// //       color: _accent,
+// //       backgroundColor: _surfaceEl,
+// //       child: ListView(
+// //         padding: const EdgeInsets.all(16),
+// //         children: [
+// //           _SectionHeader('30-Day Trend'),
+// //           const SizedBox(height: 12),
+// //           _Card(
+// //             child: _trend.isEmpty
+// //                 ? const Padding(
+// //                     padding: EdgeInsets.symmetric(vertical: 20),
+// //                     child: Center(
+// //                       child: Text('No data', style: TextStyle(color: _textMut)),
+// //                     ),
+// //                   )
+// //                 : _BarChart(trend: _trend),
+// //           ),
+// //           const SizedBox(height: 20),
+// //           _SectionHeader('Performance by Type'),
+// //           const SizedBox(height: 12),
+// //           if (_byType.isEmpty)
+// //             const Center(
+// //               child: Text('No data', style: TextStyle(color: _textMut)),
+// //             )
+// //           else
+// //             ..._byType.map((t) {
+// //               final c = _typeColor(t.type);
+// //               return Padding(
+// //                 padding: const EdgeInsets.only(bottom: 10),
+// //                 child: _Card(
+// //                   borderColor: c.withValues(alpha: 0.2),
+// //                   child: Column(
+// //                     crossAxisAlignment: CrossAxisAlignment.start,
+// //                     children: [
+// //                       Row(
+// //                         children: [
+// //                           _TypeChip(t.type),
+// //                           const Spacer(),
+// //                           Text(
+// //                             '${_fmt(t.total)} campaigns',
+// //                             style: const TextStyle(
+// //                               color: _textMut,
+// //                               fontSize: 11,
+// //                             ),
+// //                           ),
+// //                         ],
+// //                       ),
+// //                       const SizedBox(height: 12),
+// //                       _ProgressRow(
+// //                         label: 'Sent',
+// //                         value: t.totalSent,
+// //                         total: t.total > 0 ? t.total * 1000 : 1,
+// //                         color: _success,
+// //                       ),
+// //                       _ProgressRow(
+// //                         label: 'Failed',
+// //                         value: t.totalFailed,
+// //                         total: (t.totalSent + t.totalFailed) > 0
+// //                             ? t.totalSent + t.totalFailed
+// //                             : 1,
+// //                         color: _error,
+// //                       ),
+// //                       Row(
+// //                         children: [
+// //                           const Text(
+// //                             'Open Rate',
+// //                             style: TextStyle(color: _textSec, fontSize: 12),
+// //                           ),
+// //                           const Spacer(),
+// //                           Container(
+// //                             padding: const EdgeInsets.symmetric(
+// //                               horizontal: 10,
+// //                               vertical: 4,
+// //                             ),
+// //                             decoration: BoxDecoration(
+// //                               color: _cyan.withValues(alpha: 0.12),
+// //                               borderRadius: BorderRadius.circular(20),
+// //                             ),
+// //                             child: Text(
+// //                               '${t.openRate.toStringAsFixed(1)}%',
+// //                               style: const TextStyle(
+// //                                 color: _cyan,
+// //                                 fontSize: 13,
+// //                                 fontWeight: FontWeight.w700,
+// //                               ),
+// //                             ),
+// //                           ),
+// //                         ],
+// //                       ),
+// //                     ],
+// //                   ),
+// //                 ),
+// //               );
+// //             }),
+// //         ],
+// //       ),
+// //     );
+// //   }
+// // }
+
+// // // Simple bar chart widget (no external packages)
+// // class _BarChart extends StatelessWidget {
+// //   final List<GnAnalyticsTrend> trend;
+// //   const _BarChart({required this.trend});
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     final maxVal = trend.fold<int>(0, (m, t) => t.sent > m ? t.sent : m);
+// //     final show = trend.length > 14 ? trend.sublist(trend.length - 14) : trend;
+// //     return SizedBox(
+// //       height: 130,
+// //       child: Row(
+// //         crossAxisAlignment: CrossAxisAlignment.end,
+// //         children: show.map((t) {
+// //           final sentH = maxVal > 0 ? (t.sent / maxVal) * 100 : 0.0;
+// //           final failH = maxVal > 0 ? (t.failed / maxVal) * 100 : 0.0;
+// //           final day = t.date.length >= 10 ? t.date.substring(8, 10) : t.date;
+// //           return Expanded(
+// //             child: Padding(
+// //               padding: const EdgeInsets.symmetric(horizontal: 2),
+// //               child: Column(
+// //                 mainAxisAlignment: MainAxisAlignment.end,
+// //                 children: [
+// //                   Stack(
+// //                     alignment: Alignment.bottomCenter,
+// //                     children: [
+// //                       Container(
+// //                         height: sentH.clamp(2.0, 100.0),
+// //                         decoration: BoxDecoration(
+// //                           color: _accent.withValues(alpha: 0.7),
+// //                           borderRadius: const BorderRadius.vertical(
+// //                             top: Radius.circular(2),
+// //                           ),
+// //                         ),
+// //                       ),
+// //                       if (failH > 0)
+// //                         Container(
+// //                           height: failH.clamp(2.0, 100.0),
+// //                           decoration: BoxDecoration(
+// //                             color: _error.withValues(alpha: 0.8),
+// //                             borderRadius: const BorderRadius.vertical(
+// //                               top: Radius.circular(2),
+// //                             ),
+// //                           ),
+// //                         ),
+// //                     ],
+// //                   ),
+// //                   const SizedBox(height: 4),
+// //                   Text(
+// //                     day,
+// //                     style: const TextStyle(color: _textMut, fontSize: 9),
+// //                   ),
+// //                 ],
+// //               ),
+// //             ),
+// //           );
+// //         }).toList(),
+// //       ),
+// //     );
+// //   }
+// // }
+
+// // // ─────────────────────────────────────────────────────────────────────────────
+// // // SECTION 11 — DETAIL SCREEN
+// // // ─────────────────────────────────────────────────────────────────────────────
+
+// // class _DetailScreen extends StatefulWidget {
+// //   final GnService svc;
+// //   final int id;
+// //   const _DetailScreen({required this.svc, required this.id});
+
+// //   @override
+// //   State<_DetailScreen> createState() => _DetailScreenState();
+// // }
+
+// // class _DetailScreenState extends State<_DetailScreen> {
+// //   GnNotification? _n;
+// //   List<Map<String, dynamic>> _breakdown = [];
+// //   List<Map<String, dynamic>> _orgStats = [];
+// //   bool _loading = true;
+// //   // FIXED: renamed from _error to _errMsg
+// //   String? _errMsg;
+// //   bool _retrying = false;
+
+// //   @override
+// //   void initState() {
+// //     super.initState();
+// //     _load();
+// //   }
+
+// //   Future<void> _load() async {
+// //     setState(() {
+// //       _loading = true;
+// //       _errMsg = null;
+// //     });
+// //     try {
+// //       final data = await widget.svc.detail(widget.id);
+// //       setState(() {
+// //         _n = GnNotification.fromJson(data['notification']);
+// //         _breakdown = List<Map<String, dynamic>>.from(data['breakdown'] ?? []);
+// //         _orgStats = List<Map<String, dynamic>>.from(data['org_stats'] ?? []);
+// //         _loading = false;
+// //       });
+// //     } catch (e) {
+// //       setState(() {
+// //         _errMsg = e.toString();
+// //         _loading = false;
+// //       });
+// //     }
+// //   }
+
+// //   Future<void> _retry() async {
+// //     setState(() => _retrying = true);
+// //     try {
+// //       final r = await widget.svc.retry(widget.id);
+// //       _snack('Recovered ${r['retried'] ?? 0} deliveries', isSuccess: true);
+// //       _load();
+// //     } catch (e) {
+// //       _snack('Retry failed: $e');
+// //     } finally {
+// //       setState(() => _retrying = false);
+// //     }
+// //   }
+
+// //   void _snack(String msg, {bool isSuccess = false}) {
+// //     if (!mounted) return;
+// //     ScaffoldMessenger.of(context).showSnackBar(
+// //       SnackBar(
+// //         content: Text(msg),
+// //         backgroundColor: isSuccess ? _success : _error,
+// //         behavior: SnackBarBehavior.floating,
+// //         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+// //       ),
+// //     );
+// //   }
+
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     return Scaffold(
+// //       backgroundColor: _bg,
+// //       appBar: AppBar(
+// //         backgroundColor: _surface,
+// //         title: const Text(
+// //           'Notification Detail',
+// //           style: TextStyle(color: _textPri, fontSize: 16),
+// //         ),
+// //         iconTheme: const IconThemeData(color: _textSec),
+// //         actions: [
+// //           if (_n?.status == 'sent' && (_n?.failedCount ?? 0) > 0)
+// //             TextButton.icon(
+// //               onPressed: _retrying ? null : _retry,
+// //               icon: _retrying
+// //                   ? const SizedBox(
+// //                       width: 14,
+// //                       height: 14,
+// //                       child: CircularProgressIndicator(
+// //                         color: _accent,
+// //                         strokeWidth: 2,
+// //                       ),
+// //                     )
+// //                   : const Icon(Icons.refresh, color: _accent, size: 16),
+// //               label: const Text(
+// //                 'Retry Failed',
+// //                 style: TextStyle(color: _accent, fontSize: 13),
+// //               ),
+// //             ),
+// //         ],
+// //       ),
+// //       body: _loading
+// //           ? const Center(
+// //               child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
+// //             )
+// //           : _errMsg != null
+// //           ? Center(
+// //               child: Column(
+// //                 mainAxisSize: MainAxisSize.min,
+// //                 children: [
+// //                   Text(_errMsg!, style: const TextStyle(color: _textSec)),
+// //                   const SizedBox(height: 12),
+// //                   ElevatedButton(onPressed: _load, child: const Text('Retry')),
+// //                 ],
+// //               ),
+// //             )
+// //           : _buildBody(),
+// //     );
+// //   }
+
+// //   Widget _buildBody() {
+// //     final n = _n!;
+// //     final fmt = DateFormat('MMM d, yyyy  h:mm a');
+// //     return ListView(
+// //       padding: const EdgeInsets.all(16),
+// //       children: [
+// //         _Card(
+// //           borderColor: _typeColor(n.type).withValues(alpha: 0.3),
+// //           child: Column(
+// //             crossAxisAlignment: CrossAxisAlignment.start,
+// //             children: [
+// //               Row(
+// //                 children: [
+// //                   _TypeChip(n.type),
+// //                   const SizedBox(width: 8),
+// //                   _StatusChip(n.status),
+// //                   const Spacer(),
+// //                   Text(
+// //                     '#${n.id}',
+// //                     style: const TextStyle(color: _textMut, fontSize: 12),
+// //                   ),
+// //                 ],
+// //               ),
+// //               const SizedBox(height: 10),
+// //               Text(
+// //                 n.title,
+// //                 style: const TextStyle(
+// //                   color: _textPri,
+// //                   fontSize: 16,
+// //                   fontWeight: FontWeight.w700,
+// //                 ),
+// //               ),
+// //               const SizedBox(height: 6),
+// //               Text(
+// //                 n.message,
+// //                 style: const TextStyle(
+// //                   color: _textSec,
+// //                   fontSize: 13,
+// //                   height: 1.5,
+// //                 ),
+// //               ),
+// //               const SizedBox(height: 12),
+// //               _infoRow(Icons.people_outline, 'Audience', _scopeLabel(n.scope)),
+// //               _infoRow(Icons.person_outline, 'Created by', n.createdBy),
+// //               _infoRow(
+// //                 Icons.calendar_today_outlined,
+// //                 'Created',
+// //                 fmt.format(n.createdAt),
+// //               ),
+// //               if (n.sentAt != null)
+// //                 _infoRow(Icons.send_outlined, 'Sent', fmt.format(n.sentAt!)),
+// //               if (n.scheduledAt != null)
+// //                 _infoRow(
+// //                   Icons.schedule_outlined,
+// //                   'Scheduled',
+// //                   fmt.format(n.scheduledAt!),
+// //                 ),
+// //             ],
+// //           ),
+// //         ),
+// //         const SizedBox(height: 16),
+// //         _SectionHeader('Delivery Summary'),
+// //         const SizedBox(height: 10),
+// //         GridView.count(
+// //           crossAxisCount: 2,
+// //           crossAxisSpacing: 10,
+// //           mainAxisSpacing: 10,
+// //           shrinkWrap: true,
+// //           physics: const NeverScrollableScrollPhysics(),
+// //           childAspectRatio: 2.0,
+// //           children: [
+// //             _MiniStat('Total', _fmt(n.totalTargets), _textPri),
+// //             _MiniStat('Sent', _fmt(n.sentCount), _success),
+// //             _MiniStat('Failed', _fmt(n.failedCount), _error),
+// //             _MiniStat('Opened', '${n.openRate.toStringAsFixed(1)}%', _cyan),
+// //           ],
+// //         ),
+// //         const SizedBox(height: 12),
+// //         _Card(
+// //           child: Column(
+// //             crossAxisAlignment: CrossAxisAlignment.start,
+// //             children: [
+// //               _ProgressRow(
+// //                 label: 'Sent',
+// //                 value: n.sentCount,
+// //                 total: n.totalTargets > 0 ? n.totalTargets : 1,
+// //                 color: _success,
+// //               ),
+// //               _ProgressRow(
+// //                 label: 'Failed',
+// //                 value: n.failedCount,
+// //                 total: n.totalTargets > 0 ? n.totalTargets : 1,
+// //                 color: _error,
+// //               ),
+// //               _ProgressRow(
+// //                 label: 'Opened',
+// //                 value: n.openedCount,
+// //                 total: n.sentCount > 0 ? n.sentCount : 1,
+// //                 color: _cyan,
+// //               ),
+// //             ],
+// //           ),
+// //         ),
+// //         const SizedBox(height: 16),
+// //         if (_breakdown.isNotEmpty) ...[
+// //           _SectionHeader('Status Breakdown'),
+// //           const SizedBox(height: 10),
+// //           _Card(
+// //             child: Column(
+// //               children: _breakdown.map((b) {
+// //                 final statusStr = b['delivery_status'] as String? ?? '';
+// //                 final count = b['count'] ?? 0;
+// //                 final c = _statusColor(statusStr);
+// //                 return Padding(
+// //                   padding: const EdgeInsets.only(bottom: 8),
+// //                   child: Row(
+// //                     children: [
+// //                       Container(
+// //                         width: 8,
+// //                         height: 8,
+// //                         decoration: BoxDecoration(
+// //                           color: c,
+// //                           shape: BoxShape.circle,
+// //                         ),
+// //                       ),
+// //                       const SizedBox(width: 8),
+// //                       Text(
+// //                         statusStr.toUpperCase(),
+// //                         style: TextStyle(
+// //                           color: c,
+// //                           fontSize: 11,
+// //                           fontWeight: FontWeight.w600,
+// //                           letterSpacing: 0.5,
+// //                         ),
+// //                       ),
+// //                       const Spacer(),
+// //                       Text(
+// //                         '$count',
+// //                         style: const TextStyle(
+// //                           color: _textPri,
+// //                           fontSize: 14,
+// //                           fontWeight: FontWeight.w600,
+// //                         ),
+// //                       ),
+// //                     ],
+// //                   ),
+// //                 );
+// //               }).toList(),
+// //             ),
+// //           ),
+// //           const SizedBox(height: 16),
+// //         ],
+// //         if (_orgStats.isNotEmpty) ...[
+// //           _SectionHeader('Per-Organization Stats'),
+// //           const SizedBox(height: 10),
+// //           ..._orgStats.map((o) {
+// //             final sent = o['sent'] ?? 0;
+// //             final failed = o['failed'] ?? 0;
+// //             final opened = o['opened'] ?? 0;
+// //             final total = o['total'] ?? 1;
+// //             return Padding(
+// //               padding: const EdgeInsets.only(bottom: 8),
+// //               child: _Card(
+// //                 padding: const EdgeInsets.all(12),
+// //                 child: Column(
+// //                   crossAxisAlignment: CrossAxisAlignment.start,
+// //                   children: [
+// //                     Text(
+// //                       o['tenant_id'] as String? ?? '',
+// //                       style: const TextStyle(
+// //                         color: _textPri,
+// //                         fontSize: 13,
+// //                         fontWeight: FontWeight.w600,
+// //                       ),
+// //                     ),
+// //                     const SizedBox(height: 6),
+// //                     Row(
+// //                       children: [
+// //                         _StatPill(
+// //                           icon: Icons.send_outlined,
+// //                           value: '$sent/$total',
+// //                           color: _success,
+// //                         ),
+// //                         const SizedBox(width: 12),
+// //                         _StatPill(
+// //                           icon: Icons.error_outline,
+// //                           value: '$failed',
+// //                           color: _error,
+// //                         ),
+// //                         const SizedBox(width: 12),
+// //                         _StatPill(
+// //                           icon: Icons.visibility_outlined,
+// //                           value: '$opened',
+// //                           color: _cyan,
+// //                         ),
+// //                       ],
+// //                     ),
+// //                   ],
+// //                 ),
+// //               ),
+// //             );
+// //           }),
+// //         ],
+// //       ],
+// //     );
+// //   }
+
+// //   Widget _infoRow(IconData icon, String label, String value) => Padding(
+// //     padding: const EdgeInsets.only(bottom: 6),
+// //     child: Row(
+// //       children: [
+// //         Icon(icon, color: _textMut, size: 14),
+// //         const SizedBox(width: 6),
+// //         Text(label, style: const TextStyle(color: _textMut, fontSize: 12)),
+// //         const SizedBox(width: 8),
+// //         Expanded(
+// //           child: Text(
+// //             value,
+// //             style: const TextStyle(color: _textSec, fontSize: 12),
+// //             textAlign: TextAlign.right,
+// //             maxLines: 1,
+// //             overflow: TextOverflow.ellipsis,
+// //           ),
+// //         ),
+// //       ],
+// //     ),
+// //   );
+// // }
+
+// // class _MiniStat extends StatelessWidget {
+// //   final String label;
+// //   final String value;
+// //   final Color color;
+
+// //   const _MiniStat(this.label, this.value, this.color);
+
+// //   @override
+// //   Widget build(BuildContext context) => _Card(
+// //     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+// //     child: Column(
+// //       crossAxisAlignment: CrossAxisAlignment.start,
+// //       mainAxisAlignment: MainAxisAlignment.center,
+// //       children: [
+// //         Text(
+// //           value,
+// //           style: TextStyle(
+// //             color: color,
+// //             fontSize: 20,
+// //             fontWeight: FontWeight.w700,
+// //           ),
+// //         ),
+// //         Text(label, style: const TextStyle(color: _textMut, fontSize: 11)),
+// //       ],
+// //     ),
+// //   );
+// // }
+
 // import 'dart:convert';
 // import 'package:flutter/material.dart';
 // import 'package:http/http.dart' as http;
 // import 'package:intl/intl.dart';
 // import '../providers/api_config.dart';
+
 // // ─────────────────────────────────────────────────────────────────────────────
-// // SECTION 1 — MODELS
+// // SECTION 1 — MODELS  (unchanged)
 // // ─────────────────────────────────────────────────────────────────────────────
+
+// int _parseInt(dynamic v) => v == null ? 0 : int.tryParse(v.toString()) ?? 0;
+// double _parseDouble(dynamic v) =>
+//     v == null ? 0.0 : double.tryParse(v.toString()) ?? 0.0;
 
 // class GnNotification {
 //   final int id;
@@ -110,16 +3111,14 @@
 //   final int totalEmployees;
 //   final int totalOrgs;
 //   final List<String> orgIds;
-
 //   GnTargetPreview({
 //     required this.totalEmployees,
 //     required this.totalOrgs,
 //     required this.orgIds,
 //   });
-
 //   factory GnTargetPreview.fromJson(Map<String, dynamic> j) => GnTargetPreview(
-//     totalEmployees: j['total_employees'] ?? 0,
-//     totalOrgs: j['total_orgs'] ?? 0,
+//     totalEmployees: _parseInt(j['total_employees']),
+//     totalOrgs: _parseInt(j['total_orgs']),
 //     orgIds: List<String>.from(j['org_ids'] ?? []),
 //   );
 // }
@@ -130,7 +3129,6 @@
 //   final int sent;
 //   final int failed;
 //   final int opened;
-
 //   GnAnalyticsTrend({
 //     required this.date,
 //     required this.total,
@@ -138,13 +3136,12 @@
 //     required this.failed,
 //     required this.opened,
 //   });
-
 //   factory GnAnalyticsTrend.fromJson(Map<String, dynamic> j) => GnAnalyticsTrend(
 //     date: j['date'] ?? '',
-//     total: j['total'] ?? 0,
-//     sent: j['sent'] ?? 0,
-//     failed: j['failed'] ?? 0,
-//     opened: j['opened'] ?? 0,
+//     total: _parseInt(j['total']),
+//     sent: _parseInt(j['sent']),
+//     failed: _parseInt(j['failed']),
+//     opened: _parseInt(j['opened']),
 //   );
 // }
 
@@ -154,7 +3151,6 @@
 //   final int totalSent;
 //   final int totalFailed;
 //   final double openRate;
-
 //   GnTypeBreakdown({
 //     required this.type,
 //     required this.total,
@@ -162,29 +3158,25 @@
 //     required this.totalFailed,
 //     required this.openRate,
 //   });
-
 //   factory GnTypeBreakdown.fromJson(Map<String, dynamic> j) => GnTypeBreakdown(
 //     type: j['type'] ?? '',
-//     total: j['total'] ?? 0,
-//     totalSent: j['total_sent'] ?? 0,
-//     totalFailed: j['total_failed'] ?? 0,
-//     openRate: (j['open_rate'] ?? 0.0).toDouble(),
+//     total: _parseInt(j['total']),
+//     totalSent: _parseInt(j['total_sent']),
+//     totalFailed: _parseInt(j['total_failed']),
+//     openRate: _parseDouble(j['open_rate']),
 //   );
 // }
 
 // // ─────────────────────────────────────────────────────────────────────────────
-// // SECTION 2 — SERVICE
+// // SECTION 2 — SERVICE  (unchanged)
 // // ─────────────────────────────────────────────────────────────────────────────
 
 // class GnService {
 //   final String baseUrl;
 //   final String token;
-
 //   const GnService({required this.baseUrl, required this.token});
 
 //   String get _base => '$baseUrl/app-admin/notifications';
-
-//   // Matches OrgService._headers exactly
 //   Map<String, String> get _headers => {
 //     'Content-Type': 'application/json',
 //     'Authorization': 'Bearer $token',
@@ -272,23 +3264,17 @@
 //   }, (d) => d);
 
 //   Future<Map<String, dynamic>> detail(int id) => _get('/$id', (d) => d);
-
 //   Future<void> cancel(int id) => _patch('/$id/cancel');
-
 //   Future<void> reschedule(int id, String scheduledAt) =>
 //       _patch('/$id/reschedule', {'scheduled_at': scheduledAt});
-
 //   Future<Map<String, dynamic>> retry(int id) =>
 //       _post('/$id/retry', {}, (d) => d);
-
 //   Future<List<GnNotification>> scheduled() => _get(
 //     '/scheduled/upcoming',
 //     (d) => (d['data'] as List).map((e) => GnNotification.fromJson(e)).toList(),
 //   );
-
 //   Future<Map<String, dynamic>> analytics() =>
 //       _get('/analytics/summary', (d) => d);
-
 //   Future<GnTargetPreview> previewTargets({
 //     required String scope,
 //     Map<String, dynamic>? scopeMeta,
@@ -299,22 +3285,22 @@
 // }
 
 // // ─────────────────────────────────────────────────────────────────────────────
-// // SECTION 3 — THEME CONSTANTS (private)
+// // SECTION 3 — LIGHT THEME CONSTANTS  (matches AppAdminOrgScreen exactly)
 // // ─────────────────────────────────────────────────────────────────────────────
 
-// const _bg = Color(0xFF0A0E1A);
-// const _surface = Color(0xFF111827);
-// const _surfaceEl = Color(0xFF162032);
-// const _border = Color(0xFF1E2D45);
-// const _accent = Color(0xFF3B82F6);
-// const _success = Color(0xFF10B981);
-// const _warning = Color(0xFFF59E0B);
-// const _error = Color(0xFFEF4444);
-// const _purple = Color(0xFF8B5CF6);
-// const _cyan = Color(0xFF06B6D4);
-// const _textPri = Color(0xFFF1F5F9);
-// const _textSec = Color(0xFF94A3B8);
-// const _textMut = Color(0xFF475569);
+// const _bg = Color(0xFFF5F6FA);
+// const _white = Colors.white;
+// const _accent = Color(0xFF4361EE);
+// const _success = Color(0xFF06D6A0);
+// const _warning = Color(0xFFFFB703);
+// const _error = Color(0xFFEF476F);
+// const _purple = Color(0xFF7209B7);
+// const _cyan = Color(0xFF4CC9F0);
+// const _textPri = Color(0xFF1A1A2E);
+// const _textSec = Color(0xFF6B7280);
+// const _textMut = Color(0xFF9CA3AF);
+// const _borderCol = Color(0xFFE2E8F0);
+// const _divider = Color(0xFFF1F3F4);
 
 // Color _statusColor(String s) {
 //   switch (s.toLowerCase()) {
@@ -391,113 +3377,143 @@
 //     case 'all':
 //       return 'All Organizations';
 //     case 'selected':
-//       return 'Selected Organizations';
+//       return 'Selected Orgs';
 //     case 'by_plan':
 //       return 'By Plan';
 //     case 'trial':
-//       return 'Trial Organizations';
+//       return 'Trial Orgs';
 //     case 'expired':
-//       return 'Expired Subscriptions';
+//       return 'Expired';
 //     case 'by_version':
-//       return 'By App Version';
+//       return 'By Version';
 //     default:
 //       return s;
 //   }
 // }
 
+// String _fmt(int n) {
+//   if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+//   if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+//   return '$n';
+// }
+
 // // ─────────────────────────────────────────────────────────────────────────────
-// // SECTION 4 — PRIVATE WIDGETS
+// // SECTION 4 — SHARED LIGHT WIDGETS
 // // ─────────────────────────────────────────────────────────────────────────────
 
-// class _Card extends StatelessWidget {
+// /// White card matching AppAdminOrgScreen's card style
+// class _LCard extends StatelessWidget {
 //   final Widget child;
 //   final EdgeInsets? padding;
 //   final VoidCallback? onTap;
+//   final Color? borderLeft; // accent left border like _StatCard
 //   final Color? borderColor;
-//   final Color? bgColor;
 
-//   const _Card({
+//   const _LCard({
 //     required this.child,
 //     this.padding,
 //     this.onTap,
+//     this.borderLeft,
 //     this.borderColor,
-//     this.bgColor,
 //   });
 
 //   @override
-//   Widget build(BuildContext context) => GestureDetector(
-//     onTap: onTap,
-//     child: Container(
-//       padding: padding ?? const EdgeInsets.all(16),
-//       decoration: BoxDecoration(
-//         color: bgColor ?? _surfaceEl,
-//         borderRadius: BorderRadius.circular(12),
-//         border: Border.all(color: borderColor ?? _border),
+//   Widget build(BuildContext context) {
+//     return GestureDetector(
+//       onTap: onTap,
+//       child: Container(
+//         padding: padding ?? const EdgeInsets.all(14),
+//         decoration: BoxDecoration(
+//           color: _white,
+//           borderRadius: BorderRadius.circular(12),
+//           border: borderLeft != null
+//               ? Border(left: BorderSide(color: borderLeft!, width: 3))
+//               : Border.all(color: borderColor ?? _borderCol),
+//           boxShadow: const [
+//             BoxShadow(
+//               color: Color(0x08000000),
+//               blurRadius: 8,
+//               offset: Offset(0, 2),
+//             ),
+//           ],
+//         ),
+//         child: child,
 //       ),
-//       child: child,
-//     ),
-//   );
+//     );
+//   }
 // }
 
+// /// Stat card — exact copy of AppAdminOrgScreen's _StatCard with left border
 // class _StatCard extends StatelessWidget {
 //   final String label;
 //   final String value;
-//   final IconData icon;
 //   final Color color;
+//   final IconData icon;
 //   final String? sub;
 
 //   const _StatCard({
 //     required this.label,
 //     required this.value,
-//     required this.icon,
 //     required this.color,
+//     required this.icon,
 //     this.sub,
 //   });
 
 //   @override
-//   Widget build(BuildContext context) => _Card(
-//     borderColor: color.withValues(alpha: 0.25),
-//     child: Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         Row(
-//           children: [
-//             Container(
-//               padding: const EdgeInsets.all(7),
-//               decoration: BoxDecoration(
-//                 color: color.withValues(alpha: 0.15),
-//                 borderRadius: BorderRadius.circular(8),
-//               ),
-//               child: Icon(icon, color: color, size: 16),
-//             ),
-//             const Spacer(),
-//             if (sub != null)
-//               Text(
-//                 sub!,
-//                 style: TextStyle(
-//                   color: color,
-//                   fontSize: 11,
-//                   fontWeight: FontWeight.w600,
-//                 ),
-//               ),
-//           ],
-//         ),
-//         const SizedBox(height: 12),
-//         Text(
-//           value,
-//           style: const TextStyle(
-//             color: _textPri,
-//             fontSize: 24,
-//             fontWeight: FontWeight.w800,
+//   Widget build(BuildContext context) {
+//     return Container(
+//       width: 120,
+//       margin: const EdgeInsets.only(right: 10),
+//       padding: const EdgeInsets.all(14),
+//       decoration: BoxDecoration(
+//         color: _white,
+//         borderRadius: BorderRadius.circular(12),
+//         border: Border(left: BorderSide(color: color, width: 3)),
+//         boxShadow: const [
+//           BoxShadow(
+//             color: Color(0x08000000),
+//             blurRadius: 6,
+//             offset: Offset(0, 2),
 //           ),
-//         ),
-//         const SizedBox(height: 2),
-//         Text(label, style: const TextStyle(color: _textSec, fontSize: 12)),
-//       ],
-//     ),
-//   );
+//         ],
+//       ),
+//       child: Column(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         mainAxisAlignment: MainAxisAlignment.center,
+//         children: [
+//           Row(
+//             children: [
+//               Icon(icon, size: 14, color: color),
+//               const Spacer(),
+//               if (sub != null)
+//                 Text(
+//                   sub!,
+//                   style: TextStyle(
+//                     fontSize: 9,
+//                     color: color,
+//                     fontWeight: FontWeight.w600,
+//                   ),
+//                 ),
+//             ],
+//           ),
+//           const SizedBox(height: 6),
+//           Text(
+//             value,
+//             style: TextStyle(
+//               fontSize: 22,
+//               fontWeight: FontWeight.w700,
+//               color: color,
+//             ),
+//           ),
+//           const SizedBox(height: 2),
+//           Text(label, style: const TextStyle(fontSize: 11, color: _textSec)),
+//         ],
+//       ),
+//     );
+//   }
 // }
 
+// /// Status badge matching _StatusBadge in AppAdminOrgScreen
 // class _StatusChip extends StatelessWidget {
 //   final String status;
 //   const _StatusChip(this.status);
@@ -505,12 +3521,15 @@
 //   @override
 //   Widget build(BuildContext context) {
 //     final c = _statusColor(status);
+//     final label = status.isNotEmpty
+//         ? status[0].toUpperCase() + status.substring(1)
+//         : 'Unknown';
 //     return Container(
 //       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
 //       decoration: BoxDecoration(
-//         color: c.withValues(alpha: 0.12),
+//         color: c.withOpacity(0.1),
 //         borderRadius: BorderRadius.circular(20),
-//         border: Border.all(color: c.withValues(alpha: 0.3)),
+//         border: Border.all(color: c.withOpacity(0.3)),
 //       ),
 //       child: Row(
 //         mainAxisSize: MainAxisSize.min,
@@ -520,14 +3539,14 @@
 //             height: 5,
 //             decoration: BoxDecoration(color: c, shape: BoxShape.circle),
 //           ),
-//           const SizedBox(width: 5),
+//           const SizedBox(width: 4),
 //           Text(
-//             status.toUpperCase(),
+//             label,
 //             style: TextStyle(
 //               color: c,
-//               fontSize: 9,
-//               fontWeight: FontWeight.w800,
-//               letterSpacing: 0.6,
+//               fontSize: 10,
+//               fontWeight: FontWeight.w600,
+//               letterSpacing: 0.3,
 //             ),
 //           ),
 //         ],
@@ -546,8 +3565,9 @@
 //     return Container(
 //       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
 //       decoration: BoxDecoration(
-//         color: c.withValues(alpha: 0.1),
+//         color: c.withOpacity(0.08),
 //         borderRadius: BorderRadius.circular(6),
+//         border: Border.all(color: c.withOpacity(0.2)),
 //       ),
 //       child: Row(
 //         mainAxisSize: MainAxisSize.min,
@@ -568,9 +3588,11 @@
 //   }
 // }
 
+// /// Section header — blue left bar, matches _SectionCard title style
 // class _SectionHeader extends StatelessWidget {
 //   final String title;
-//   const _SectionHeader(this.title);
+//   final IconData? icon;
+//   const _SectionHeader(this.title, {this.icon});
 
 //   @override
 //   Widget build(BuildContext context) => Row(
@@ -584,11 +3606,15 @@
 //         ),
 //       ),
 //       const SizedBox(width: 8),
+//       if (icon != null) ...[
+//         Icon(icon, size: 15, color: _accent),
+//         const SizedBox(width: 6),
+//       ],
 //       Text(
 //         title,
 //         style: const TextStyle(
 //           color: _textPri,
-//           fontSize: 14,
+//           fontSize: 13,
 //           fontWeight: FontWeight.w700,
 //         ),
 //       ),
@@ -610,7 +3636,7 @@
 //   Widget build(BuildContext context) => Row(
 //     mainAxisSize: MainAxisSize.min,
 //     children: [
-//       Icon(icon, color: color, size: 11),
+//       Icon(icon, color: color, size: 12),
 //       const SizedBox(width: 3),
 //       Text(
 //         value,
@@ -624,6 +3650,61 @@
 //   );
 // }
 
+// /// Progress row — light styled
+// class _ProgressRow extends StatelessWidget {
+//   final String label;
+//   final int value;
+//   final int total;
+//   final Color color;
+//   const _ProgressRow({
+//     required this.label,
+//     required this.value,
+//     required this.total,
+//     required this.color,
+//   });
+
+//   @override
+//   Widget build(BuildContext context) {
+//     final pct = total > 0 ? value / total : 0.0;
+//     return Padding(
+//       padding: const EdgeInsets.only(bottom: 10),
+//       child: Column(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         children: [
+//           Row(
+//             children: [
+//               Text(
+//                 label,
+//                 style: const TextStyle(color: _textSec, fontSize: 12),
+//               ),
+//               const Spacer(),
+//               Text(
+//                 '$value / $total',
+//                 style: TextStyle(
+//                   color: color,
+//                   fontSize: 12,
+//                   fontWeight: FontWeight.w600,
+//                 ),
+//               ),
+//             ],
+//           ),
+//           const SizedBox(height: 5),
+//           ClipRRect(
+//             borderRadius: BorderRadius.circular(3),
+//             child: LinearProgressIndicator(
+//               value: pct.clamp(0.0, 1.0),
+//               backgroundColor: _divider,
+//               valueColor: AlwaysStoppedAnimation<Color>(color),
+//               minHeight: 5,
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+
+// /// Notification list tile — light card style
 // class _NotifTile extends StatelessWidget {
 //   final GnNotification n;
 //   final VoidCallback? onTap;
@@ -632,9 +3713,8 @@
 //   @override
 //   Widget build(BuildContext context) {
 //     final fmt = DateFormat('MMM d · h:mm a');
-//     return _Card(
+//     return _LCard(
 //       onTap: onTap,
-//       padding: const EdgeInsets.all(14),
 //       child: Column(
 //         crossAxisAlignment: CrossAxisAlignment.start,
 //         children: [
@@ -668,39 +3748,49 @@
 //             children: [
 //               _TypeChip(n.type),
 //               const SizedBox(width: 8),
-//               Container(
-//                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-//                 decoration: BoxDecoration(
-//                   color: _border,
-//                   borderRadius: BorderRadius.circular(5),
-//                 ),
-//                 child: Text(
-//                   _scopeLabel(n.scope),
-//                   style: const TextStyle(color: _textMut, fontSize: 10),
+//               Flexible(
+//                 child: Container(
+//                   padding: const EdgeInsets.symmetric(
+//                     horizontal: 7,
+//                     vertical: 3,
+//                   ),
+//                   decoration: BoxDecoration(
+//                     color: const Color(0xFFF1F5F9),
+//                     borderRadius: BorderRadius.circular(5),
+//                   ),
+//                   child: Text(
+//                     _scopeLabel(n.scope),
+//                     style: const TextStyle(color: _textMut, fontSize: 10),
+//                     overflow: TextOverflow.ellipsis,
+//                   ),
 //                 ),
 //               ),
-//               const Spacer(),
-//               if (n.status == 'sent') ...[
+//             ],
+//           ),
+//           if (n.status == 'sent') ...[
+//             const SizedBox(height: 6),
+//             Row(
+//               children: [
 //                 _StatPill(
 //                   icon: Icons.send_outlined,
 //                   value: _fmt(n.sentCount),
 //                   color: _success,
 //                 ),
-//                 const SizedBox(width: 8),
+//                 const SizedBox(width: 10),
 //                 _StatPill(
 //                   icon: Icons.error_outline,
 //                   value: _fmt(n.failedCount),
 //                   color: _error,
 //                 ),
-//                 const SizedBox(width: 8),
+//                 const SizedBox(width: 10),
 //                 _StatPill(
 //                   icon: Icons.visibility_outlined,
 //                   value: '${n.openRate.toStringAsFixed(1)}%',
 //                   color: _cyan,
 //                 ),
 //               ],
-//             ],
-//           ),
+//             ),
+//           ],
 //           const SizedBox(height: 8),
 //           Text(
 //             n.scheduledAt != null
@@ -716,77 +3806,53 @@
 //   }
 // }
 
-// String _fmt(int n) {
-//   if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-//   if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
-//   return '$n';
-// }
-
-// class _ProgressRow extends StatelessWidget {
+// /// Filter chip — identical to AppAdminOrgScreen's _FilterChip
+// class _FilterChip extends StatelessWidget {
 //   final String label;
-//   final int value;
-//   final int total;
-//   final Color color;
-//   const _ProgressRow({
+//   final bool selected;
+//   final Color? color;
+//   final VoidCallback? onTap;
+//   const _FilterChip({
 //     required this.label,
-//     required this.value,
-//     required this.total,
-//     required this.color,
+//     required this.selected,
+//     this.color,
+//     this.onTap,
 //   });
 
 //   @override
 //   Widget build(BuildContext context) {
-//     final pct = total > 0 ? value / total : 0.0;
-//     return Padding(
-//       padding: const EdgeInsets.only(bottom: 12),
-//       child: Column(
-//         crossAxisAlignment: CrossAxisAlignment.start,
-//         children: [
-//           Row(
-//             children: [
-//               Text(
-//                 label,
-//                 style: const TextStyle(color: _textSec, fontSize: 12),
-//               ),
-//               const Spacer(),
-//               Text(
-//                 '$value / $total',
-//                 style: TextStyle(
-//                   color: color,
-//                   fontSize: 12,
-//                   fontWeight: FontWeight.w600,
-//                 ),
-//               ),
-//             ],
+//     final c = color ?? _accent;
+//     return GestureDetector(
+//       onTap: onTap,
+//       child: AnimatedContainer(
+//         duration: const Duration(milliseconds: 150),
+//         margin: const EdgeInsets.only(right: 6),
+//         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+//         decoration: BoxDecoration(
+//           color: selected ? c : _white,
+//           borderRadius: BorderRadius.circular(8),
+//           border: Border.all(color: selected ? c : _borderCol),
+//           boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 3)],
+//         ),
+//         child: Text(
+//           label,
+//           style: TextStyle(
+//             fontSize: 12,
+//             fontWeight: FontWeight.w500,
+//             color: selected ? _white : _textSec,
 //           ),
-//           const SizedBox(height: 5),
-//           ClipRRect(
-//             borderRadius: BorderRadius.circular(3),
-//             child: LinearProgressIndicator(
-//               value: pct.clamp(0.0, 1.0),
-//               backgroundColor: _border,
-//               valueColor: AlwaysStoppedAnimation<Color>(color),
-//               minHeight: 5,
-//             ),
-//           ),
-//         ],
+//         ),
 //       ),
 //     );
 //   }
 // }
 
-// // ─────────────────────────────────────────────────────────────────────────────
-// // SECTION 5 — MAIN CONSOLE (entry point)
-// // ─────────────────────────────────────────────────────────────────────────────
-// // Add this helper at the top of the file (outside any class)
-// int _parseInt(dynamic v) => v == null ? 0 : int.tryParse(v.toString()) ?? 0;
-// double _parseDouble(dynamic v) =>
-//     v == null ? 0.0 : double.tryParse(v.toString()) ?? 0.0;
+// extension _StrExt on String {
+//   String capitalize() => isEmpty ? this : this[0].toUpperCase() + substring(1);
+// }
 
-// /// Drop this widget anywhere in your existing app.
 // // ─────────────────────────────────────────────────────────────────────────────
-// // SECTION 5 — MAIN CONSOLE (updated: no loadFromPrefs gate, mirrors
-// //             AppAdminOrgScreen's lazy `late final _service = ...` pattern)
+// // SECTION 5 — MAIN CONSOLE
 // // ─────────────────────────────────────────────────────────────────────────────
 
 // class GlobalNotifyConsole extends StatefulWidget {
@@ -798,18 +3864,7 @@
 
 // class _GlobalNotifyConsoleState extends State<GlobalNotifyConsole> {
 //   late final GnService _svc;
-
 //   int _tab = 0;
-//   bool _ready = false;
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _svc = GnService(baseUrl: ApiConfig.baseUrl, token: ApiConfig.getToken());
-//     WidgetsBinding.instance.addPostFrameCallback((_) {
-//       if (mounted) setState(() => _ready = true);
-//     });
-//   }
 
 //   static const _tabs = [
 //     (icon: Icons.dashboard_outlined, label: 'Overview'),
@@ -820,19 +3875,13 @@
 //   ];
 
 //   @override
-//   Widget build(BuildContext context) {
-//     if (!_ready) {
-//       return Theme(
-//         data: _buildTheme(),
-//         child: const Scaffold(
-//           backgroundColor: _bg,
-//           body: Center(
-//             child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
-//           ),
-//         ),
-//       );
-//     }
+//   void initState() {
+//     super.initState();
+//     _svc = GnService(baseUrl: ApiConfig.baseUrl, token: ApiConfig.getToken());
+//   }
 
+//   @override
+//   Widget build(BuildContext context) {
 //     final screens = [
 //       _OverviewScreen(svc: _svc),
 //       _SendScreen(svc: _svc),
@@ -841,153 +3890,115 @@
 //       _AnalyticsScreen(svc: _svc),
 //     ];
 
-//     return Theme(
-//       data: _buildTheme(),
-//       child: Scaffold(
-//         backgroundColor: _bg,
-//         appBar: AppBar(
-//           backgroundColor: _surface,
-//           elevation: 0,
-//           title: Row(
-//             children: [
-//               Container(
-//                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-//                 decoration: BoxDecoration(
-//                   color: _accent.withValues(alpha: 0.15),
-//                   borderRadius: BorderRadius.circular(6),
-//                 ),
-//                 child: const Icon(Icons.bolt, color: _accent, size: 16),
+//     return Scaffold(
+//       backgroundColor: _bg,
+//       appBar: AppBar(
+//         backgroundColor: _white,
+//         elevation: 0,
+//         surfaceTintColor: Colors.transparent,
+//         centerTitle: false,
+//         title: Row(
+//           children: [
+//             Container(
+//               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+//               decoration: BoxDecoration(
+//                 color: _accent.withOpacity(0.1),
+//                 borderRadius: BorderRadius.circular(6),
 //               ),
-//               const SizedBox(width: 10),
-//               const Text(
-//                 'Global Notifications',
+//               child: const Icon(Icons.bolt, color: _accent, size: 16),
+//             ),
+//             const SizedBox(width: 10),
+//             const Text(
+//               'Global Notifications',
+//               style: TextStyle(
+//                 fontSize: 17,
+//                 fontWeight: FontWeight.w600,
+//                 color: _textPri,
+//               ),
+//             ),
+//             const SizedBox(width: 8),
+//             Container(
+//               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+//               decoration: BoxDecoration(
+//                 color: _purple.withOpacity(0.1),
+//                 borderRadius: BorderRadius.circular(4),
+//               ),
+//               child: Text(
+//                 'SUPER ADMIN',
 //                 style: TextStyle(
-//                   color: _textPri,
-//                   fontSize: 16,
-//                   fontWeight: FontWeight.w700,
+//                   color: _purple,
+//                   fontSize: 9,
+//                   fontWeight: FontWeight.w800,
+//                   letterSpacing: 0.5,
 //                 ),
 //               ),
-//               const SizedBox(width: 8),
+//             ),
+//           ],
+//         ),
+//         bottom: PreferredSize(
+//           preferredSize: const Size.fromHeight(47),
+//           child: Column(
+//             children: [
+//               Container(height: 1, color: const Color(0xFFE8EAED)),
 //               Container(
-//                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-//                 decoration: BoxDecoration(
-//                   color: _purple.withValues(alpha: 0.2),
-//                   borderRadius: BorderRadius.circular(4),
-//                 ),
-//                 child: const Text(
-//                   'SUPER ADMIN',
-//                   style: TextStyle(
-//                     color: _purple,
-//                     fontSize: 9,
-//                     fontWeight: FontWeight.w800,
-//                     letterSpacing: 0.5,
+//                 color: _white,
+//                 padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+//                 child: SingleChildScrollView(
+//                   scrollDirection: Axis.horizontal,
+//                   child: Row(
+//                     children: List.generate(_tabs.length, (i) {
+//                       final t = _tabs[i];
+//                       final sel = _tab == i;
+//                       return GestureDetector(
+//                         onTap: () => setState(() => _tab = i),
+//                         child: AnimatedContainer(
+//                           duration: const Duration(milliseconds: 160),
+//                           margin: const EdgeInsets.only(right: 6),
+//                           padding: const EdgeInsets.symmetric(
+//                             horizontal: 14,
+//                             vertical: 7,
+//                           ),
+//                           decoration: BoxDecoration(
+//                             color: sel ? _accent : Colors.transparent,
+//                             borderRadius: BorderRadius.circular(8),
+//                             border: Border.all(
+//                               color: sel ? _accent : _borderCol,
+//                             ),
+//                           ),
+//                           child: Row(
+//                             children: [
+//                               Icon(
+//                                 t.icon,
+//                                 size: 14,
+//                                 color: sel ? _white : _textSec,
+//                               ),
+//                               const SizedBox(width: 6),
+//                               Text(
+//                                 t.label,
+//                                 style: TextStyle(
+//                                   color: sel ? _white : _textSec,
+//                                   fontSize: 12,
+//                                   fontWeight: sel
+//                                       ? FontWeight.w600
+//                                       : FontWeight.w400,
+//                                 ),
+//                               ),
+//                             ],
+//                           ),
+//                         ),
+//                       );
+//                     }),
 //                   ),
 //                 ),
 //               ),
 //             ],
 //           ),
-//           bottom: PreferredSize(
-//             preferredSize: const Size.fromHeight(46),
-//             child: Container(
-//               color: _surface,
-//               child: SingleChildScrollView(
-//                 scrollDirection: Axis.horizontal,
-//                 padding: const EdgeInsets.symmetric(horizontal: 12),
-//                 child: Row(
-//                   children: List.generate(_tabs.length, (i) {
-//                     final t = _tabs[i];
-//                     final sel = _tab == i;
-//                     return GestureDetector(
-//                       onTap: () => setState(() => _tab = i),
-//                       child: Container(
-//                         margin: const EdgeInsets.only(right: 4, bottom: 6),
-//                         padding: const EdgeInsets.symmetric(
-//                           horizontal: 14,
-//                           vertical: 7,
-//                         ),
-//                         decoration: BoxDecoration(
-//                           color: sel
-//                               ? _accent.withValues(alpha: 0.15)
-//                               : Colors.transparent,
-//                           borderRadius: BorderRadius.circular(8),
-//                           border: Border.all(
-//                             color: sel
-//                                 ? _accent.withValues(alpha: 0.4)
-//                                 : Colors.transparent,
-//                           ),
-//                         ),
-//                         child: Row(
-//                           children: [
-//                             Icon(
-//                               t.icon,
-//                               size: 14,
-//                               color: sel ? _accent : _textMut,
-//                             ),
-//                             const SizedBox(width: 6),
-//                             Text(
-//                               t.label,
-//                               style: TextStyle(
-//                                 color: sel ? _accent : _textMut,
-//                                 fontSize: 13,
-//                                 fontWeight: sel
-//                                     ? FontWeight.w600
-//                                     : FontWeight.w400,
-//                               ),
-//                             ),
-//                           ],
-//                         ),
-//                       ),
-//                     );
-//                   }),
-//                 ),
-//               ),
-//             ),
-//           ),
 //         ),
-//         body: IndexedStack(index: _tab, children: screens),
 //       ),
+//       body: IndexedStack(index: _tab, children: screens),
 //     );
 //   }
 // }
-
-// ThemeData _buildTheme() => ThemeData(
-//   scaffoldBackgroundColor: _bg,
-//   colorScheme: const ColorScheme.dark(
-//     primary: _accent,
-//     surface: _surface,
-//     error: _error,
-//   ),
-//   inputDecorationTheme: InputDecorationTheme(
-//     filled: true,
-//     fillColor: _surfaceEl,
-//     border: OutlineInputBorder(
-//       borderRadius: BorderRadius.circular(10),
-//       borderSide: const BorderSide(color: _border),
-//     ),
-//     enabledBorder: OutlineInputBorder(
-//       borderRadius: BorderRadius.circular(10),
-//       borderSide: const BorderSide(color: _border),
-//     ),
-//     focusedBorder: OutlineInputBorder(
-//       borderRadius: BorderRadius.circular(10),
-//       borderSide: const BorderSide(color: _accent, width: 1.5),
-//     ),
-//     labelStyle: const TextStyle(color: _textSec),
-//     hintStyle: const TextStyle(color: _textMut),
-//     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-//   ),
-//   elevatedButtonTheme: ElevatedButtonThemeData(
-//     style: ElevatedButton.styleFrom(
-//       backgroundColor: _accent,
-//       foregroundColor: Colors.white,
-//       elevation: 0,
-//       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
-//       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-//       textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-//     ),
-//   ),
-//   dividerColor: _border,
-// );
 
 // // ─────────────────────────────────────────────────────────────────────────────
 // // SECTION 6 — OVERVIEW SCREEN
@@ -996,7 +4007,6 @@
 // class _OverviewScreen extends StatefulWidget {
 //   final GnService svc;
 //   const _OverviewScreen({required this.svc});
-
 //   @override
 //   State<_OverviewScreen> createState() => _OverviewScreenState();
 // }
@@ -1005,7 +4015,6 @@
 //   GnDashboardSummary? _summary;
 //   List<GnNotification> _recent = [];
 //   bool _loading = true;
-//   // FIXED: renamed from _error to _errMsg to avoid shadowing the Color constant
 //   String? _errMsg;
 
 //   @override
@@ -1044,168 +4053,92 @@
 //       );
 //     }
 //     if (_errMsg != null) {
-//       return Center(
-//         child: Column(
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             const Icon(Icons.cloud_off_outlined, color: _textMut, size: 40),
-//             const SizedBox(height: 12),
-//             Text(
-//               _errMsg!,
-//               style: const TextStyle(color: _textSec),
-//               textAlign: TextAlign.center,
-//             ),
-//             const SizedBox(height: 16),
-//             ElevatedButton(onPressed: _load, child: const Text('Retry')),
-//           ],
-//         ),
-//       );
+//       return _ErrorView(message: _errMsg!, onRetry: _load);
 //     }
 //     final s = _summary!;
 //     return RefreshIndicator(
 //       onRefresh: _load,
 //       color: _accent,
-//       backgroundColor: _surfaceEl,
-//       child: ListView(
-//         padding: const EdgeInsets.all(16),
-//         children: [
-//           GridView.count(
-//             crossAxisCount: 2,
-//             crossAxisSpacing: 10,
-//             mainAxisSpacing: 10,
-//             shrinkWrap: true,
-//             physics: const NeverScrollableScrollPhysics(),
-//             childAspectRatio: 1.55,
-//             children: [
-//               _StatCard(
-//                 label: 'Total Sent',
-//                 value: _fmt(s.totalSent),
-//                 icon: Icons.send_outlined,
-//                 color: _accent,
-//               ),
-//               _StatCard(
-//                 label: 'Delivered',
-//                 value: _fmt(s.totalDelivered),
-//                 icon: Icons.mark_email_read_outlined,
-//                 color: _success,
-//               ),
-//               _StatCard(
-//                 label: 'Failed',
-//                 value: _fmt(s.totalFailed),
-//                 icon: Icons.error_outline,
-//                 color: _error,
-//               ),
-//               _StatCard(
-//                 label: 'Open Rate',
-//                 value: '${s.openRate.toStringAsFixed(1)}%',
-//                 icon: Icons.visibility_outlined,
-//                 color: _cyan,
-//                 sub: '${_fmt(s.totalOpened)} opens',
-//               ),
-//             ],
-//           ),
-//           const SizedBox(height: 10),
-//           Row(
-//             children: [
-//               Expanded(
-//                 child: _Card(
-//                   borderColor: _warning.withValues(alpha: 0.3),
-//                   child: Row(
-//                     children: [
-//                       Container(
-//                         padding: const EdgeInsets.all(7),
-//                         decoration: BoxDecoration(
-//                           color: _warning.withValues(alpha: 0.15),
-//                           borderRadius: BorderRadius.circular(8),
+//       child: CustomScrollView(
+//         slivers: [
+//           SliverToBoxAdapter(
+//             child: Padding(
+//               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+//               child: Column(
+//                 crossAxisAlignment: CrossAxisAlignment.start,
+//                 children: [
+//                   // ── Stats row (horizontal scroll, left-border style) ──
+//                   SizedBox(
+//                     height: 100,
+//                     child: ListView(
+//                       scrollDirection: Axis.horizontal,
+//                       children: [
+//                         _StatCard(
+//                           label: 'Total Sent',
+//                           value: _fmt(s.totalSent),
+//                           icon: Icons.send_outlined,
+//                           color: _accent,
 //                         ),
-//                         child: const Icon(
-//                           Icons.schedule_outlined,
+//                         _StatCard(
+//                           label: 'Delivered',
+//                           value: _fmt(s.totalDelivered),
+//                           icon: Icons.mark_email_read_outlined,
+//                           color: _success,
+//                         ),
+//                         _StatCard(
+//                           label: 'Failed',
+//                           value: _fmt(s.totalFailed),
+//                           icon: Icons.error_outline,
+//                           color: _error,
+//                         ),
+//                         _StatCard(
+//                           label: 'Open Rate',
+//                           value: '${s.openRate.toStringAsFixed(1)}%',
+//                           icon: Icons.visibility_outlined,
+//                           color: _cyan,
+//                           sub: '${_fmt(s.totalOpened)} opens',
+//                         ),
+//                         _StatCard(
+//                           label: 'Scheduled',
+//                           value: _fmt(s.scheduledCount),
+//                           icon: Icons.schedule_outlined,
 //                           color: _warning,
-//                           size: 16,
 //                         ),
-//                       ),
-//                       const SizedBox(width: 10),
-//                       Column(
-//                         crossAxisAlignment: CrossAxisAlignment.start,
-//                         children: [
-//                           Text(
-//                             _fmt(s.scheduledCount),
-//                             style: const TextStyle(
-//                               color: _textPri,
-//                               fontSize: 20,
-//                               fontWeight: FontWeight.w700,
-//                             ),
-//                           ),
-//                           const Text(
-//                             'Scheduled',
-//                             style: TextStyle(color: _textSec, fontSize: 11),
-//                           ),
-//                         ],
-//                       ),
-//                     ],
-//                   ),
-//                 ),
-//               ),
-//               const SizedBox(width: 10),
-//               Expanded(
-//                 child: _Card(
-//                   borderColor: _purple.withValues(alpha: 0.3),
-//                   child: Row(
-//                     children: [
-//                       Container(
-//                         padding: const EdgeInsets.all(7),
-//                         decoration: BoxDecoration(
-//                           color: _purple.withValues(alpha: 0.15),
-//                           borderRadius: BorderRadius.circular(8),
-//                         ),
-//                         child: const Icon(
-//                           Icons.all_inbox_outlined,
+//                         _StatCard(
+//                           label: 'Total',
+//                           value: _fmt(s.totalNotifications),
+//                           icon: Icons.all_inbox_outlined,
 //                           color: _purple,
-//                           size: 16,
 //                         ),
-//                       ),
-//                       const SizedBox(width: 10),
-//                       Column(
-//                         crossAxisAlignment: CrossAxisAlignment.start,
-//                         children: [
-//                           Text(
-//                             _fmt(s.totalNotifications),
-//                             style: const TextStyle(
-//                               color: _textPri,
-//                               fontSize: 20,
-//                               fontWeight: FontWeight.w700,
-//                             ),
-//                           ),
-//                           const Text(
-//                             'Total Notifs',
-//                             style: TextStyle(color: _textSec, fontSize: 11),
-//                           ),
-//                         ],
-//                       ),
-//                     ],
+//                       ],
+//                     ),
 //                   ),
-//                 ),
+//                   const SizedBox(height: 20),
+//                   _SectionHeader(
+//                     'Recent Notifications',
+//                     icon: Icons.notifications_outlined,
+//                   ),
+//                   const SizedBox(height: 12),
+//                 ],
 //               ),
-//             ],
+//             ),
 //           ),
-//           const SizedBox(height: 20),
-//           _SectionHeader('Recent Notifications'),
-//           const SizedBox(height: 12),
 //           if (_recent.isEmpty)
-//             const Padding(
-//               padding: EdgeInsets.symmetric(vertical: 24),
-//               child: Center(
-//                 child: Text(
-//                   'No notifications yet',
-//                   style: TextStyle(color: _textMut),
-//                 ),
-//               ),
-//             )
+//             const SliverToBoxAdapter(child: _EmptyState())
 //           else
-//             ..._recent.map(
-//               (n) => Padding(
-//                 padding: const EdgeInsets.only(bottom: 10),
-//                 child: _NotifTile(n, onTap: () => _openDetail(context, n.id)),
+//             SliverPadding(
+//               padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+//               sliver: SliverList(
+//                 delegate: SliverChildBuilderDelegate(
+//                   (ctx, i) => Padding(
+//                     padding: const EdgeInsets.only(bottom: 10),
+//                     child: _NotifTile(
+//                       _recent[i],
+//                       onTap: () => _openDetail(ctx, _recent[i].id),
+//                     ),
+//                   ),
+//                   childCount: _recent.length,
+//                 ),
 //               ),
 //             ),
 //         ],
@@ -1228,7 +4161,6 @@
 // class _SendScreen extends StatefulWidget {
 //   final GnService svc;
 //   const _SendScreen({required this.svc});
-
 //   @override
 //   State<_SendScreen> createState() => _SendScreenState();
 // }
@@ -1245,7 +4177,6 @@
 //   String _scope = 'all';
 //   bool _schedule = false;
 //   DateTime? _scheduledAt;
-
 //   bool _sending = false;
 //   GnTargetPreview? _preview;
 //   bool _previewing = false;
@@ -1360,21 +4291,20 @@
 //       firstDate: now,
 //       lastDate: now.add(const Duration(days: 365)),
 //       builder: (ctx, child) => Theme(
-//         data: ThemeData.dark().copyWith(
-//           colorScheme: const ColorScheme.dark(primary: _accent),
-//         ),
+//         data: Theme.of(
+//           ctx,
+//         ).copyWith(colorScheme: const ColorScheme.light(primary: _accent)),
 //         child: child!,
 //       ),
 //     );
-//     if (date == null) return;
-//     if (!mounted) return;
+//     if (date == null || !mounted) return;
 //     final time = await showTimePicker(
 //       context: context,
 //       initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
 //       builder: (ctx, child) => Theme(
-//         data: ThemeData.dark().copyWith(
-//           colorScheme: const ColorScheme.dark(primary: _accent),
-//         ),
+//         data: Theme.of(
+//           ctx,
+//         ).copyWith(colorScheme: const ColorScheme.light(primary: _accent)),
 //         child: child!,
 //       ),
 //     );
@@ -1390,6 +4320,29 @@
 //     );
 //   }
 
+//   InputDecoration _fieldDec(String label, {String? hint, IconData? icon}) =>
+//       InputDecoration(
+//         labelText: label,
+//         hintText: hint,
+//         labelStyle: const TextStyle(fontSize: 13, color: _textSec),
+//         hintStyle: const TextStyle(fontSize: 13, color: _textMut),
+//         prefixIcon: icon != null ? Icon(icon, color: _textMut, size: 18) : null,
+//         filled: true,
+//         fillColor: _white,
+//         enabledBorder: OutlineInputBorder(
+//           borderRadius: BorderRadius.circular(10),
+//           borderSide: const BorderSide(color: _borderCol),
+//         ),
+//         focusedBorder: OutlineInputBorder(
+//           borderRadius: BorderRadius.circular(10),
+//           borderSide: const BorderSide(color: _accent, width: 1.5),
+//         ),
+//         contentPadding: const EdgeInsets.symmetric(
+//           horizontal: 14,
+//           vertical: 13,
+//         ),
+//       );
+
 //   @override
 //   Widget build(BuildContext context) {
 //     return Stack(
@@ -1397,14 +4350,15 @@
 //         ListView(
 //           padding: const EdgeInsets.all(16),
 //           children: [
-//             _SectionHeader('Notification Type'),
+//             // ── Type selector ──
+//             _SectionHeader('Notification Type', icon: Icons.category_outlined),
 //             const SizedBox(height: 10),
 //             SizedBox(
 //               height: 44,
 //               child: ListView.separated(
 //                 scrollDirection: Axis.horizontal,
 //                 itemCount: _types.length,
-//                 separatorBuilder: (_, _) => const SizedBox(width: 8),
+//                 separatorBuilder: (_, __) => const SizedBox(width: 8),
 //                 itemBuilder: (_, i) {
 //                   final t = _types[i];
 //                   final sel = _type == t;
@@ -1412,30 +4366,31 @@
 //                   return GestureDetector(
 //                     onTap: () => setState(() => _type = t),
 //                     child: AnimatedContainer(
-//                       duration: const Duration(milliseconds: 180),
+//                       duration: const Duration(milliseconds: 160),
 //                       padding: const EdgeInsets.symmetric(
 //                         horizontal: 14,
 //                         vertical: 10,
 //                       ),
 //                       decoration: BoxDecoration(
-//                         color: sel ? c.withValues(alpha: 0.15) : _surfaceEl,
+//                         color: sel ? c : _white,
 //                         borderRadius: BorderRadius.circular(10),
-//                         border: Border.all(
-//                           color: sel ? c.withValues(alpha: 0.5) : _border,
-//                         ),
+//                         border: Border.all(color: sel ? c : _borderCol),
+//                         boxShadow: const [
+//                           BoxShadow(color: Color(0x06000000), blurRadius: 4),
+//                         ],
 //                       ),
 //                       child: Row(
 //                         children: [
 //                           Icon(
 //                             _typeIcon(t),
-//                             color: sel ? c : _textMut,
+//                             color: sel ? _white : _textMut,
 //                             size: 14,
 //                           ),
 //                           const SizedBox(width: 6),
 //                           Text(
 //                             _typeLabel(t),
 //                             style: TextStyle(
-//                               color: sel ? c : _textMut,
+//                               color: sel ? _white : _textSec,
 //                               fontSize: 12,
 //                               fontWeight: sel
 //                                   ? FontWeight.w600
@@ -1450,7 +4405,9 @@
 //               ),
 //             ),
 //             const SizedBox(height: 18),
-//             _SectionHeader('Target Audience'),
+
+//             // ── Scope ──
+//             _SectionHeader('Target Audience', icon: Icons.people_outline),
 //             const SizedBox(height: 10),
 //             Wrap(
 //               spacing: 8,
@@ -1469,16 +4426,14 @@
 //                       vertical: 7,
 //                     ),
 //                     decoration: BoxDecoration(
-//                       color: sel ? _accent.withValues(alpha: 0.15) : _surfaceEl,
+//                       color: sel ? _accent : _white,
 //                       borderRadius: BorderRadius.circular(8),
-//                       border: Border.all(
-//                         color: sel ? _accent.withValues(alpha: 0.5) : _border,
-//                       ),
+//                       border: Border.all(color: sel ? _accent : _borderCol),
 //                     ),
 //                     child: Text(
 //                       _scopeLabel(s),
 //                       style: TextStyle(
-//                         color: sel ? _accent : _textSec,
+//                         color: sel ? _white : _textSec,
 //                         fontSize: 12,
 //                         fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
 //                       ),
@@ -1492,14 +4447,10 @@
 //               TextField(
 //                 controller: _tenantCtrl,
 //                 style: const TextStyle(color: _textPri, fontSize: 13),
-//                 decoration: const InputDecoration(
-//                   labelText: 'Tenant IDs (comma separated)',
-//                   hintText: 'TENANT1, TENANT2, ...',
-//                   prefixIcon: Icon(
-//                     Icons.business_outlined,
-//                     color: _textMut,
-//                     size: 18,
-//                   ),
+//                 decoration: _fieldDec(
+//                   'Tenant IDs (comma separated)',
+//                   hint: 'TENANT1, TENANT2, ...',
+//                   icon: Icons.business_outlined,
 //                 ),
 //               ),
 //               const SizedBox(height: 10),
@@ -1508,14 +4459,10 @@
 //               TextField(
 //                 controller: _planCtrl,
 //                 style: const TextStyle(color: _textPri, fontSize: 13),
-//                 decoration: const InputDecoration(
-//                   labelText: 'Plan ID',
-//                   hintText: 'e.g. plan-pro-monthly',
-//                   prefixIcon: Icon(
-//                     Icons.card_membership_outlined,
-//                     color: _textMut,
-//                     size: 18,
-//                   ),
+//                 decoration: _fieldDec(
+//                   'Plan ID',
+//                   hint: 'e.g. plan-pro-monthly',
+//                   icon: Icons.card_membership_outlined,
 //                 ),
 //               ),
 //               const SizedBox(height: 10),
@@ -1524,14 +4471,10 @@
 //               TextField(
 //                 controller: _versionCtrl,
 //                 style: const TextStyle(color: _textPri, fontSize: 13),
-//                 decoration: const InputDecoration(
-//                   labelText: 'App Version',
-//                   hintText: 'e.g. 2.4.0',
-//                   prefixIcon: Icon(
-//                     Icons.phone_android_outlined,
-//                     color: _textMut,
-//                     size: 18,
-//                   ),
+//                 decoration: _fieldDec(
+//                   'App Version',
+//                   hint: 'e.g. 2.4.0',
+//                   icon: Icons.phone_android_outlined,
 //                 ),
 //               ),
 //               const SizedBox(height: 10),
@@ -1561,9 +4504,8 @@
 //               ),
 //             ),
 //             if (_preview != null) ...[
-//               _Card(
-//                 borderColor: _accent.withValues(alpha: 0.3),
-//                 bgColor: _accent.withValues(alpha: 0.06),
+//               _LCard(
+//                 borderColor: _accent.withOpacity(0.25),
 //                 padding: const EdgeInsets.symmetric(
 //                   horizontal: 14,
 //                   vertical: 10,
@@ -1572,27 +4514,30 @@
 //                   children: [
 //                     const Icon(Icons.people_outline, color: _accent, size: 18),
 //                     const SizedBox(width: 10),
-//                     RichText(
-//                       text: TextSpan(
-//                         style: const TextStyle(color: _textSec, fontSize: 13),
-//                         children: [
-//                           TextSpan(
-//                             text: '${_fmt(_preview!.totalEmployees)} employees',
-//                             style: const TextStyle(
-//                               color: _accent,
-//                               fontWeight: FontWeight.w700,
+//                     Expanded(
+//                       child: RichText(
+//                         text: TextSpan(
+//                           style: const TextStyle(color: _textSec, fontSize: 13),
+//                           children: [
+//                             TextSpan(
+//                               text:
+//                                   '${_fmt(_preview!.totalEmployees)} employees',
+//                               style: const TextStyle(
+//                                 color: _accent,
+//                                 fontWeight: FontWeight.w700,
+//                               ),
 //                             ),
-//                           ),
-//                           const TextSpan(text: ' across '),
-//                           TextSpan(
-//                             text: '${_preview!.totalOrgs} organizations',
-//                             style: const TextStyle(
-//                               color: _accent,
-//                               fontWeight: FontWeight.w700,
+//                             const TextSpan(text: ' across '),
+//                             TextSpan(
+//                               text: '${_preview!.totalOrgs} organizations',
+//                               style: const TextStyle(
+//                                 color: _accent,
+//                                 fontWeight: FontWeight.w700,
+//                               ),
 //                             ),
-//                           ),
-//                           const TextSpan(text: ' will be targeted'),
-//                         ],
+//                             const TextSpan(text: ' will be targeted'),
+//                           ],
+//                         ),
 //                       ),
 //                     ),
 //                   ],
@@ -1600,20 +4545,17 @@
 //               ),
 //               const SizedBox(height: 10),
 //             ],
+
 //             const SizedBox(height: 8),
-//             _SectionHeader('Content'),
+//             _SectionHeader('Content', icon: Icons.edit_outlined),
 //             const SizedBox(height: 10),
 //             TextField(
 //               controller: _titleCtrl,
 //               style: const TextStyle(color: _textPri, fontSize: 14),
-//               decoration: const InputDecoration(
-//                 labelText: 'Notification Title *',
-//                 hintText: 'e.g. Scheduled Maintenance Tonight',
-//                 prefixIcon: Icon(
-//                   Icons.title_outlined,
-//                   color: _textMut,
-//                   size: 18,
-//                 ),
+//               decoration: _fieldDec(
+//                 'Notification Title *',
+//                 hint: 'e.g. Scheduled Maintenance Tonight',
+//                 icon: Icons.title_outlined,
 //               ),
 //             ),
 //             const SizedBox(height: 10),
@@ -1622,32 +4564,27 @@
 //               minLines: 3,
 //               maxLines: 6,
 //               style: const TextStyle(color: _textPri, fontSize: 13),
-//               decoration: const InputDecoration(
-//                 labelText: 'Message *',
-//                 hintText: 'Write your notification body here...',
-//                 alignLabelWithHint: true,
-//                 prefixIcon: Padding(
-//                   padding: EdgeInsets.only(bottom: 40),
-//                   child: Icon(Icons.notes_outlined, color: _textMut, size: 18),
-//                 ),
+//               decoration: _fieldDec(
+//                 'Message *',
+//                 hint: 'Write your notification body here...',
+//                 icon: Icons.notes_outlined,
 //               ),
 //             ),
 //             const SizedBox(height: 10),
 //             TextField(
 //               controller: _imgCtrl,
 //               style: const TextStyle(color: _textPri, fontSize: 13),
-//               decoration: const InputDecoration(
-//                 labelText: 'Image / Banner URL (optional)',
-//                 hintText: 'https://...',
-//                 prefixIcon: Icon(
-//                   Icons.image_outlined,
-//                   color: _textMut,
-//                   size: 18,
-//                 ),
+//               decoration: _fieldDec(
+//                 'Image / Banner URL (optional)',
+//                 hint: 'https://...',
+//                 icon: Icons.image_outlined,
 //               ),
 //             ),
-//             const SizedBox(height: 18),
-//             _Card(
+
+//             const SizedBox(height: 16),
+//             // ── Schedule toggle ──
+//             _LCard(
+//               borderColor: _warning.withOpacity(0.35),
 //               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
 //               child: Row(
 //                 children: [
@@ -1664,7 +4601,7 @@
 //                   const Spacer(),
 //                   Switch(
 //                     value: _schedule,
-//                     activeThumbColor: _accent,
+//                     activeColor: _accent,
 //                     onChanged: (v) => setState(() => _schedule = v),
 //                   ),
 //                 ],
@@ -1674,9 +4611,8 @@
 //               const SizedBox(height: 8),
 //               GestureDetector(
 //                 onTap: _pickSchedule,
-//                 child: _Card(
-//                   borderColor: _warning.withValues(alpha: 0.4),
-//                   bgColor: _warning.withValues(alpha: 0.06),
+//                 child: _LCard(
+//                   borderColor: _warning.withOpacity(0.4),
 //                   padding: const EdgeInsets.symmetric(
 //                     horizontal: 14,
 //                     vertical: 12,
@@ -1711,39 +4647,55 @@
 //                 ),
 //               ),
 //             ],
-//             const SizedBox(height: 24),
-//             if (_type == 'emergency_alert')
-//               _Card(
-//                 borderColor: _error.withValues(alpha: 0.4),
-//                 bgColor: _error.withValues(alpha: 0.06),
+//             const SizedBox(height: 16),
+//             if (_type == 'emergency_alert') ...[
+//               _LCard(
+//                 borderColor: _error.withOpacity(0.4),
 //                 padding: const EdgeInsets.symmetric(
 //                   horizontal: 14,
 //                   vertical: 10,
 //                 ),
-//                 child: const Row(
+//                 child: Row(
 //                   children: [
-//                     Icon(Icons.warning_amber_rounded, color: _error, size: 18),
-//                     SizedBox(width: 10),
-//                     Expanded(
+//                     const Icon(
+//                       Icons.warning_amber_rounded,
+//                       color: _error,
+//                       size: 18,
+//                     ),
+//                     const SizedBox(width: 10),
+//                     const Expanded(
 //                       child: Text(
-//                         'Emergency alerts are delivered with high priority and may override DND settings.',
+//                         'Emergency alerts are delivered with high priority'
+//                         ' and may override DND settings.',
 //                         style: TextStyle(color: _error, fontSize: 12),
 //                       ),
 //                     ),
 //                   ],
 //                 ),
 //               ),
-//             if (_type == 'emergency_alert') const SizedBox(height: 16),
+//               const SizedBox(height: 16),
+//             ],
 //             SizedBox(
 //               width: double.infinity,
+//               height: 48,
 //               child: ElevatedButton.icon(
 //                 onPressed: _sending ? null : _doSend,
+//                 style: ElevatedButton.styleFrom(
+//                   backgroundColor: _type == 'emergency_alert'
+//                       ? _error
+//                       : _accent,
+//                   foregroundColor: _white,
+//                   elevation: 0,
+//                   shape: RoundedRectangleBorder(
+//                     borderRadius: BorderRadius.circular(12),
+//                   ),
+//                 ),
 //                 icon: _sending
 //                     ? const SizedBox(
 //                         width: 16,
 //                         height: 16,
 //                         child: CircularProgressIndicator(
-//                           color: Colors.white,
+//                           color: _white,
 //                           strokeWidth: 2,
 //                         ),
 //                       )
@@ -1752,11 +4704,12 @@
 //                             ? Icons.schedule_send_outlined
 //                             : Icons.send_outlined,
 //                       ),
-//                 label: Text(_schedule ? 'Schedule Notification' : 'Send Now'),
-//                 style: ElevatedButton.styleFrom(
-//                   backgroundColor: _type == 'emergency_alert'
-//                       ? _error
-//                       : _accent,
+//                 label: Text(
+//                   _schedule ? 'Schedule Notification' : 'Send Now',
+//                   style: const TextStyle(
+//                     fontSize: 14,
+//                     fontWeight: FontWeight.w600,
+//                   ),
 //                 ),
 //               ),
 //             ),
@@ -1766,7 +4719,7 @@
 //         if (_sending)
 //           Positioned.fill(
 //             child: Container(
-//               color: Colors.black.withValues(alpha: 0.4),
+//               color: Colors.black.withOpacity(0.15),
 //               child: const Center(
 //                 child: CircularProgressIndicator(
 //                   color: _accent,
@@ -1781,12 +4734,16 @@
 
 //   @override
 //   void dispose() {
-//     _titleCtrl.dispose();
-//     _msgCtrl.dispose();
-//     _imgCtrl.dispose();
-//     _tenantCtrl.dispose();
-//     _planCtrl.dispose();
-//     _versionCtrl.dispose();
+//     for (final c in [
+//       _titleCtrl,
+//       _msgCtrl,
+//       _imgCtrl,
+//       _tenantCtrl,
+//       _planCtrl,
+//       _versionCtrl,
+//     ]) {
+//       c.dispose();
+//     }
 //     super.dispose();
 //   }
 // }
@@ -1798,7 +4755,6 @@
 // class _HistoryScreen extends StatefulWidget {
 //   final GnService svc;
 //   const _HistoryScreen({required this.svc});
-
 //   @override
 //   State<_HistoryScreen> createState() => _HistoryScreenState();
 // }
@@ -1806,12 +4762,10 @@
 // class _HistoryScreenState extends State<_HistoryScreen> {
 //   List<GnNotification> _items = [];
 //   bool _loading = true;
-//   // FIXED: renamed from _error to _errMsg
 //   String? _errMsg;
 //   int _page = 1;
 //   int _total = 0;
 //   static const _limit = 20;
-
 //   String? _filterType;
 //   String? _filterStatus;
 //   final _searchCtrl = TextEditingController();
@@ -1839,7 +4793,7 @@
 //             : _searchCtrl.text.trim(),
 //       );
 //       setState(() {
-//         _total = data['total'] ?? 0;
+//         _total = _parseInt(data['total']);
 //         _items = (data['data'] as List)
 //             .map((e) => GnNotification.fromJson(e))
 //             .toList();
@@ -1858,42 +4812,55 @@
 //     final totalPages = (_total / _limit).ceil();
 //     return Column(
 //       children: [
+//         // ── Filter bar (light, matches AppAdminOrgScreen) ──
 //         Container(
-//           color: _surface,
-//           padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+//           color: _white,
+//           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
 //           child: Column(
 //             children: [
-//               TextField(
-//                 controller: _searchCtrl,
-//                 onSubmitted: (_) => _load(reset: true),
-//                 style: const TextStyle(color: _textPri, fontSize: 13),
-//                 decoration: InputDecoration(
-//                   hintText: 'Search by title...',
-//                   prefixIcon: const Icon(
-//                     Icons.search,
-//                     color: _textMut,
-//                     size: 18,
+//               Container(
+//                 decoration: BoxDecoration(
+//                   color: _white,
+//                   borderRadius: BorderRadius.circular(10),
+//                   boxShadow: const [
+//                     BoxShadow(color: Color(0x08000000), blurRadius: 4),
+//                   ],
+//                 ),
+//                 child: TextField(
+//                   controller: _searchCtrl,
+//                   onSubmitted: (_) => _load(reset: true),
+//                   style: const TextStyle(color: _textPri, fontSize: 13),
+//                   decoration: InputDecoration(
+//                     hintText: 'Search by title...',
+//                     hintStyle: const TextStyle(color: _textMut, fontSize: 13),
+//                     prefixIcon: const Icon(
+//                       Icons.search,
+//                       color: _textMut,
+//                       size: 18,
+//                     ),
+//                     suffixIcon: _searchCtrl.text.isNotEmpty
+//                         ? IconButton(
+//                             icon: const Icon(
+//                               Icons.close,
+//                               color: _textMut,
+//                               size: 16,
+//                             ),
+//                             onPressed: () {
+//                               _searchCtrl.clear();
+//                               _load(reset: true);
+//                             },
+//                           )
+//                         : null,
+//                     border: InputBorder.none,
+//                     contentPadding: const EdgeInsets.symmetric(vertical: 13),
 //                   ),
-//                   suffixIcon: _searchCtrl.text.isNotEmpty
-//                       ? IconButton(
-//                           icon: const Icon(
-//                             Icons.close,
-//                             color: _textMut,
-//                             size: 16,
-//                           ),
-//                           onPressed: () {
-//                             _searchCtrl.clear();
-//                             _load(reset: true);
-//                           },
-//                         )
-//                       : null,
-//                   isDense: true,
 //                 ),
 //               ),
 //               const SizedBox(height: 8),
-//               SingleChildScrollView(
-//                 scrollDirection: Axis.horizontal,
-//                 child: Row(
+//               SizedBox(
+//                 height: 32,
+//                 child: ListView(
+//                   scrollDirection: Axis.horizontal,
 //                   children: [
 //                     _FilterChip(
 //                       label: 'All Types',
@@ -1916,7 +4883,7 @@
 //                         ),
 //                       ),
 //                     ),
-//                     const SizedBox(width: 12),
+//                     const SizedBox(width: 10),
 //                     _FilterChip(
 //                       label: 'All Status',
 //                       selected: _filterStatus == null,
@@ -1935,15 +4902,19 @@
 //                   ],
 //                 ),
 //               ),
-//               const SizedBox(height: 6),
+//               const SizedBox(height: 8),
 //               SizedBox(
 //                 width: double.infinity,
+//                 height: 38,
 //                 child: ElevatedButton(
 //                   onPressed: () => _load(reset: true),
 //                   style: ElevatedButton.styleFrom(
-//                     padding: const EdgeInsets.symmetric(vertical: 9),
-//                     backgroundColor: _surfaceEl,
-//                     foregroundColor: _textPri,
+//                     backgroundColor: _accent,
+//                     foregroundColor: _white,
+//                     elevation: 0,
+//                     shape: RoundedRectangleBorder(
+//                       borderRadius: BorderRadius.circular(8),
+//                     ),
 //                   ),
 //                   child: const Text(
 //                     'Apply Filters',
@@ -1954,6 +4925,7 @@
 //             ],
 //           ),
 //         ),
+//         const Divider(height: 1, color: Color(0xFFE8EAED)),
 //         Expanded(
 //           child: _loading
 //               ? const Center(
@@ -1963,23 +4935,13 @@
 //                   ),
 //                 )
 //               : _errMsg != null
-//               ? Center(
-//                   child: Text(
-//                     _errMsg!,
-//                     style: const TextStyle(color: _textSec),
-//                   ),
-//                 )
+//               ? _ErrorView(message: _errMsg!, onRetry: _load)
 //               : _items.isEmpty
-//               ? const Center(
-//                   child: Text(
-//                     'No notifications found',
-//                     style: TextStyle(color: _textMut),
-//                   ),
-//                 )
+//               ? const _EmptyState()
 //               : ListView.separated(
 //                   padding: const EdgeInsets.all(14),
 //                   itemCount: _items.length,
-//                   separatorBuilder: (_, _) => const SizedBox(height: 8),
+//                   separatorBuilder: (_, __) => const SizedBox(height: 8),
 //                   itemBuilder: (ctx, i) => _NotifTile(
 //                     _items[i],
 //                     onTap: () => Navigator.push(
@@ -1994,8 +4956,8 @@
 //         ),
 //         if (!_loading && _total > _limit)
 //           Container(
-//             color: _surface,
-//             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+//             color: _white,
+//             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
 //             child: Row(
 //               children: [
 //                 Text(
@@ -2004,7 +4966,8 @@
 //                 ),
 //                 const Spacer(),
 //                 IconButton(
-//                   icon: const Icon(Icons.chevron_left, color: _textSec),
+//                   icon: const Icon(Icons.chevron_left),
+//                   color: _page > 1 ? _accent : _textMut,
 //                   onPressed: _page > 1
 //                       ? () {
 //                           _page--;
@@ -2017,7 +4980,8 @@
 //                   style: const TextStyle(color: _textPri, fontSize: 13),
 //                 ),
 //                 IconButton(
-//                   icon: const Icon(Icons.chevron_right, color: _textSec),
+//                   icon: const Icon(Icons.chevron_right),
+//                   color: _page < totalPages ? _accent : _textMut,
 //                   onPressed: _page < totalPages
 //                       ? () {
 //                           _page++;
@@ -2039,51 +5003,6 @@
 //   }
 // }
 
-// class _FilterChip extends StatelessWidget {
-//   final String label;
-//   final bool selected;
-//   final Color? color;
-//   final VoidCallback? onTap;
-
-//   const _FilterChip({
-//     required this.label,
-//     required this.selected,
-//     this.color,
-//     this.onTap,
-//   });
-
-//   @override
-//   Widget build(BuildContext context) {
-//     final c = color ?? _accent;
-//     return GestureDetector(
-//       onTap: onTap,
-//       child: Container(
-//         margin: const EdgeInsets.only(right: 6),
-//         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-//         decoration: BoxDecoration(
-//           color: selected ? c.withValues(alpha: 0.15) : _surfaceEl,
-//           borderRadius: BorderRadius.circular(20),
-//           border: Border.all(
-//             color: selected ? c.withValues(alpha: 0.5) : _border,
-//           ),
-//         ),
-//         child: Text(
-//           label,
-//           style: TextStyle(
-//             color: selected ? c : _textMut,
-//             fontSize: 11,
-//             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
-
-// extension _StrExt on String {
-//   String capitalize() => isEmpty ? this : this[0].toUpperCase() + substring(1);
-// }
-
 // // ─────────────────────────────────────────────────────────────────────────────
 // // SECTION 9 — SCHEDULED SCREEN
 // // ─────────────────────────────────────────────────────────────────────────────
@@ -2091,7 +5010,6 @@
 // class _ScheduledScreen extends StatefulWidget {
 //   final GnService svc;
 //   const _ScheduledScreen({required this.svc});
-
 //   @override
 //   State<_ScheduledScreen> createState() => _ScheduledScreenState();
 // }
@@ -2123,11 +5041,14 @@
 //     final ok = await showDialog<bool>(
 //       context: context,
 //       builder: (ctx) => AlertDialog(
-//         backgroundColor: _surfaceEl,
 //         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
 //         title: const Text(
 //           'Cancel Notification',
-//           style: TextStyle(color: _textPri, fontSize: 16),
+//           style: TextStyle(
+//             color: _textPri,
+//             fontSize: 16,
+//             fontWeight: FontWeight.w600,
+//           ),
 //         ),
 //         content: const Text(
 //           'Are you sure you want to cancel this scheduled notification?',
@@ -2140,7 +5061,14 @@
 //           ),
 //           ElevatedButton(
 //             onPressed: () => Navigator.pop(ctx, true),
-//             style: ElevatedButton.styleFrom(backgroundColor: _error),
+//             style: ElevatedButton.styleFrom(
+//               backgroundColor: _error,
+//               foregroundColor: _white,
+//               elevation: 0,
+//               shape: RoundedRectangleBorder(
+//                 borderRadius: BorderRadius.circular(8),
+//               ),
+//             ),
 //             child: const Text('Cancel Notif'),
 //           ),
 //         ],
@@ -2159,30 +5087,29 @@
 //   }
 
 //   Future<void> _reschedule(GnNotification n) async {
-//     DateTime? picked = n.scheduledAt;
 //     final date = await showDatePicker(
 //       context: context,
-//       initialDate: picked ?? DateTime.now().add(const Duration(hours: 1)),
+//       initialDate:
+//           n.scheduledAt ?? DateTime.now().add(const Duration(hours: 1)),
 //       firstDate: DateTime.now(),
 //       lastDate: DateTime.now().add(const Duration(days: 365)),
 //       builder: (ctx, child) => Theme(
-//         data: ThemeData.dark().copyWith(
-//           colorScheme: const ColorScheme.dark(primary: _accent),
-//         ),
+//         data: Theme.of(
+//           ctx,
+//         ).copyWith(colorScheme: const ColorScheme.light(primary: _accent)),
 //         child: child!,
 //       ),
 //     );
-//     if (date == null) return;
-//     if (!mounted) return;
+//     if (date == null || !mounted) return;
 //     final time = await showTimePicker(
 //       context: context,
-//       initialTime: picked != null
-//           ? TimeOfDay.fromDateTime(picked)
+//       initialTime: n.scheduledAt != null
+//           ? TimeOfDay.fromDateTime(n.scheduledAt!)
 //           : const TimeOfDay(hour: 9, minute: 0),
 //       builder: (ctx, child) => Theme(
-//         data: ThemeData.dark().copyWith(
-//           colorScheme: const ColorScheme.dark(primary: _accent),
-//         ),
+//         data: Theme.of(
+//           ctx,
+//         ).copyWith(colorScheme: const ColorScheme.light(primary: _accent)),
 //         child: child!,
 //       ),
 //     );
@@ -2232,29 +5159,29 @@
 //         child: Column(
 //           mainAxisSize: MainAxisSize.min,
 //           children: [
-//             Icon(Icons.schedule_outlined, color: _textMut, size: 40),
+//             Icon(Icons.schedule_outlined, color: _textMut, size: 48),
 //             SizedBox(height: 12),
 //             Text(
 //               'No scheduled notifications',
-//               style: TextStyle(color: _textMut),
+//               style: TextStyle(color: _textMut, fontSize: 15),
 //             ),
 //           ],
 //         ),
 //       );
 //     }
+
 //     return RefreshIndicator(
 //       onRefresh: _load,
 //       color: _accent,
-//       backgroundColor: _surfaceEl,
 //       child: ListView.separated(
 //         padding: const EdgeInsets.all(14),
 //         itemCount: _items.length,
-//         separatorBuilder: (_, _) => const SizedBox(height: 10),
+//         separatorBuilder: (_, __) => const SizedBox(height: 10),
 //         itemBuilder: (_, i) {
 //           final n = _items[i];
 //           final fmt = DateFormat('MMM d, yyyy  ·  h:mm a');
-//           return _Card(
-//             borderColor: _warning.withValues(alpha: 0.3),
+//           return _LCard(
+//             borderColor: _warning.withOpacity(0.3),
 //             child: Column(
 //               crossAxisAlignment: CrossAxisAlignment.start,
 //               children: [
@@ -2283,15 +5210,16 @@
 //                   overflow: TextOverflow.ellipsis,
 //                 ),
 //                 const SizedBox(height: 10),
+//                 // ── Scheduled time badge ──
 //                 Container(
 //                   padding: const EdgeInsets.symmetric(
 //                     horizontal: 10,
 //                     vertical: 6,
 //                   ),
 //                   decoration: BoxDecoration(
-//                     color: _warning.withValues(alpha: 0.08),
+//                     color: _warning.withOpacity(0.08),
 //                     borderRadius: BorderRadius.circular(7),
-//                     border: Border.all(color: _warning.withValues(alpha: 0.25)),
+//                     border: Border.all(color: _warning.withOpacity(0.25)),
 //                   ),
 //                   child: Row(
 //                     children: [
@@ -2323,7 +5251,7 @@
 //                         vertical: 4,
 //                       ),
 //                       decoration: BoxDecoration(
-//                         color: _border,
+//                         color: const Color(0xFFF1F5F9),
 //                         borderRadius: BorderRadius.circular(5),
 //                       ),
 //                       child: Text(
@@ -2387,7 +5315,6 @@
 // class _AnalyticsScreen extends StatefulWidget {
 //   final GnService svc;
 //   const _AnalyticsScreen({required this.svc});
-
 //   @override
 //   State<_AnalyticsScreen> createState() => _AnalyticsScreenState();
 // }
@@ -2396,7 +5323,6 @@
 //   List<GnAnalyticsTrend> _trend = [];
 //   List<GnTypeBreakdown> _byType = [];
 //   bool _loading = true;
-//   // FIXED: renamed from _error to _errMsg
 //   String? _errMsg;
 
 //   @override
@@ -2437,27 +5363,17 @@
 //       );
 //     }
 //     if (_errMsg != null) {
-//       return Center(
-//         child: Column(
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             Text(_errMsg!, style: const TextStyle(color: _textSec)),
-//             const SizedBox(height: 12),
-//             ElevatedButton(onPressed: _load, child: const Text('Retry')),
-//           ],
-//         ),
-//       );
+//       return _ErrorView(message: _errMsg!, onRetry: _load);
 //     }
 //     return RefreshIndicator(
 //       onRefresh: _load,
 //       color: _accent,
-//       backgroundColor: _surfaceEl,
 //       child: ListView(
 //         padding: const EdgeInsets.all(16),
 //         children: [
-//           _SectionHeader('30-Day Trend'),
+//           _SectionHeader('30-Day Trend', icon: Icons.show_chart_outlined),
 //           const SizedBox(height: 12),
-//           _Card(
+//           _LCard(
 //             child: _trend.isEmpty
 //                 ? const Padding(
 //                     padding: EdgeInsets.symmetric(vertical: 20),
@@ -2468,7 +5384,7 @@
 //                 : _BarChart(trend: _trend),
 //           ),
 //           const SizedBox(height: 20),
-//           _SectionHeader('Performance by Type'),
+//           _SectionHeader('Performance by Type', icon: Icons.pie_chart_outline),
 //           const SizedBox(height: 12),
 //           if (_byType.isEmpty)
 //             const Center(
@@ -2479,8 +5395,8 @@
 //               final c = _typeColor(t.type);
 //               return Padding(
 //                 padding: const EdgeInsets.only(bottom: 10),
-//                 child: _Card(
-//                   borderColor: c.withValues(alpha: 0.2),
+//                 child: _LCard(
+//                   borderLeft: c,
 //                   child: Column(
 //                     crossAxisAlignment: CrossAxisAlignment.start,
 //                     children: [
@@ -2525,8 +5441,9 @@
 //                               vertical: 4,
 //                             ),
 //                             decoration: BoxDecoration(
-//                               color: _cyan.withValues(alpha: 0.12),
+//                               color: _cyan.withOpacity(0.1),
 //                               borderRadius: BorderRadius.circular(20),
+//                               border: Border.all(color: _cyan.withOpacity(0.2)),
 //                             ),
 //                             child: Text(
 //                               '${t.openRate.toStringAsFixed(1)}%',
@@ -2550,7 +5467,7 @@
 //   }
 // }
 
-// // Simple bar chart widget (no external packages)
+// /// Bar chart — same logic, light colours
 // class _BarChart extends StatelessWidget {
 //   final List<GnAnalyticsTrend> trend;
 //   const _BarChart({required this.trend});
@@ -2579,9 +5496,9 @@
 //                       Container(
 //                         height: sentH.clamp(2.0, 100.0),
 //                         decoration: BoxDecoration(
-//                           color: _accent.withValues(alpha: 0.7),
+//                           color: _accent.withOpacity(0.6),
 //                           borderRadius: const BorderRadius.vertical(
-//                             top: Radius.circular(2),
+//                             top: Radius.circular(3),
 //                           ),
 //                         ),
 //                       ),
@@ -2589,9 +5506,9 @@
 //                         Container(
 //                           height: failH.clamp(2.0, 100.0),
 //                           decoration: BoxDecoration(
-//                             color: _error.withValues(alpha: 0.8),
+//                             color: _error.withOpacity(0.75),
 //                             borderRadius: const BorderRadius.vertical(
-//                               top: Radius.circular(2),
+//                               top: Radius.circular(3),
 //                             ),
 //                           ),
 //                         ),
@@ -2620,7 +5537,6 @@
 //   final GnService svc;
 //   final int id;
 //   const _DetailScreen({required this.svc, required this.id});
-
 //   @override
 //   State<_DetailScreen> createState() => _DetailScreenState();
 // }
@@ -2630,7 +5546,6 @@
 //   List<Map<String, dynamic>> _breakdown = [];
 //   List<Map<String, dynamic>> _orgStats = [];
 //   bool _loading = true;
-//   // FIXED: renamed from _error to _errMsg
 //   String? _errMsg;
 //   bool _retrying = false;
 
@@ -2691,12 +5606,22 @@
 //     return Scaffold(
 //       backgroundColor: _bg,
 //       appBar: AppBar(
-//         backgroundColor: _surface,
+//         backgroundColor: _white,
+//         elevation: 0,
+//         surfaceTintColor: Colors.transparent,
+//         leading: const BackButton(color: _textPri),
 //         title: const Text(
 //           'Notification Detail',
-//           style: TextStyle(color: _textPri, fontSize: 16),
+//           style: TextStyle(
+//             color: _textPri,
+//             fontSize: 16,
+//             fontWeight: FontWeight.w600,
+//           ),
 //         ),
-//         iconTheme: const IconThemeData(color: _textSec),
+//         bottom: PreferredSize(
+//           preferredSize: const Size.fromHeight(1),
+//           child: Container(height: 1, color: const Color(0xFFE8EAED)),
+//         ),
 //         actions: [
 //           if (_n?.status == 'sent' && (_n?.failedCount ?? 0) > 0)
 //             TextButton.icon(
@@ -2723,16 +5648,7 @@
 //               child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
 //             )
 //           : _errMsg != null
-//           ? Center(
-//               child: Column(
-//                 mainAxisSize: MainAxisSize.min,
-//                 children: [
-//                   Text(_errMsg!, style: const TextStyle(color: _textSec)),
-//                   const SizedBox(height: 12),
-//                   ElevatedButton(onPressed: _load, child: const Text('Retry')),
-//                 ],
-//               ),
-//             )
+//           ? _ErrorView(message: _errMsg!, onRetry: _load)
 //           : _buildBody(),
 //     );
 //   }
@@ -2743,8 +5659,9 @@
 //     return ListView(
 //       padding: const EdgeInsets.all(16),
 //       children: [
-//         _Card(
-//           borderColor: _typeColor(n.type).withValues(alpha: 0.3),
+//         // ── Header card ──
+//         _LCard(
+//           borderLeft: _typeColor(n.type),
 //           child: Column(
 //             crossAxisAlignment: CrossAxisAlignment.start,
 //             children: [
@@ -2797,27 +5714,31 @@
 //             ],
 //           ),
 //         ),
-//         const SizedBox(height: 16),
-//         _SectionHeader('Delivery Summary'),
+//         const SizedBox(height: 14),
+
+//         // ── Delivery metrics ──
+//         _SectionHeader('Delivery Summary', icon: Icons.analytics_outlined),
 //         const SizedBox(height: 10),
-//         GridView.count(
-//           crossAxisCount: 2,
-//           crossAxisSpacing: 10,
-//           mainAxisSpacing: 10,
-//           shrinkWrap: true,
-//           physics: const NeverScrollableScrollPhysics(),
-//           childAspectRatio: 2.0,
+//         Row(
 //           children: [
-//             _MiniStat('Total', _fmt(n.totalTargets), _textPri),
-//             _MiniStat('Sent', _fmt(n.sentCount), _success),
-//             _MiniStat('Failed', _fmt(n.failedCount), _error),
-//             _MiniStat('Opened', '${n.openRate.toStringAsFixed(1)}%', _cyan),
+//             Expanded(child: _MiniStat('Total', _fmt(n.totalTargets), _textPri)),
+//             const SizedBox(width: 8),
+//             Expanded(child: _MiniStat('Sent', _fmt(n.sentCount), _success)),
+//             const SizedBox(width: 8),
+//             Expanded(child: _MiniStat('Failed', _fmt(n.failedCount), _error)),
+//             const SizedBox(width: 8),
+//             Expanded(
+//               child: _MiniStat(
+//                 'Opened',
+//                 '${n.openRate.toStringAsFixed(1)}%',
+//                 _cyan,
+//               ),
+//             ),
 //           ],
 //         ),
-//         const SizedBox(height: 12),
-//         _Card(
+//         const SizedBox(height: 10),
+//         _LCard(
 //           child: Column(
-//             crossAxisAlignment: CrossAxisAlignment.start,
 //             children: [
 //               _ProgressRow(
 //                 label: 'Sent',
@@ -2840,16 +5761,17 @@
 //             ],
 //           ),
 //         ),
-//         const SizedBox(height: 16),
+
 //         if (_breakdown.isNotEmpty) ...[
-//           _SectionHeader('Status Breakdown'),
+//           const SizedBox(height: 16),
+//           _SectionHeader('Status Breakdown', icon: Icons.donut_small_outlined),
 //           const SizedBox(height: 10),
-//           _Card(
+//           _LCard(
 //             child: Column(
 //               children: _breakdown.map((b) {
-//                 final statusStr = b['delivery_status'] as String? ?? '';
+//                 final st = b['delivery_status'] as String? ?? '';
 //                 final count = b['count'] ?? 0;
-//                 final c = _statusColor(statusStr);
+//                 final c = _statusColor(st);
 //                 return Padding(
 //                   padding: const EdgeInsets.only(bottom: 8),
 //                   child: Row(
@@ -2864,7 +5786,7 @@
 //                       ),
 //                       const SizedBox(width: 8),
 //                       Text(
-//                         statusStr.toUpperCase(),
+//                         st.toUpperCase(),
 //                         style: TextStyle(
 //                           color: c,
 //                           fontSize: 11,
@@ -2887,10 +5809,14 @@
 //               }).toList(),
 //             ),
 //           ),
-//           const SizedBox(height: 16),
 //         ],
+
 //         if (_orgStats.isNotEmpty) ...[
-//           _SectionHeader('Per-Organization Stats'),
+//           const SizedBox(height: 16),
+//           _SectionHeader(
+//             'Per-Organization Stats',
+//             icon: Icons.business_outlined,
+//           ),
 //           const SizedBox(height: 10),
 //           ..._orgStats.map((o) {
 //             final sent = o['sent'] ?? 0;
@@ -2899,7 +5825,7 @@
 //             final total = o['total'] ?? 1;
 //             return Padding(
 //               padding: const EdgeInsets.only(bottom: 8),
-//               child: _Card(
+//               child: _LCard(
 //                 padding: const EdgeInsets.all(12),
 //                 child: Column(
 //                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2940,6 +5866,7 @@
 //             );
 //           }),
 //         ],
+//         const SizedBox(height: 20),
 //       ],
 //     );
 //   }
@@ -2970,11 +5897,10 @@
 //   final String label;
 //   final String value;
 //   final Color color;
-
 //   const _MiniStat(this.label, this.value, this.color);
 
 //   @override
-//   Widget build(BuildContext context) => _Card(
+//   Widget build(BuildContext context) => _LCard(
 //     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
 //     child: Column(
 //       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2984,7 +5910,7 @@
 //           value,
 //           style: TextStyle(
 //             color: color,
-//             fontSize: 20,
+//             fontSize: 18,
 //             fontWeight: FontWeight.w700,
 //           ),
 //         ),
@@ -2994,6 +5920,68 @@
 //   );
 // }
 
+// // ─────────────────────────────────────────────────────────────────────────────
+// // SECTION 12 — EMPTY & ERROR STATES
+// // ─────────────────────────────────────────────────────────────────────────────
+
+// class _EmptyState extends StatelessWidget {
+//   const _EmptyState();
+//   @override
+//   Widget build(BuildContext context) => const Padding(
+//     padding: EdgeInsets.symmetric(vertical: 60),
+//     child: Center(
+//       child: Column(
+//         children: [
+//           Icon(Icons.notifications_off_outlined, size: 48, color: _textMut),
+//           SizedBox(height: 12),
+//           Text(
+//             'No notifications found',
+//             style: TextStyle(color: _textMut, fontSize: 15),
+//           ),
+//         ],
+//       ),
+//     ),
+//   );
+// }
+
+// class _ErrorView extends StatelessWidget {
+//   final String message;
+//   final VoidCallback onRetry;
+//   const _ErrorView({required this.message, required this.onRetry});
+
+//   @override
+//   Widget build(BuildContext context) => Center(
+//     child: Padding(
+//       padding: const EdgeInsets.all(24),
+//       child: Column(
+//         mainAxisAlignment: MainAxisAlignment.center,
+//         children: [
+//           const Icon(Icons.cloud_off_outlined, size: 48, color: _textMut),
+//           const SizedBox(height: 12),
+//           Text(
+//             message,
+//             textAlign: TextAlign.center,
+//             style: const TextStyle(color: _textSec),
+//           ),
+//           const SizedBox(height: 16),
+//           ElevatedButton(
+//             onPressed: onRetry,
+//             style: ElevatedButton.styleFrom(
+//               backgroundColor: _accent,
+//               foregroundColor: _white,
+//               elevation: 0,
+//               shape: RoundedRectangleBorder(
+//                 borderRadius: BorderRadius.circular(10),
+//               ),
+//             ),
+//             child: const Text('Retry'),
+//           ),
+//         ],
+//       ),
+//     ),
+//   );
+// }
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -3001,7 +5989,7 @@ import 'package:intl/intl.dart';
 import '../providers/api_config.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION 1 — MODELS  (unchanged)
+// SECTION 1 — MODELS
 // ─────────────────────────────────────────────────────────────────────────────
 
 int _parseInt(dynamic v) => v == null ? 0 : int.tryParse(v.toString()) ?? 0;
@@ -3111,11 +6099,13 @@ class GnTargetPreview {
   final int totalEmployees;
   final int totalOrgs;
   final List<String> orgIds;
+
   GnTargetPreview({
     required this.totalEmployees,
     required this.totalOrgs,
     required this.orgIds,
   });
+
   factory GnTargetPreview.fromJson(Map<String, dynamic> j) => GnTargetPreview(
     totalEmployees: _parseInt(j['total_employees']),
     totalOrgs: _parseInt(j['total_orgs']),
@@ -3129,6 +6119,7 @@ class GnAnalyticsTrend {
   final int sent;
   final int failed;
   final int opened;
+
   GnAnalyticsTrend({
     required this.date,
     required this.total,
@@ -3136,6 +6127,7 @@ class GnAnalyticsTrend {
     required this.failed,
     required this.opened,
   });
+
   factory GnAnalyticsTrend.fromJson(Map<String, dynamic> j) => GnAnalyticsTrend(
     date: j['date'] ?? '',
     total: _parseInt(j['total']),
@@ -3151,6 +6143,7 @@ class GnTypeBreakdown {
   final int totalSent;
   final int totalFailed;
   final double openRate;
+
   GnTypeBreakdown({
     required this.type,
     required this.total,
@@ -3158,6 +6151,7 @@ class GnTypeBreakdown {
     required this.totalFailed,
     required this.openRate,
   });
+
   factory GnTypeBreakdown.fromJson(Map<String, dynamic> j) => GnTypeBreakdown(
     type: j['type'] ?? '',
     total: _parseInt(j['total']),
@@ -3168,15 +6162,17 @@ class GnTypeBreakdown {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION 2 — SERVICE  (unchanged)
+// SECTION 2 — SERVICE
 // ─────────────────────────────────────────────────────────────────────────────
 
 class GnService {
   final String baseUrl;
   final String token;
+
   const GnService({required this.baseUrl, required this.token});
 
   String get _base => '$baseUrl/app-admin/notifications';
+
   Map<String, String> get _headers => {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer $token',
@@ -3237,7 +6233,7 @@ class GnService {
       if (tenantId != null) 'tenant_id': tenantId,
       if (dateFrom != null) 'date_from': dateFrom,
       if (dateTo != null) 'date_to': dateTo,
-      if (search != null) 'search': search,
+      if (search != null && search.isNotEmpty) 'search': search,
     };
     final uri = Uri.parse('$_base/history').replace(queryParameters: q);
     final res = await http.get(uri, headers: _headers);
@@ -3269,12 +6265,15 @@ class GnService {
       _patch('/$id/reschedule', {'scheduled_at': scheduledAt});
   Future<Map<String, dynamic>> retry(int id) =>
       _post('/$id/retry', {}, (d) => d);
+
   Future<List<GnNotification>> scheduled() => _get(
     '/scheduled/upcoming',
     (d) => (d['data'] as List).map((e) => GnNotification.fromJson(e)).toList(),
   );
+
   Future<Map<String, dynamic>> analytics() =>
       _get('/analytics/summary', (d) => d);
+
   Future<GnTargetPreview> previewTargets({
     required String scope,
     Map<String, dynamic>? scopeMeta,
@@ -3285,7 +6284,7 @@ class GnService {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION 3 — LIGHT THEME CONSTANTS  (matches AppAdminOrgScreen exactly)
+// SECTION 3 — LIGHT THEME CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const _bg = Color(0xFFF5F6FA);
@@ -3398,15 +6397,14 @@ String _fmt(int n) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION 4 — SHARED LIGHT WIDGETS
+// SECTION 4 — SHARED WIDGETS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// White card matching AppAdminOrgScreen's card style
 class _LCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets? padding;
   final VoidCallback? onTap;
-  final Color? borderLeft; // accent left border like _StatCard
+  final Color? borderLeft;
   final Color? borderColor;
 
   const _LCard({
@@ -3443,7 +6441,6 @@ class _LCard extends StatelessWidget {
   }
 }
 
-/// Stat card — exact copy of AppAdminOrgScreen's _StatCard with left border
 class _StatCard extends StatelessWidget {
   final String label;
   final String value;
@@ -3513,7 +6510,6 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-/// Status badge matching _StatusBadge in AppAdminOrgScreen
 class _StatusChip extends StatelessWidget {
   final String status;
   const _StatusChip(this.status);
@@ -3588,7 +6584,6 @@ class _TypeChip extends StatelessWidget {
   }
 }
 
-/// Section header — blue left bar, matches _SectionCard title style
 class _SectionHeader extends StatelessWidget {
   final String title;
   final IconData? icon;
@@ -3626,6 +6621,7 @@ class _StatPill extends StatelessWidget {
   final IconData icon;
   final String value;
   final Color color;
+
   const _StatPill({
     required this.icon,
     required this.value,
@@ -3650,12 +6646,12 @@ class _StatPill extends StatelessWidget {
   );
 }
 
-/// Progress row — light styled
 class _ProgressRow extends StatelessWidget {
   final String label;
   final int value;
   final int total;
   final Color color;
+
   const _ProgressRow({
     required this.label,
     required this.value,
@@ -3704,7 +6700,6 @@ class _ProgressRow extends StatelessWidget {
   }
 }
 
-/// Notification list tile — light card style
 class _NotifTile extends StatelessWidget {
   final GnNotification n;
   final VoidCallback? onTap;
@@ -3806,12 +6801,15 @@ class _NotifTile extends StatelessWidget {
   }
 }
 
-/// Filter chip — identical to AppAdminOrgScreen's _FilterChip
+// ─────────────────────────────────────────────────────────────────────────────
+// FIX: _FilterChip — now shows a checkmark when selected for clear feedback
+// ─────────────────────────────────────────────────────────────────────────────
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool selected;
   final Color? color;
   final VoidCallback? onTap;
+
   const _FilterChip({
     required this.label,
     required this.selected,
@@ -3834,13 +6832,22 @@ class _FilterChip extends StatelessWidget {
           border: Border.all(color: selected ? c : _borderCol),
           boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 3)],
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: selected ? _white : _textSec,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selected) ...[
+              const Icon(Icons.check, size: 11, color: _white),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: selected ? _white : _textSec,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -3923,7 +6930,7 @@ class _GlobalNotifyConsoleState extends State<GlobalNotifyConsole> {
                 color: _purple.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Text(
+              child: const Text(
                 'SUPER ADMIN',
                 style: TextStyle(
                   color: _purple,
@@ -4007,6 +7014,7 @@ class _GlobalNotifyConsoleState extends State<GlobalNotifyConsole> {
 class _OverviewScreen extends StatefulWidget {
   final GnService svc;
   const _OverviewScreen({required this.svc});
+
   @override
   State<_OverviewScreen> createState() => _OverviewScreenState();
 }
@@ -4067,7 +7075,6 @@ class _OverviewScreenState extends State<_OverviewScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Stats row (horizontal scroll, left-border style) ──
                   SizedBox(
                     height: 100,
                     child: ListView(
@@ -4161,6 +7168,7 @@ class _OverviewScreenState extends State<_OverviewScreen> {
 class _SendScreen extends StatefulWidget {
   final GnService svc;
   const _SendScreen({required this.svc});
+
   @override
   State<_SendScreen> createState() => _SendScreenState();
 }
@@ -4350,7 +7358,6 @@ class _SendScreenState extends State<_SendScreen> {
         ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // ── Type selector ──
             _SectionHeader('Notification Type', icon: Icons.category_outlined),
             const SizedBox(height: 10),
             SizedBox(
@@ -4405,8 +7412,6 @@ class _SendScreenState extends State<_SendScreen> {
               ),
             ),
             const SizedBox(height: 18),
-
-            // ── Scope ──
             _SectionHeader('Target Audience', icon: Icons.people_outline),
             const SizedBox(height: 10),
             Wrap(
@@ -4545,7 +7550,6 @@ class _SendScreenState extends State<_SendScreen> {
               ),
               const SizedBox(height: 10),
             ],
-
             const SizedBox(height: 8),
             _SectionHeader('Content', icon: Icons.edit_outlined),
             const SizedBox(height: 10),
@@ -4580,9 +7584,7 @@ class _SendScreenState extends State<_SendScreen> {
                 icon: Icons.image_outlined,
               ),
             ),
-
             const SizedBox(height: 16),
-            // ── Schedule toggle ──
             _LCard(
               borderColor: _warning.withOpacity(0.35),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -4655,15 +7657,11 @@ class _SendScreenState extends State<_SendScreen> {
                   horizontal: 14,
                   vertical: 10,
                 ),
-                child: Row(
+                child: const Row(
                   children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: _error,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 10),
-                    const Expanded(
+                    Icon(Icons.warning_amber_rounded, color: _error, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(
                       child: Text(
                         'Emergency alerts are delivered with high priority'
                         ' and may override DND settings.',
@@ -4749,12 +7747,13 @@ class _SendScreenState extends State<_SendScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION 8 — HISTORY SCREEN
+// SECTION 8 — HISTORY SCREEN  ← ALL FIXES HERE
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _HistoryScreen extends StatefulWidget {
   final GnService svc;
   const _HistoryScreen({required this.svc});
+
   @override
   State<_HistoryScreen> createState() => _HistoryScreenState();
 }
@@ -4766,14 +7765,28 @@ class _HistoryScreenState extends State<_HistoryScreen> {
   int _page = 1;
   int _total = 0;
   static const _limit = 20;
+
   String? _filterType;
   String? _filterStatus;
   final _searchCtrl = TextEditingController();
+
+  // FIX 1: debounce timer so search fires 400ms after the user stops typing
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // FIX 2: listen to every keystroke; debounce the actual load call
+    _searchCtrl.addListener(_onSearchChanged);
+  }
+
+  // FIX 3: debounced handler — resets page and fetches when text changes
+  void _onSearchChanged() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) _load(reset: true);
+    });
   }
 
   Future<void> _load({bool reset = false}) async {
@@ -4807,27 +7820,56 @@ class _HistoryScreenState extends State<_HistoryScreen> {
     }
   }
 
+  // FIX 4: type chip toggle — updates state AND immediately fetches
+  void _toggleType(String t) {
+    setState(() => _filterType = _filterType == t ? null : t);
+    _load(reset: true);
+  }
+
+  // FIX 5: status chip toggle — updates state AND immediately fetches
+  void _toggleStatus(String s) {
+    setState(() => _filterStatus = _filterStatus == s ? null : s);
+    _load(reset: true);
+  }
+
+  // FIX 6: clear type filter
+  void _clearType() {
+    setState(() => _filterType = null);
+    _load(reset: true);
+  }
+
+  // FIX 7: clear status filter
+  void _clearStatus() {
+    setState(() => _filterStatus = null);
+    _load(reset: true);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final totalPages = (_total / _limit).ceil();
+    final totalPages = (_total / _limit).ceil().clamp(1, 9999);
+
     return Column(
       children: [
-        // ── Filter bar (light, matches AppAdminOrgScreen) ──
+        // ── Filter bar ──────────────────────────────────────────────────────
         Container(
           color: _white,
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Search field ──
               Container(
                 decoration: BoxDecoration(
                   color: _white,
                   borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _borderCol),
                   boxShadow: const [
                     BoxShadow(color: Color(0x08000000), blurRadius: 4),
                   ],
                 ),
                 child: TextField(
                   controller: _searchCtrl,
+                  // FIX 8: onSubmitted still works for keyboard "search" button
                   onSubmitted: (_) => _load(reset: true),
                   style: const TextStyle(color: _textPri, fontSize: 13),
                   decoration: InputDecoration(
@@ -4838,6 +7880,8 @@ class _HistoryScreenState extends State<_HistoryScreen> {
                       color: _textMut,
                       size: 18,
                     ),
+                    // FIX 9: clear button wired to debounced listener
+                    // (clearing the controller fires _onSearchChanged)
                     suffixIcon: _searchCtrl.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(
@@ -4847,7 +7891,7 @@ class _HistoryScreenState extends State<_HistoryScreen> {
                             ),
                             onPressed: () {
                               _searchCtrl.clear();
-                              _load(reset: true);
+                              // listener fires automatically; no manual call needed
                             },
                           )
                         : null,
@@ -4856,16 +7900,30 @@ class _HistoryScreenState extends State<_HistoryScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
+
+              // ── Type chips ──
+              const Text(
+                'TYPE',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: _textMut,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              const SizedBox(height: 6),
               SizedBox(
                 height: 32,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
                     _FilterChip(
-                      label: 'All Types',
+                      label: 'All',
                       selected: _filterType == null,
-                      onTap: () => setState(() => _filterType = null),
+                      // FIX 10: directly calls _clearType instead of
+                      // setState-only
+                      onTap: _clearType,
                     ),
                     ...[
                       'general',
@@ -4878,54 +7936,101 @@ class _HistoryScreenState extends State<_HistoryScreen> {
                         label: _typeLabel(t),
                         selected: _filterType == t,
                         color: _typeColor(t),
-                        onTap: () => setState(
-                          () => _filterType = _filterType == t ? null : t,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    _FilterChip(
-                      label: 'All Status',
-                      selected: _filterStatus == null,
-                      onTap: () => setState(() => _filterStatus = null),
-                    ),
-                    ...['sent', 'scheduled', 'failed', 'sending'].map(
-                      (s) => _FilterChip(
-                        label: s.capitalize(),
-                        selected: _filterStatus == s,
-                        color: _statusColor(s),
-                        onTap: () => setState(
-                          () => _filterStatus = _filterStatus == s ? null : s,
-                        ),
+                        onTap: () => _toggleType(t),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                height: 38,
-                child: ElevatedButton(
-                  onPressed: () => _load(reset: true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _accent,
-                    foregroundColor: _white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text(
-                    'Apply Filters',
-                    style: TextStyle(fontSize: 13),
-                  ),
+              const SizedBox(height: 10),
+
+              // ── Status chips ──
+              const Text(
+                'STATUS',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: _textMut,
+                  letterSpacing: 0.6,
                 ),
               ),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 32,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    _FilterChip(
+                      label: 'All',
+                      selected: _filterStatus == null,
+                      onTap: _clearStatus,
+                    ),
+                    ...[
+                      'sent',
+                      'scheduled',
+                      'failed',
+                      'sending',
+                      'cancelled',
+                    ].map(
+                      (s) => _FilterChip(
+                        label: s.capitalize(),
+                        selected: _filterStatus == s,
+                        color: _statusColor(s),
+                        onTap: () => _toggleStatus(s),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ── Active filter summary + reset-all ──
+              if (_filterType != null || _filterStatus != null) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Icon(Icons.filter_list, size: 13, color: _accent),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        [
+                          if (_filterType != null)
+                            'Type: ${_typeLabel(_filterType!)}',
+                          if (_filterStatus != null)
+                            'Status: ${_filterStatus!.capitalize()}',
+                        ].join('  ·  '),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: _accent,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _filterType = null;
+                          _filterStatus = null;
+                        });
+                        _load(reset: true);
+                      },
+                      child: const Text(
+                        'Reset all',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _error,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
-        const Divider(height: 1, color: Color(0xFFE8EAED)),
+        Container(height: 1, color: const Color(0xFFE8EAED)),
+
+        // ── List ────────────────────────────────────────────────────────────
         Expanded(
           child: _loading
               ? const Center(
@@ -4954,6 +8059,8 @@ class _HistoryScreenState extends State<_HistoryScreen> {
                   ),
                 ),
         ),
+
+        // ── Pagination ──────────────────────────────────────────────────────
         if (!_loading && _total > _limit)
           Container(
             color: _white,
@@ -4961,7 +8068,7 @@ class _HistoryScreenState extends State<_HistoryScreen> {
             child: Row(
               children: [
                 Text(
-                  '$_total results',
+                  '$_total result${_total == 1 ? '' : 's'}',
                   style: const TextStyle(color: _textMut, fontSize: 12),
                 ),
                 const Spacer(),
@@ -4998,6 +8105,9 @@ class _HistoryScreenState extends State<_HistoryScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    // FIX 11: remove listener before disposing controller
+    _searchCtrl.removeListener(_onSearchChanged);
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -5010,6 +8120,7 @@ class _HistoryScreenState extends State<_HistoryScreen> {
 class _ScheduledScreen extends StatefulWidget {
   final GnService svc;
   const _ScheduledScreen({required this.svc});
+
   @override
   State<_ScheduledScreen> createState() => _ScheduledScreenState();
 }
@@ -5210,7 +8321,6 @@ class _ScheduledScreenState extends State<_ScheduledScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 10),
-                // ── Scheduled time badge ──
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -5315,6 +8425,7 @@ class _ScheduledScreenState extends State<_ScheduledScreen> {
 class _AnalyticsScreen extends StatefulWidget {
   final GnService svc;
   const _AnalyticsScreen({required this.svc});
+
   @override
   State<_AnalyticsScreen> createState() => _AnalyticsScreenState();
 }
@@ -5467,7 +8578,6 @@ class _AnalyticsScreenState extends State<_AnalyticsScreen> {
   }
 }
 
-/// Bar chart — same logic, light colours
 class _BarChart extends StatelessWidget {
   final List<GnAnalyticsTrend> trend;
   const _BarChart({required this.trend});
@@ -5537,6 +8647,7 @@ class _DetailScreen extends StatefulWidget {
   final GnService svc;
   final int id;
   const _DetailScreen({required this.svc, required this.id});
+
   @override
   State<_DetailScreen> createState() => _DetailScreenState();
 }
@@ -5659,7 +8770,6 @@ class _DetailScreenState extends State<_DetailScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // ── Header card ──
         _LCard(
           borderLeft: _typeColor(n.type),
           child: Column(
@@ -5715,8 +8825,6 @@ class _DetailScreenState extends State<_DetailScreen> {
           ),
         ),
         const SizedBox(height: 14),
-
-        // ── Delivery metrics ──
         _SectionHeader('Delivery Summary', icon: Icons.analytics_outlined),
         const SizedBox(height: 10),
         Row(
@@ -5761,7 +8869,6 @@ class _DetailScreenState extends State<_DetailScreen> {
             ],
           ),
         ),
-
         if (_breakdown.isNotEmpty) ...[
           const SizedBox(height: 16),
           _SectionHeader('Status Breakdown', icon: Icons.donut_small_outlined),
@@ -5810,7 +8917,6 @@ class _DetailScreenState extends State<_DetailScreen> {
             ),
           ),
         ],
-
         if (_orgStats.isNotEmpty) ...[
           const SizedBox(height: 16),
           _SectionHeader(
@@ -5926,6 +9032,7 @@ class _MiniStat extends StatelessWidget {
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
+
   @override
   Widget build(BuildContext context) => const Padding(
     padding: EdgeInsets.symmetric(vertical: 60),

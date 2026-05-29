@@ -288,6 +288,7 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen>
 
   List<_Row> _personalRows() => [
     _Row('Employee ID', _fmt(employeeData!['emp_id'])),
+    _Row('Employee Code', _fmt(employeeData!['employee_code'])),
     _Row('Full Name', _fullName()),
     _Row('Gender', _fmt(employeeData!['gender'])),
     _Row('Date of Birth', _fmtDate(employeeData!['date_of_birth'])),
@@ -301,9 +302,15 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen>
     ),
   ];
   List<_Row> _workRows() => [
-    _Row('Department', _fmt(employeeData!['department_name'])),
+    _Row(
+      'Designation',
+      _fmt(employeeData!['designation_name']),
+    ), // ← was 'department_name'
+    _Row(
+      'Department',
+      _fmt(employeeData!['department_name']),
+    ), // ← keep, comes via join
     _Row('Role', _fmt(employeeData!['role_name'])),
-    _Row('TL Name', _fmt(employeeData!['tl_name'])),
     _Row(
       'Employment Type',
       _fmt(employeeData!['employment_type']),
@@ -322,6 +329,10 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen>
           ? '${employeeData!['years_experience']} yrs'
           : '-',
     ),
+    _Row(
+      'Reporting To',
+      _fmt(employeeData!['reporting_to_name']),
+    ), // ← was tl_name
     _Row('Date of Joining', _fmtDate(employeeData!['date_of_joining'])),
     _Row('Date of Relieving', _fmtDate(employeeData!['date_of_relieving'])),
   ];
@@ -525,6 +536,18 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen>
                               color: Colors.white.withOpacity(0.8),
                               fontSize: r.bodyTextSize,
                               fontWeight: FontWeight.w500,
+                            ),
+                          ),
+
+                          Text(
+                            // Show designation + department
+                            [
+                              _fmt(employeeData!['designation_name']),
+                              _fmt(employeeData!['department_name']),
+                            ].where((s) => s != '-').join(' · '),
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.55),
+                              fontSize: r.labelTextSize,
                             ),
                           ),
                           Text(

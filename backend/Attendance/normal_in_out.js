@@ -500,7 +500,7 @@ router.get("/all", requireAuth, async (req, res) => {
             ea.attendance_id,
             ea.employee_id,
             CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
-            e.department_id,
+            e.designation_id,
             ea.work_date,
             ea.checkin_time,
             ea.checkout_time,

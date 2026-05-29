@@ -67,7 +67,7 @@ router.get("/open-sessions", async (req, res) => {
             AND CONVERT(e.tenant_id   USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
               = CONVERT(ea.tenant_id  USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
       LEFT JOIN department_master d
-            ON  d.department_id = e.department_id
+            ON  d.department_id = e.designation_id
             AND CONVERT(d.tenant_id  USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
               = CONVERT(ea.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
        WHERE CONVERT(ea.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = ?

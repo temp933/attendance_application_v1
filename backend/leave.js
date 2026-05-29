@@ -1,6 +1,5 @@
 "use strict";
 
- 
 const express = require("express");
 const db = require("./config/db");
 const router = express.Router();
@@ -689,7 +688,7 @@ router.get("/details/:leave_id", async (req, res) => {
           lm.*,
           lt.leave_name,
           CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
-          e.department_id,
+          e.designation_id,
           CONCAT(ca.first_name, ' ', ca.last_name) AS current_approver_name
         FROM leave_master lm
         LEFT JOIN leave_type_master lt
@@ -741,7 +740,7 @@ router.get("/pending-approvals", async (req, res) => {
       `SELECT
           lm.leave_id, lm.emp_id,
           CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
-          e.department_id, lm.leave_type_id, lt.leave_name,
+          e.designation_id, lm.leave_type_id, lt.leave_name,
           lm.leave_start_date, lm.leave_end_date,
           lm.is_half_day, lm.half_day_period, lm.number_of_days,
           lm.reason, lm.status, lm.final_status,
@@ -1076,8 +1075,8 @@ router.get("/all-history", async (req, res) => {
           lm.leave_id,
           lm.emp_id,
           CONCAT(e.first_name, ' ', e.last_name)         AS employee_name,
-          e.department_id,
-          d.department_name,
+          e.designation_id,
+          d.designation_name,
           lm.leave_type_id,
           lt.leave_name,
           lm.leave_start_date,
@@ -1100,8 +1099,8 @@ router.get("/all-history", async (req, res) => {
         FROM leave_master lm
         LEFT JOIN employee_master e
           ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
-        LEFT JOIN department_master d
-          ON e.department_id = d.department_id AND d.tenant_id = lm.tenant_id
+        LEFT JOIN designation_master d
+          ON e.designation_id = d.designation_id AND d.tenant_id = lm.tenant_id
         LEFT JOIN leave_type_master lt
           ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
         LEFT JOIN employee_master ca

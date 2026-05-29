@@ -1290,9 +1290,15 @@ const appAdminLogin = require("./app_admin_login");
 app.use("/api/auth/app-admin", appAdminLogin);
 
 // ── Departments
-const departmentRoutes = require("./department_routes");
-app.use("/api/departments", departmentRoutes);
 
+const departmentrouter = require("./department");
+app.use("/api/departments", authMiddleware, departmentrouter);
+
+const rolerouter = require("./role");
+app.use("/api/roles", authMiddleware, rolerouter);
+
+const designationrouter = require("./designation");
+app.use("/api/designations", authMiddleware, designationrouter);
 // ── SPECIFIC /api/app-admin/* routes MUST come before the catch-all below ──
 
 // Global Notifications (Super Admin)

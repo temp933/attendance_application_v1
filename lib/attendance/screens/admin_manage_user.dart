@@ -1179,8 +1179,8 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   final passwordCtrl = TextEditingController();
 
   String gender = 'Male', employmentType = 'Permanent', workType = 'Full Time';
-  int? selectedDeptId, selectedRoleId;
-  List<Map<String, dynamic>> departments = [], roles = [];
+  int? selectedDeptId, selectedDesignationId, selectedRoleId;
+  List<Map<String, dynamic>> departments = [], designations = [], roles = [];
   int? selectedTlId;
   bool _submitting = false;
   Uint8List? _selectedPhotoBytes;
@@ -1198,29 +1198,28 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     try {
       final results = await Future.wait([
         EmployeeService.fetchDepartments(),
-        EmployeeService.fetchRoles(), // fan-out, now always returns a list
+        EmployeeService.fetchRoles(),
       ]);
       if (!mounted) return;
       setState(() {
         departments = results[0] as List<Map<String, dynamic>>;
         roles = results[1] as List<Map<String, dynamic>>;
+        designations = []; // empty until dept is selected
       });
     } catch (e) {
-      // Don't crash the form — just leave lists empty
       debugPrint('_loadDropdowns error: $e');
     }
   }
 
-  // Optional: refresh roles when user picks a department
   void _onDeptChanged(int? deptId) async {
     setState(() {
       selectedDeptId = deptId;
-      selectedRoleId = null; // reset role when dept changes
-      roles = [];
+      selectedDesignationId = null;
+      designations = [];
     });
     if (deptId != null) {
-      final deptRoles = await EmployeeService.fetchRoles(deptId: deptId);
-      if (mounted) setState(() => roles = deptRoles);
+      final list = await EmployeeService.fetchDesignations(deptId: deptId);
+      if (mounted) setState(() => designations = list);
     }
   }
 
@@ -1442,24 +1441,30 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                     color: _purple,
                     bgColor: const Color(0xFFF5F3FF),
                     children: [
-                      _row2(
-                        context,
-                        FormDropdownMap(
-                          'Department',
-                          departments,
-                          selectedDeptId,
-                          _onDeptChanged, // ← replaces the inline setState
-                          padding: EdgeInsets.zero,
-                        ),
-                        FormDropdownMap(
-                          'Role / Designation',
-                          roles,
-                          selectedRoleId,
-                          (v) => setState(() => selectedRoleId = v),
-                          padding: EdgeInsets.zero,
-                        ),
-                        sp: sp,
+                      FormDropdownMap(
+                        'Department',
+                        departments,
+                        selectedDeptId,
+                        _onDeptChanged,
+                        padding: EdgeInsets.zero,
                       ),
+                      SizedBox(height: sp),
+                      FormDropdownMap(
+                        'Designation',
+                        designations,
+                        selectedDesignationId,
+                        (v) => setState(() => selectedDesignationId = v),
+                        padding: EdgeInsets.zero,
+                      ),
+                      SizedBox(height: sp),
+                      FormDropdownMap(
+                        'Role',
+                        roles,
+                        selectedRoleId,
+                        (v) => setState(() => selectedRoleId = v),
+                        padding: EdgeInsets.zero,
+                      ),
+
                       SizedBox(height: sp),
 
                       SizedBox(height: sp),
@@ -1646,8 +1651,12 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       _snack('Please select a department');
       return;
     }
+    if (selectedDesignationId == null) {
+      _snack('Please select a designation');
+      return;
+    }
     if (selectedRoleId == null) {
-      _snack('Please select a role / designation');
+      _snack('Please select a role');
       return;
     }
     if (!(_eduKey.currentState?.validate() ?? false)) {
@@ -3862,8 +3871,8 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
       workType = 'Full Time',
       status = 'Active'; // ← NEW
 
-  int? selectedDeptId, selectedRoleId;
-  List<Map<String, dynamic>> departments = [], roles = [];
+  int? selectedDeptId, selectedDesignationId, selectedRoleId;
+  List<Map<String, dynamic>> departments = [], designations = [], roles = [];
   int? selectedTlId;
   bool _submitting = false;
   Uint8List? _selectedPhotoBytes;
@@ -3912,11 +3921,11 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
     selectedDeptId = d['department_id'] != null
         ? int.tryParse(d['department_id'].toString())
         : null;
+    selectedDesignationId = d['designation_id'] != null
+        ? int.tryParse(d['designation_id'].toString())
+        : null;
     selectedRoleId = d['role_id'] != null
         ? int.tryParse(d['role_id'].toString())
-        : null;
-    selectedTlId = d['tl_id'] != null
-        ? int.tryParse(d['tl_id'].toString())
         : null;
 
     if (d['education'] is List) {
@@ -3948,11 +3957,16 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
       final results = await Future.wait([
         EmployeeService.fetchDepartments(),
         EmployeeService.fetchRoles(),
+        if (selectedDeptId != null)
+          EmployeeService.fetchDesignations(deptId: selectedDeptId)
+        else
+          Future.value(<Map<String, dynamic>>[]),
       ]);
       if (!mounted) return;
       setState(() {
         departments = results[0] as List<Map<String, dynamic>>;
         roles = results[1] as List<Map<String, dynamic>>;
+        designations = results[2] as List<Map<String, dynamic>>;
       });
     } catch (e) {
       debugPrint('_loadDropdowns error: $e');
@@ -3962,12 +3976,12 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
   void _onDeptChanged(int? deptId) async {
     setState(() {
       selectedDeptId = deptId;
-      selectedRoleId = null;
-      roles = [];
+      selectedDesignationId = null;
+      designations = [];
     });
     if (deptId != null) {
-      final deptRoles = await EmployeeService.fetchRoles(deptId: deptId);
-      if (mounted) setState(() => roles = deptRoles);
+      final list = await EmployeeService.fetchDesignations(deptId: deptId);
+      if (mounted) setState(() => designations = list);
     }
   }
 
@@ -4271,23 +4285,36 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
                     color: _purple,
                     bgColor: const Color(0xFFF5F3FF),
                     children: [
-                      _row2(
-                        context,
-                        FormDropdownMap(
-                          'Department',
-                          departments,
-                          selectedDeptId,
-                          _onDeptChanged, // ← now uses dept-aware reload
-                          padding: EdgeInsets.zero,
-                        ),
-                        FormDropdownMap(
-                          'Role / Designation',
-                          roles,
-                          selectedRoleId,
-                          (v) => setState(() => selectedRoleId = v),
-                          padding: EdgeInsets.zero,
-                        ),
-                        sp: sp,
+                      FormDropdownMap(
+                        'Department',
+                        departments,
+                        selectedDeptId,
+                        _onDeptChanged,
+                        padding: EdgeInsets.zero,
+                      ),
+                      SizedBox(height: sp),
+                      FormDropdownMap(
+                        'Designation',
+                        designations,
+                        selectedDesignationId,
+                        (v) => setState(() => selectedDesignationId = v),
+                        padding: EdgeInsets.zero,
+                      ),
+                      SizedBox(height: sp),
+                      FormDropdownMap(
+                        'Role',
+                        roles,
+                        selectedRoleId,
+                        (v) => setState(() => selectedRoleId = v),
+                        padding: EdgeInsets.zero,
+                      ),
+                      SizedBox(height: sp),
+                      FormDropdownMap(
+                        'Role',
+                        roles,
+                        selectedRoleId,
+                        (v) => setState(() => selectedRoleId = v),
+                        padding: EdgeInsets.zero,
                       ),
                       SizedBox(height: sp),
                       FormDateField(
@@ -4532,6 +4559,10 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
       _snack('Please select a department');
       return;
     }
+    if (selectedDesignationId == null) {
+      _snack('Please select a designation');
+      return;
+    }
     if (selectedRoleId == null) {
       _snack('Please select a role');
       return;
@@ -4558,7 +4589,7 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
       'phone_number': phoneCtrl.text,
       'date_of_birth': dobCtrl.text,
       'gender': gender,
-      'department_id': selectedDeptId,
+      'designation_id': selectedDesignationId,
       'role_id': selectedRoleId,
       'date_of_joining': dojCtrl.text,
       'employment_type': employmentType,
@@ -4696,8 +4727,8 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
       gender = 'Male',
       employmentType = 'Permanent',
       status = 'Active';
-  int? selectedDeptId, selectedRoleId;
-  List<Map<String, dynamic>> departments = [], roles = [];
+  int? selectedDeptId, selectedDesignationId, selectedRoleId;
+  List<Map<String, dynamic>> departments = [], designations = [], roles = [];
   int? selectedTlId;
   bool _submitting = false, _loadingEdu = true;
   Uint8List? _selectedPhotoBytes;
@@ -4749,11 +4780,12 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
     employmentType = e.employmentType ?? 'Permanent';
     status = e.status ?? 'Active';
     selectedDeptId = e.departmentId;
+    selectedDesignationId = e.designationId;
     selectedRoleId = e.roleId;
     aadharCtrl = TextEditingController(text: e.aadharNumber ?? '');
     panCtrl = TextEditingController(text: e.panNumber ?? '');
     passportCtrl = TextEditingController(text: e.passportNumber ?? '');
-    selectedTlId = e.tlId;
+    selectedTlId = e.reportingToEmployeeId;
     _existingPhotoFuture = ApiClient.get(
       '/employees/${widget.employee.empId}/photo',
     );
@@ -4762,34 +4794,36 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
   }
 
   // In AddEmployeePage / EditPage — when department changes, reload roles
-
   Future<void> _loadDropdowns() async {
     try {
       final results = await Future.wait([
         EmployeeService.fetchDepartments(),
-        EmployeeService.fetchRoles(), // fan-out, now always returns a list
+        EmployeeService.fetchRoles(),
+        if (selectedDeptId != null)
+          EmployeeService.fetchDesignations(deptId: selectedDeptId)
+        else
+          EmployeeService.fetchDesignations(),
       ]);
       if (!mounted) return;
       setState(() {
         departments = results[0] as List<Map<String, dynamic>>;
         roles = results[1] as List<Map<String, dynamic>>;
+        designations = results[2] as List<Map<String, dynamic>>;
       });
     } catch (e) {
-      // Don't crash the form — just leave lists empty
       debugPrint('_loadDropdowns error: $e');
     }
   }
 
-  // Optional: refresh roles when user picks a department
   void _onDeptChanged(int? deptId) async {
     setState(() {
       selectedDeptId = deptId;
-      selectedRoleId = null; // reset role when dept changes
-      roles = [];
+      selectedDesignationId = null;
+      designations = [];
     });
     if (deptId != null) {
-      final deptRoles = await EmployeeService.fetchRoles(deptId: deptId);
-      if (mounted) setState(() => roles = deptRoles);
+      final list = await EmployeeService.fetchDesignations(deptId: deptId);
+      if (mounted) setState(() => designations = list);
     }
   }
 
@@ -5079,26 +5113,29 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
                     color: _purple,
                     bgColor: const Color(0xFFF5F3FF),
                     children: [
-                      _row2(
-                        context,
-                        FormDropdownMap(
-                          'Department',
-                          departments,
-                          selectedDeptId,
-                          (v) => setState(() => selectedDeptId = v),
-                          padding: EdgeInsets.zero,
-                        ),
-                        FormDropdownMap(
-                          'Role',
-                          roles,
-                          selectedRoleId,
-                          (v) => setState(() => selectedRoleId = v),
-                          padding: EdgeInsets.zero,
-                        ),
-                        sp: sp,
+                      FormDropdownMap(
+                        'Department',
+                        departments,
+                        selectedDeptId,
+                        _onDeptChanged,
+                        padding: EdgeInsets.zero,
                       ),
                       SizedBox(height: sp),
-
+                      FormDropdownMap(
+                        'Designation',
+                        designations,
+                        selectedDesignationId,
+                        (v) => setState(() => selectedDesignationId = v),
+                        padding: EdgeInsets.zero,
+                      ),
+                      SizedBox(height: sp),
+                      FormDropdownMap(
+                        'Role',
+                        roles,
+                        selectedRoleId,
+                        (v) => setState(() => selectedRoleId = v),
+                        padding: EdgeInsets.zero,
+                      ),
                       SizedBox(height: sp),
                       // ── DOJ optional on edit but validated if filled ──────────
                       FormDateField(
@@ -5344,6 +5381,10 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
       _snack('Please select a department');
       return;
     }
+    if (selectedDesignationId == null) {
+      _snack('Please select a designation');
+      return;
+    }
     if (selectedRoleId == null) {
       _snack('Please select a role');
       return;
@@ -5371,9 +5412,9 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
       'date_of_relieving': dorCtrl.text,
       'employment_type': employmentType,
       'work_type': workType,
-      'department_id': selectedDeptId,
+      'designation_id': selectedDesignationId,
       'role_id': selectedRoleId,
-      'tl_id': selectedTlId,
+      'reporting_to_employee_id': null,
       'permanent_address': permAddrCtrl.text,
       'communication_address': commAddrCtrl.text,
       'status': status,

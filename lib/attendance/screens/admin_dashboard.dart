@@ -8,7 +8,7 @@ import 'admin_home_screen.dart';
 
 import 'admin_hr_leave_approval.dart';
 import 'admin_department_screen.dart';
-
+import 'dept_role_desg_screen.dart';
 import '../services/location_services.dart';
 import 'emp_profile_screen.dart';
 import 'admin_approval.dart';
@@ -106,7 +106,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             '',
       ),
 
-      AdminDepartmentsScreen(tenantId: widget.tenantId), // 4
+      // AdminDepartmentsScreen(tenantId: widget.tenantId), // 4
+      DeptRoleDesgScreen(),
       ManageUserScreen(roleId: widget.roleId, tenantId: widget.tenantId), // 5
       AdminApprovalPage(),
       AdminFaceApprovalPage(),
