@@ -35,7 +35,7 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _tab = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -133,6 +133,16 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
                     ],
                   ),
                 ),
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.tune_rounded, size: 16),
+                      SizedBox(width: 6),
+                      Text('Permissions'),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -141,7 +151,12 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
       // ── Tab Views ──────────────────────────────────────────────────────────
       body: TabBarView(
         controller: _tab,
-        children: const [_DepartmentsTab(), _DesignationsTab(), _RolesTab()],
+        children: const [
+          _DepartmentsTab(),
+          _DesignationsTab(),
+          _RolesTab(),
+          _PermissionsTab(),
+        ],
       ),
     );
   }
@@ -1603,5 +1618,446 @@ class _ErrorView extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _PermissionsTab extends StatefulWidget {
+  const _PermissionsTab();
+
+  @override
+  State<_PermissionsTab> createState() => _PermissionsTabState();
+}
+
+class _PermissionsTabState extends State<_PermissionsTab>
+    with AutomaticKeepAliveClientMixin {
+  final _svc = RolePermissionService();
+  final _roleSvc = RoleService();
+
+  List<RoleModel> _roles = [];
+  RoleModel? _selectedRole;
+  List<RolePermissionModule> _modules = [];
+
+  bool _rolesLoading = true;
+  bool _modulesLoading = false;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRoles();
+  }
+
+  Future<void> _loadRoles() async {
+    setState(() => _rolesLoading = true);
+    try {
+      final list = await _roleSvc.fetchAll();
+      setState(() {
+        _roles = list;
+        _rolesLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceAll('Exception: ', '');
+        _rolesLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadModules(RoleModel role) async {
+    setState(() {
+      _modulesLoading = true;
+      _selectedRole = role;
+      _modules = [];
+      _error = null;
+    });
+    try {
+      final list = await _svc.fetchPermissions(role.id);
+      setState(() {
+        _modules = list;
+        _modulesLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceAll('Exception: ', '');
+        _modulesLoading = false;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    if (_selectedRole == null) return;
+    setState(() => _saving = true);
+    try {
+      await _svc.savePermissions(_selectedRole!.id, _modules);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Permissions saved successfully'),
+            backgroundColor: _success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: _danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return Column(
+      children: [
+        // ── Role Selector ──────────────────────────────────────────────────
+        Container(
+          color: _card,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: _rolesLoading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: _primary,
+                    strokeWidth: 2,
+                  ),
+                )
+              : DropdownButtonFormField<RoleModel>(
+                  value: _selectedRole,
+                  decoration: InputDecoration(
+                    labelText: 'Select Role',
+                    labelStyle: const TextStyle(color: _textMid, fontSize: 13),
+                    prefixIcon: const Icon(
+                      Icons.shield_outlined,
+                      color: _primary,
+                      size: 18,
+                    ),
+                    filled: true,
+                    fillColor: _surface,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _border),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _primary, width: 1.5),
+                    ),
+                  ),
+                  hint: const Text(
+                    'Choose a role to configure',
+                    style: TextStyle(color: _textLight, fontSize: 13),
+                  ),
+                  items: _roles
+                      .map(
+                        (r) => DropdownMenuItem(
+                          value: r,
+                          child: Text(
+                            r.roleName,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (r) {
+                    if (r != null) _loadModules(r);
+                  },
+                ),
+        ),
+        const Divider(height: 1, color: _border),
+
+        // ── Module List ────────────────────────────────────────────────────
+        Expanded(
+          child: _selectedRole == null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: const BoxDecoration(
+                          color: _primaryLight,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.tune_rounded,
+                          size: 36,
+                          color: _primary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Select a role to manage\nits module permissions',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: _textMid,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : _modulesLoading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: _primary,
+                    strokeWidth: 2,
+                  ),
+                )
+              : _error != null
+              ? _ErrorView(
+                  message: _error!,
+                  onRetry: () => _loadModules(_selectedRole!),
+                )
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                  children: [
+                    // Info banner
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: _primaryLight,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: _primary.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            color: _primary,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Configuring permissions for: ${_selectedRole!.roleName}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: _primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Module cards
+                    ..._modules.map(
+                      (m) => Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: _card,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _border),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              // Module icon + label
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: m.canView
+                                      ? _primaryLight
+                                      : _border.withOpacity(0.4),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  _moduleIcon(m.moduleKey),
+                                  size: 18,
+                                  color: m.canView ? _primary : _textLight,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  m.label,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: m.canView ? _textDark : _textLight,
+                                  ),
+                                ),
+                              ),
+                              // Can Edit toggle (only shown if can_view is on)
+                              if (m.canView) ...[
+                                const Text(
+                                  'Edit',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: _textMid,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Switch(
+                                  value: m.canEdit,
+                                  onChanged: (v) =>
+                                      setState(() => m.canEdit = v),
+                                  activeColor: _success,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              // Can View toggle
+                              const Text(
+                                'View',
+                                style: TextStyle(fontSize: 11, color: _textMid),
+                              ),
+                              const SizedBox(width: 4),
+                              Switch(
+                                value: m.canView,
+                                onChanged: (v) => setState(() {
+                                  m.canView = v;
+                                  if (!v) m.canEdit = false;
+                                }),
+                                activeColor: _primary,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+
+        // ── Save Button ────────────────────────────────────────────────────
+        if (_selectedRole != null && !_modulesLoading)
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            decoration: BoxDecoration(
+              color: _card,
+              border: const Border(top: BorderSide(color: _border)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _saving ? null : _save,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.save_rounded, size: 18),
+                label: Text(
+                  _saving ? 'Saving...' : 'Save Permissions',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  IconData _moduleIcon(String key) {
+    switch (key) {
+      // Employee-facing
+      case 'emp_dashboard':
+        return Icons.dashboard_rounded;
+      case 'emp_attendance_normal':
+        return Icons.fingerprint;
+      case 'emp_attendance_gps':
+        return Icons.gps_fixed;
+      case 'emp_attendance_face':
+        return Icons.face_outlined;
+      case 'emp_leave':
+        return Icons.event_note_outlined;
+      case 'emp_profile':
+        return Icons.person_outline_rounded;
+      case 'emp_site':
+        return Icons.place_outlined;
+      case 'comp_off':
+        return Icons.calendar_today_outlined;
+      // Admin/HR-facing
+      case 'admin_attendance_normal':
+        return Icons.access_time_rounded;
+      case 'admin_attendance_gps':
+        return Icons.location_on_rounded;
+      case 'admin_attendance_face':
+        return Icons.face_retouching_natural;
+      case 'leave_approval':
+        return Icons.beach_access_rounded;
+      case 'manage_user':
+        return Icons.people_rounded;
+      case 'employee_profile':
+        return Icons.badge_outlined;
+      case 'dept_management':
+        return Icons.apartment_rounded;
+      case 'approval':
+        return Icons.check_circle_outline;
+      case 'face_approval':
+        return Icons.how_to_reg_outlined;
+      case 'session_management':
+        return Icons.lock_clock_outlined;
+      case 'report':
+        return Icons.bar_chart_rounded;
+      default:
+        return Icons.widgets_rounded;
+    }
   }
 }

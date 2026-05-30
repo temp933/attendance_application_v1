@@ -12,6 +12,8 @@ import 'team_lead_dashboard.dart';
 import 'manager_dashboard.dart';
 import 'forgot_password_screen.dart';
 import '../providers/api_config.dart';
+import 'user_dashboard_screen.dart';
+import '../services/permissions_service.dart';
 
 // ─── API base ────────────────────────────────────────────────────────────────
 final String _baseUrl = ApiConfig.baseUrl;
@@ -72,6 +74,7 @@ class _LoginScreenState extends State<LoginScreen>
     required int roleId,
     required String userType,
     required String tenantId,
+    List<Map<String, dynamic>>? permissions,
   }) {
     ApiConfig.tenantId = tenantId;
     Widget screen;
@@ -91,33 +94,15 @@ class _LoginScreenState extends State<LoginScreen>
         roleId: roleId.toString(),
         tenantId: tenantId,
       );
-    } else if (userType == 'org_hr' || roleId == 2) {
-      screen = HRDashboardScreen(
-        loginId: loginId,
-        employeeId: empId.toString(),
-        roleId: roleId.toString(),
-        tenantId: tenantId,
-      );
-    } else if (roleId == 3) {
-      screen = TLDashboardScreen(
-        loginId: loginId,
-        employeeId: empId.toString(),
-        role: roleId.toString(),
-        tenantId: tenantId,
-      );
-    } else if (roleId == 8) {
-      screen = ManagerDashboardScreen(
-        loginId: loginId,
-        employeeId: empId.toString(),
-        roleId: roleId.toString(),
-        tenantId: tenantId,
-      );
     } else {
-      screen = DashboardScreen(
+      // HR, Employee, TL, Manager → permission-filtered dashboard
+      screen = UserDashboardScreen(
         loginId: loginId,
-        empId: empId,
-        role: roleId.toString(),
+        employeeId: empId.toString(),
+        roleId: roleId.toString(),
         tenantId: tenantId,
+        userType: userType,
+        permissions: permissions,
       );
     }
 
@@ -261,6 +246,7 @@ class _SignInTab extends StatefulWidget {
     required int roleId,
     required String userType,
     required String tenantId,
+    List<Map<String, dynamic>>? permissions,
   })
   onNavigate;
 
@@ -548,30 +534,16 @@ class _SignInTabState extends State<_SignInTab> {
     final int loginId = int.parse(data['loginId'].toString());
     final int empId = int.parse((data['empId'] ?? 0).toString());
     final int roleId = int.parse(data['roleId'].toString());
-
     final String tenantId =
         (data['tenantId'] ?? data['tenant_id'])?.toString() ?? '';
-
     final String token = data['sessionToken']?.toString() ?? '';
-
     final String userType = data['userType']?.toString() ?? 'employee';
-
     final String username = data['username']?.toString() ?? '';
 
-    // ── GLOBAL MEMORY STATE ─────────────────────────────
     ApiConfig.setToken(token);
     ApiConfig.tenantId = tenantId;
     ApiConfig.employeeId = empId.toString();
 
-    debugPrint(
-      '✅ ApiConfig.token     : '
-      '${token.isEmpty ? "❌ EMPTY" : "${token.substring(0, 10)}..."}',
-    );
-
-    debugPrint('✅ ApiConfig.tenantId  : $tenantId');
-    debugPrint('✅ ApiConfig.employeeId: $empId');
-
-    // ── PERSIST SESSION ─────────────────────────────────
     await ApiConfig.saveSession(
       loginId: loginId.toString(),
       empId: empId.toString(),
@@ -582,7 +554,6 @@ class _SignInTabState extends State<_SignInTab> {
       tenantId: tenantId,
     );
 
-    // ── FORCE FIRST LOGIN ───────────────────────────────
     if (data['firstLogin'] == true) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
@@ -599,13 +570,19 @@ class _SignInTabState extends State<_SignInTab> {
       return;
     }
 
-    // ── NAVIGATE ────────────────────────────────────────
+    // ── Fetch permissions for non-admin roles ──────────────────────────
+    List<Map<String, dynamic>>? permissions;
+    if (userType != 'org_admin') {
+      permissions = await PermissionsService.getMyPermissions();
+    }
+
     widget.onNavigate(
       loginId: loginId,
       empId: empId,
       roleId: roleId,
       userType: userType,
       tenantId: tenantId,
+      permissions: permissions, // ← ADD this parameter
     );
   }
 

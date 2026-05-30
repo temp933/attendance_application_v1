@@ -2,11 +2,16 @@ const db = require("../config/db"); // adjust to your db import
 
 /** Today's date in 'YYYY-MM-DD' (server local, adjust if you use UTC). */
 function todayDate() {
-  return new Date().toISOString().slice(0, 10);
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  return new Date(Date.now() + IST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 function toMysqlDatetime(isoString) {
-  return new Date(isoString).toISOString().slice(0, 19).replace("T", " ");
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  return new Date(new Date(isoString).getTime() + IST_OFFSET_MS)
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ");
 }
 
 /** Returns true for location-based modes. */

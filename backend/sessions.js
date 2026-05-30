@@ -17,8 +17,8 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  // role_id 1 = admin, 2 = HR, 3 = TL — adjust to match your system
-  if (!req.user || ![1, 2, 3].includes(Number(req.user.role_id))) {
+  const roleName = (req.user?.role_name || "").toLowerCase().trim();
+  if (!["admin", "hr", "team lead", "tl"].includes(roleName)) {
     return res.status(403).json({ success: false, message: "Forbidden." });
   }
   next();
@@ -95,8 +95,12 @@ router.get("/sessions", requireAuth, requireAdmin, async (req, res) => {
           ON rm.role_id   = lm.role_id
          AND CONVERT(rm.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
            = CONVERT(lm.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
+  LEFT JOIN designation_master desig
+          ON desig.designation_id = em.designation_id
+         AND CONVERT(desig.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
+           = CONVERT(lm.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
    LEFT JOIN department_master dm
-          ON dm.department_id = em.designation_id
+          ON dm.department_id = desig.department_id
          AND CONVERT(dm.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
            = CONVERT(lm.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
    WHERE CONVERT(lm.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = ?

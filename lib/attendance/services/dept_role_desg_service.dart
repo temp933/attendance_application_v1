@@ -133,3 +133,24 @@ class RoleService {
     _parseOrThrow(res.body);
   }
 }
+
+class RolePermissionService {
+  Future<List<RolePermissionModule>> fetchPermissions(int roleId) async {
+    final res = await ApiClient.get('/role-permissions?role_id=$roleId');
+    final json = _parseOrThrow(res.body);
+    return (json['data'] as List)
+        .map((e) => RolePermissionModule.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> savePermissions(
+    int roleId,
+    List<RolePermissionModule> modules,
+  ) async {
+    final res = await ApiClient.post('/role-permissions', {
+      'role_id': roleId,
+      'permissions': modules.map((m) => m.toJson()).toList(),
+    });
+    _parseOrThrow(res.body);
+  }
+}

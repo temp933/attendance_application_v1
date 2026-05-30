@@ -164,3 +164,31 @@ class RoleModel {
     );
   }
 }
+
+class RolePermissionModule {
+  final String moduleKey;
+  final String label;
+  bool canView;
+  bool canEdit;
+
+  RolePermissionModule({
+    required this.moduleKey,
+    required this.label,
+    required this.canView,
+    required this.canEdit,
+  });
+
+  factory RolePermissionModule.fromJson(Map<String, dynamic> j) =>
+      RolePermissionModule(
+        moduleKey: j['module_key'] as String,
+        label: j['label'] as String,
+        canView: j['can_view'] == 1 || j['can_view'] == true,
+        canEdit: j['can_edit'] == 1 || j['can_edit'] == true,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'module_key': moduleKey,
+    'can_view': canView,
+    'can_edit': canEdit,
+  };
+}

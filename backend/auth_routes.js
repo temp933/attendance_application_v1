@@ -105,6 +105,7 @@ router.post("/login", loginLimiter, async (req, res) => {
     const [rows] = await db.query(
       `SELECT
 lm.*,
+rm.role_name,
 t.admin_email,
 t.hr_email,
 t.is_active,
@@ -112,6 +113,7 @@ t.block_reason,
 t.status AS tenant_status
  FROM login_master lm
 INNER JOIN tenants t ON t.tenant_id = lm.tenant_id
+LEFT JOIN role_master rm ON rm.role_id = lm.role_id AND rm.tenant_id = lm.tenant_id
 WHERE lm.status = 'Active'
   AND lm.tenant_id IS NOT NULL
   AND t.is_active = 1
@@ -217,19 +219,13 @@ LIMIT 1`,
     }
 
     let userType = "employee";
-    if (user.emp_id === null || user.emp_id === undefined) {
-      const adminEmail = (user.admin_email || "").toLowerCase();
-      const hrEmail = (user.hr_email || "").toLowerCase();
-      const uname = user.username.toLowerCase();
+    const roleName = (user.role_name || "").toLowerCase().trim();
 
-      if (uname === adminEmail || uname === adminEmail.split("@")[0]) {
-        userType = "org_admin";
-      } else if (uname === hrEmail || uname === hrEmail.split("@")[0]) {
-        userType = "org_hr";
-      } else {
-        userType = "org_admin";
-      }
-    }
+    if (roleName === "admin") userType = "org_admin";
+    else if (roleName === "hr") userType = "org_hr";
+    else if (roleName === "team lead" || roleName === "tl")
+      userType = "team_lead";
+    else if (roleName === "manager") userType = "manager";
 
     if (user.device_logged_in === 1 && user.session_device) {
       const existingDevice = JSON.parse(user.session_device || "{}");
@@ -629,6 +625,7 @@ router.post("/verify-login-otp", otpLimiter, async (req, res) => {
     const [rows] = await db.query(
       `SELECT
 lm.*,
+rm.role_name,
 t.admin_email,
 t.hr_email,
 t.is_active,
@@ -636,6 +633,7 @@ t.block_reason,
 t.status AS tenant_status
  FROM login_master lm
 INNER JOIN tenants t ON t.tenant_id = lm.tenant_id
+LEFT JOIN role_master rm ON rm.role_id = lm.role_id AND rm.tenant_id = lm.tenant_id
 WHERE lm.status = 'Active'
   AND lm.tenant_id IS NOT NULL
   AND t.is_active = 1
@@ -706,15 +704,13 @@ LIMIT 1`,
     }
 
     let userType = "employee";
-    if (user.emp_id === null || user.emp_id === undefined) {
-      const adminEmail = (user.admin_email || "").toLowerCase();
-      const hrEmail = (user.hr_email || "").toLowerCase();
-      const uname = user.username.toLowerCase();
-      userType =
-        uname === hrEmail || uname === hrEmail.split("@")[0]
-          ? "org_hr"
-          : "org_admin";
-    }
+    const roleName = (user.role_name || "").toLowerCase().trim();
+
+    if (roleName === "admin") userType = "org_admin";
+    else if (roleName === "hr") userType = "org_hr";
+    else if (roleName === "team lead" || roleName === "tl")
+      userType = "team_lead";
+    else if (roleName === "manager") userType = "manager";
 
     // FIX #10: Hash token before storing in DB
     const rawToken = generateToken();

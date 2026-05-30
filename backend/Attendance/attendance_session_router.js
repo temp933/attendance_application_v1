@@ -60,14 +60,18 @@ router.get("/open-sessions", async (req, res) => {
                     '%Y-%m-%d %H:%i:%s'
                  )
             ELSE NULL
-          END                                                             AS last_location_updated_at
+          END    AS last_location_updated_at
       FROM  employee_attendance ea
       JOIN  employee_master e
             ON  e.emp_id = ea.employee_id
             AND CONVERT(e.tenant_id   USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
               = CONVERT(ea.tenant_id  USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
+      LEFT JOIN designation_master desig
+            ON  desig.designation_id = e.designation_id
+            AND CONVERT(desig.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
+              = CONVERT(ea.tenant_id   USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
       LEFT JOIN department_master d
-            ON  d.department_id = e.designation_id
+            ON  d.department_id = desig.department_id
             AND CONVERT(d.tenant_id  USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
               = CONVERT(ea.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
        WHERE CONVERT(ea.tenant_id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = ?

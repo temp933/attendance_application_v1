@@ -23,19 +23,20 @@ module.exports = async (req, res, next) => {
     const [rows] = await db.query(
       `
       SELECT
-        login_id,
-        emp_id,
-        role_id,
-        tenant_id,
-        username,
-        device_logged_in
-      FROM login_master
-      WHERE session_token = ?
+        lm.login_id,
+        lm.emp_id,
+        lm.role_id,
+        lm.tenant_id,
+        lm.username,
+        lm.device_logged_in,
+        rm.role_name
+      FROM login_master lm
+      LEFT JOIN role_master rm ON rm.role_id = lm.role_id AND rm.tenant_id = lm.tenant_id
+      WHERE lm.session_token = ?
       LIMIT 1
       `,
       [hashedToken],
     );
-
     if (!rows.length) {
       return res.status(401).json({
         success: false,
@@ -56,6 +57,7 @@ module.exports = async (req, res, next) => {
       login_id: user.login_id,
       emp_id: user.emp_id,
       role_id: user.role_id,
+      role_name: user.role_name,
       tenant_id: user.tenant_id,
       username: user.username,
     };

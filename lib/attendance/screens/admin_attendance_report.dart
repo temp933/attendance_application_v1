@@ -264,6 +264,7 @@ mixin _DepartmentMixin<T extends StatefulWidget> on State<T> {
     setState(() => _deptLoading = true);
     try {
       final list = await ReportService.fetchDepartments();
+      print('Departments loaded: ${list.length}');
       setState(() => _departments = [kAllDepartments, ...list]);
     } catch (_) {
       setState(() => _departments = [kAllDepartments]);

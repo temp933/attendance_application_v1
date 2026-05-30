@@ -50,15 +50,17 @@ async function fetchEmployees(tenantId, departmentId = null) {
     SELECT
       em.emp_id,
       CONCAT(em.first_name, ' ', em.last_name) AS employee_name,
-      COALESCE(dm.department_name, '') AS department
+      COALESCE(dept.department_name, '') AS department
     FROM employee_master em
-    LEFT JOIN department_master dm
-      ON dm.department_id = em.department_id AND dm.tenant_id = em.tenant_id
+    LEFT JOIN designation_master desig
+      ON desig.designation_id = em.designation_id AND desig.tenant_id = em.tenant_id
+    LEFT JOIN department_master dept
+      ON dept.department_id = desig.department_id AND dept.tenant_id = em.tenant_id
     WHERE em.tenant_id = ? AND em.status = 'Active'
   `;
   const params = [tenantId];
   if (departmentId) {
-    sql += ` AND em.department_id = ?`;
+    sql += ` AND desig.department_id = ?`;
     params.push(departmentId);
   }
   sql += ` ORDER BY em.emp_id`;
@@ -395,7 +397,7 @@ router.get("/attendance/report/matrix", async (req, res) => {
       fetchEmployees(tenant_id, deptId),
       fetchHolidayMapByDate(tenant_id, from, to),
       fetchLeaveMap(tenant_id, from, to),
-      fetchAttendanceMap(tenant_id, from, to, attendanceMode ?? 'normal'),
+      fetchAttendanceMap(tenant_id, from, to, attendanceMode ?? "normal"),
       fetchCompOffUsedMap(tenant_id, from, to),
     ]);
 

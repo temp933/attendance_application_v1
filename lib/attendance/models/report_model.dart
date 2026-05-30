@@ -21,11 +21,16 @@ class DepartmentModel {
     required this.name,
     required this.status,
   });
+  @override
+  bool operator ==(Object other) => other is DepartmentModel && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
 
   factory DepartmentModel.fromJson(Map<String, dynamic> j) => DepartmentModel(
-    id: parseInt(j['id']),
-    name: parseString(j['name']),
-    status: parseString(j['status']),
+    id: parseInt(j['department_id'] ?? j['id']),
+    name: parseString(j['department_name'] ?? j['name']),
+    status: parseString(j['status'] ?? 'Active'),
   );
 }
 
