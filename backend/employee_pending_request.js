@@ -88,6 +88,7 @@ router.post("/", requireAuth, async (req, res) => {
     password: rawPassword,
     edit_reason,
     education,
+    tl_id,
   } = req.body;
 
   // ── Validation ─────────────────────────────────────────────────────────────
@@ -162,42 +163,7 @@ router.post("/", requireAuth, async (req, res) => {
       : null;
 
     // ── Insert pending request ───────────────────────────────────────────────
-    //
-    // COLUMN LIST (29 bound params — status and created_at are literals):
-    //  1  tenant_id
-    //  2  emp_id
-    //  3  request_type
-    //     admin_approve  ← hardcoded literal 'PENDING'
-    //  4  first_name
-    //  5  mid_name
-    //  6  last_name
-    //  7  email_id
-    //  8  phone_number
-    //  9  date_of_birth
-    //  10 gender
-    //  11 designation_id
-    //  12 role_id
-    //  13 date_of_joining
-    //  14 date_of_relieving
-    //  15 employment_type
-    //  16 work_type
-    //  17 permanent_address
-    //  18 communication_address
-    //  19 aadhar_number
-    //  20 pan_number
-    //  21 passport_number
-    //  22 father_name
-    //  23 emergency_contact_relation
-    //  24 emergency_contact
-    //  25 pf_number
-    //  26 esic_number
-    //  27 years_experience
-    //  28 username
-    //  29 password
-    //  30 edit_reason
-    //     status         ← hardcoded literal 'Active'
-    //     created_at     ← hardcoded literal NOW()
-    //
+
     const [result] = await conn.query(
       `INSERT INTO employee_pending_request (
          tenant_id, emp_id,
@@ -214,7 +180,7 @@ router.post("/", requireAuth, async (req, res) => {
          pf_number, esic_number,
          years_experience,
          username, password,
-         edit_reason,
+         edit_reason, reporting_to_employee_id,
          status, created_at
        ) VALUES (
          ?, ?,
@@ -231,7 +197,7 @@ router.post("/", requireAuth, async (req, res) => {
          ?, ?,
          ?,
          ?, ?,
-         ?,
+         ?, ?,
          'Active', NOW()
        )`,
       [
@@ -280,6 +246,7 @@ router.post("/", requireAuth, async (req, res) => {
         hashedPassword,
         // 30  (status and created_at are literals)
         nullIfEmpty(edit_reason),
+        nullIfEmpty(tl_id),
       ],
     );
 
@@ -288,14 +255,24 @@ router.post("/", requireAuth, async (req, res) => {
     // ── Education rows ───────────────────────────────────────────────────────
     if (Array.isArray(education) && education.length > 0) {
       for (const edu of education) {
+        const isChanged =
+          edu.is_changed !== undefined ? Number(edu.is_changed) : 1;
+
+        // Skip unchanged rows on UPDATE requests
+        if (request_type === "UPDATE" && !isChanged) continue;
+
+        const actionType =
+          edu.action_type || (request_type === "UPDATE" ? "UPDATE" : "ADD");
+        const originalEduId = edu.original_edu_id || edu.edu_id || null;
+
         await conn.query(
           `INSERT INTO education_pending_request (
              request_id, tenant_id, emp_id,
              education_level, stream, score,
              year_of_passout,
              university, college_name,
-             action_type
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ADD')`,
+             action_type, original_edu_id, is_changed
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             requestId,
             tenantId,
@@ -306,6 +283,9 @@ router.post("/", requireAuth, async (req, res) => {
             nullIfEmpty(edu.year_of_passout),
             nullIfEmpty(edu.university),
             nullIfEmpty(edu.college_name),
+            actionType,
+            originalEduId,
+            isChanged,
           ],
         );
       }

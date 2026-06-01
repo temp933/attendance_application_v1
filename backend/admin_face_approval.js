@@ -505,10 +505,10 @@ router.post(
                permanent_address, communication_address,
                aadhar_number, pan_number, passport_number,
                father_name, emergency_contact_relation, emergency_contact,
-               pf_number, esic_number, years_experience,
+               pf_number, esic_number, years_experience,reporting_to_employee_id,
                profile_photo, profile_photo_mime,
                status, created_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Active',NOW())`,
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Active',NOW())`,
           [
             tenantId,
             employeeCode,
@@ -536,6 +536,7 @@ router.post(
             pending.pf_number || null,
             pending.esic_number || null,
             pending.years_experience ?? null,
+            pending.reporting_to_employee_id || null,
             pending.profile_photo || null,
             pending.profile_photo_mime || null,
           ],
@@ -706,6 +707,7 @@ router.post(
         ["pf_number", pending.pf_number],
         ["esic_number", pending.esic_number],
         ["years_experience", pending.years_experience],
+        ["reporting_to_employee_id", pending.reporting_to_employee_id],
         // status changes require a dedicated, audited flow — excluded here
       ].filter(([, v]) => v !== null && v !== undefined);
 

@@ -373,6 +373,48 @@ router.get("/team-leads", requireAuth, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/employees/leave-approvers
+// Returns employees whose role has leave_approval permission (can_view = 1)
+// These are the valid "Reporting To" candidates
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/leave-approvers", requireAuth, async (req, res) => {
+  const { tenantId } = req.user;
+
+  try {
+    const [rows] = await db.query(
+      `SELECT 
+          e.emp_id,
+          e.first_name,
+          e.last_name,
+          e.mid_name,
+          r.role_name,
+          dm.department_id,  
+          dm.department_name
+       FROM employee_master e
+       JOIN role_master r ON r.role_id = e.role_id
+       LEFT JOIN designation_master ds ON ds.designation_id = e.designation_id
+       LEFT JOIN department_master dm ON dm.department_id = ds.department_id
+       WHERE e.tenant_id = ?
+         AND e.status = 'Active'
+         AND r.role_id IN (
+           SELECT role_id 
+           FROM role_permissions
+           WHERE tenant_id = ?
+             AND module_key = 'leave_approval'
+             AND can_view = 1
+         )
+       ORDER BY dm.department_name, r.role_name, e.first_name`,
+      [tenantId, tenantId],
+    );
+
+    res.json({ success: true, count: rows.length, data: rows });
+  } catch (err) {
+    console.error("[GET /employees/leave-approvers]", err);
+    res.status(500).json({ success: false, message: "Server error." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/employees/:emp_id/education
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/:emp_id/education", requireAuth, async (req, res) => {

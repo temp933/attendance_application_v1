@@ -505,7 +505,16 @@ class EducationFormSectionState extends State<EducationFormSection> {
   }
 
   /// Called by parent's submit handler to collect all entries.
+  /// For NEW requests all entries go. For UPDATE, only changed ones go.
   List<Map<String, dynamic>> getEntries() => List.unmodifiable(_entries);
+
+  /// Returns only entries that need to be sent to the backend.
+  List<Map<String, dynamic>> getChangedEntries() => List.unmodifiable(
+    _entries.where((e) {
+      final changed = e['is_changed'];
+      return changed == 1 || changed == true || changed?.toString() == '1';
+    }).toList(),
+  );
 
   List<String> get _usedLevels =>
       _entries.map((e) => e['education_level']?.toString() ?? '').toList();
@@ -536,11 +545,18 @@ class EducationFormSectionState extends State<EducationFormSection> {
           if (!mounted) return;
           setState(() {
             if (isEdit) {
-              _entries[existingIndex] = entry;
+              final originalId =
+                  _entries[existingIndex]['original_edu_id'] ??
+                  _entries[existingIndex]['edu_id'];
+              _entries[existingIndex] = {
+                ...entry,
+                'original_edu_id': originalId,
+                'action_type': originalId != null ? 'UPDATE' : 'ADD',
+                'is_changed': 1,
+              };
             } else {
-              _entries.add(entry);
+              _entries.add({...entry, 'action_type': 'ADD', 'is_changed': 1});
             }
-
             _showError = false;
           });
         },
@@ -670,10 +686,26 @@ class EducationFormSectionState extends State<EducationFormSection> {
       children: _entries.asMap().entries.map((e) {
         final idx = e.key;
         final entry = e.value;
+        // Hide entries marked as DELETE from the UI
+        if (entry['action_type'] == 'DELETE') return const SizedBox.shrink();
         return _EduEntryCard(
           entry: entry,
           onEdit: () => _openDialog(context, existingIndex: idx),
-          onDelete: () => setState(() => _entries.removeAt(idx)),
+          onDelete: () => setState(() {
+            final originalId =
+                _entries[idx]['original_edu_id'] ?? _entries[idx]['edu_id'];
+            if (originalId != null) {
+              // Existing master record — mark as deleted, keep for backend
+              _entries[idx] = {
+                ..._entries[idx],
+                'action_type': 'DELETE',
+                'is_changed': 1,
+              };
+            } else {
+              // Newly added row — just remove entirely
+              _entries.removeAt(idx);
+            }
+          }),
         );
       }).toList(),
     );

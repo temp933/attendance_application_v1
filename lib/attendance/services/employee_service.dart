@@ -526,6 +526,43 @@ class EmployeeService {
     }
   }
 
+  // ================= LEAVE APPROVERS (Reporting To candidates) =================
+  static Future<List<Map<String, dynamic>>> fetchLeaveApprovers() async {
+    try {
+      final res = await ApiClient.get('/employees/leave-approvers');
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final list = (body['data'] ?? []) as List;
+        return list.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (e) {
+      debugPrint('fetchLeaveApprovers error: $e');
+    }
+    return [];
+  }
+
+  // Returns distinct roles that have leave_approval permission
+  // Derived from the leave-approvers list — no extra endpoint needed
+  static Future<List<String>> fetchLeaveApproverRoles() async {
+    try {
+      final res = await ApiClient.get('/employees/leave-approvers');
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final list = (body['data'] ?? []) as List;
+        final roles = list
+            .map((e) => e['role_name']?.toString() ?? '')
+            .where((r) => r.isNotEmpty)
+            .toSet()
+            .toList();
+        roles.sort();
+        return roles;
+      }
+    } catch (e) {
+      debugPrint('fetchLeaveApproverRoles error: $e');
+    }
+    return [];
+  }
+
   // ================= TODAY ATTENDANCE SUMMARY =================
   static Future<Map<String, dynamic>> fetchTodayAttendanceSummary(
     int empId,

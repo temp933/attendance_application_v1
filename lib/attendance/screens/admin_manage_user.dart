@@ -1191,6 +1191,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   void initState() {
     super.initState();
     _loadDropdowns();
+    _loadReportingManagers();
   }
 
   // In AddEmployeePage / EditPage — when department changes, reload roles
@@ -1211,11 +1212,151 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     }
   }
 
+  List<Map<String, dynamic>> _deptEmployees = [];
+  List<String> _approverRoles = [];
+  String? _selectedReportingRole;
+
+  Future<void> _loadReportingManagers() async {
+    final results = await Future.wait([
+      EmployeeService.fetchLeaveApprovers(),
+      EmployeeService.fetchLeaveApproverRoles(), // ← ADD
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _deptEmployees = results[0] as List<Map<String, dynamic>>;
+      _approverRoles = results[1] as List<String>; // ← ADD
+    });
+  }
+
+  // DELETE the old getter entirely and replace with:
+  List<String> get _reportingRoles => _approverRoles;
+  List<Map<String, dynamic>> get _filteredApprovers {
+    if (_selectedReportingRole == null) return _deptEmployees;
+    return _deptEmployees
+        .where((e) => e['role_name']?.toString() == _selectedReportingRole)
+        .toList();
+  }
+
+  Widget _buildReportingToDropdowns(double sp) {
+    if (_approverRoles.isEmpty) return const SizedBox.shrink();
+
+    // Get filtered approvers by role
+    final filtered = _filteredApprovers;
+
+    // Split into same-dept and others based on selectedDeptId
+    // _deptEmployees has department_id; look it up per emp
+    List<Map<String, dynamic>> sameDept = [];
+    List<Map<String, dynamic>> otherDept = [];
+
+    for (final emp in filtered) {
+      // department_id may be on emp directly or via dept lookup
+      final empDeptId = emp['department_id'] != null
+          ? int.tryParse(emp['department_id'].toString())
+          : null;
+      if (selectedDeptId != null && empDeptId == selectedDeptId) {
+        sameDept.add(emp);
+      } else {
+        otherDept.add(emp);
+      }
+    }
+
+    // Build dropdown items with group headers
+    List<DropdownMenuItem<int>> items = [];
+
+    if (sameDept.isNotEmpty) {
+      items.add(_groupHeader('── Same Department ──'));
+      items.addAll(sameDept.map((emp) => _approverItem(emp)));
+    }
+
+    if (otherDept.isNotEmpty) {
+      items.add(_groupHeader('── Others ──'));
+      items.addAll(otherDept.map((emp) => _approverItem(emp)));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          value: _selectedReportingRole,
+          isExpanded: true,
+          decoration: _inputDec('Reporting To — Filter by Role'),
+          hint: const Text(
+            'All roles',
+            style: TextStyle(color: _textLight, fontSize: 13),
+          ),
+          items: [
+            const DropdownMenuItem<String>(
+              value: null,
+              child: Text('All roles', overflow: TextOverflow.ellipsis),
+            ),
+            ..._reportingRoles.map(
+              (r) => DropdownMenuItem<String>(
+                value: r,
+                child: Text(r, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ],
+          onChanged: (v) => setState(() {
+            _selectedReportingRole = v;
+            selectedTlId = null;
+          }),
+        ),
+        SizedBox(height: sp),
+        DropdownButtonFormField<int>(
+          value: selectedTlId,
+          isExpanded: true,
+          decoration: _inputDec('Reporting To — Select Employee'),
+          hint: const Text(
+            'Select reporting manager',
+            style: TextStyle(color: _textLight, fontSize: 13),
+          ),
+          items: items,
+          onChanged: (v) {
+            if (v != null) setState(() => selectedTlId = v);
+          },
+        ),
+      ],
+    );
+  }
+
+  DropdownMenuItem<int> _groupHeader(String label) {
+    return DropdownMenuItem<int>(
+      value: null,
+      enabled: false,
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: _textMid,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  DropdownMenuItem<int> _approverItem(Map<String, dynamic> emp) {
+    final name = '${emp['first_name'] ?? ''} ${emp['last_name'] ?? ''}'.trim();
+    final dept = emp['department_name']?.toString() ?? '';
+    final id = emp['emp_id'] is int
+        ? emp['emp_id'] as int
+        : int.tryParse(emp['emp_id'].toString());
+    return DropdownMenuItem<int>(
+      value: id,
+      child: Text(
+        dept.isNotEmpty ? '$name ($dept)' : name,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
   void _onDeptChanged(int? deptId) async {
     setState(() {
       selectedDeptId = deptId;
       selectedDesignationId = null;
       designations = [];
+      selectedTlId = null;
+      // ← do NOT clear _deptEmployees — managers list is global
     });
     if (deptId != null) {
       final list = await EmployeeService.fetchDesignations(deptId: deptId);
@@ -1456,6 +1597,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                         (v) => setState(() => selectedDesignationId = v),
                         padding: EdgeInsets.zero,
                       ),
+
                       SizedBox(height: sp),
                       FormDropdownMap(
                         'Role',
@@ -1464,10 +1606,10 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                         (v) => setState(() => selectedRoleId = v),
                         padding: EdgeInsets.zero,
                       ),
-
+                      SizedBox(height: sp),
+                      _buildReportingToDropdowns(sp),
                       SizedBox(height: sp),
 
-                      SizedBox(height: sp),
                       // ── DOJ — cannot be in future ──────────────────────────
                       FormDateField(
                         dojCtrl,
@@ -1675,7 +1817,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       'email_id': emailCtrl.text,
       'phone_number': phoneCtrl.text,
       'date_of_birth': dobCtrl.text,
-      'gender': gender, 
+      'gender': gender,
       'designation_id': selectedDesignationId,
       'role_id': selectedRoleId,
       'date_of_joining': dojCtrl.text,
@@ -4300,6 +4442,7 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
                         (v) => setState(() => selectedDesignationId = v),
                         padding: EdgeInsets.zero,
                       ),
+
                       SizedBox(height: sp),
                       FormDropdownMap(
                         'Role',
@@ -4308,14 +4451,7 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
                         (v) => setState(() => selectedRoleId = v),
                         padding: EdgeInsets.zero,
                       ),
-                      SizedBox(height: sp),
-                      FormDropdownMap(
-                        'Role',
-                        roles,
-                        selectedRoleId,
-                        (v) => setState(() => selectedRoleId = v),
-                        padding: EdgeInsets.zero,
-                      ),
+
                       SizedBox(height: sp),
                       FormDateField(
                         dojCtrl,
@@ -4791,6 +4927,9 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
     );
     _loadDropdowns();
     _loadExistingEducation();
+    if (selectedDeptId != null) {
+      _loadReportingManagers();
+    }
   }
 
   // In AddEmployeePage / EditPage — when department changes, reload roles
@@ -4815,15 +4954,159 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
     }
   }
 
+  // ── State variable (same name, different data source) ──
+  List<Map<String, dynamic>> _deptEmployees = [];
+  List<String> _approverRoles = [];
+  String? _selectedReportingRole;
+
+  // ── Load once at init — not per-dept ──
+  Future<void> _loadReportingManagers() async {
+    final results = await Future.wait([
+      EmployeeService.fetchLeaveApprovers(),
+      EmployeeService.fetchLeaveApproverRoles(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _deptEmployees = results[0] as List<Map<String, dynamic>>;
+      _approverRoles = results[1] as List<String>;
+    });
+  }
+
+  List<String> get _reportingRoles => _approverRoles;
+
+  List<Map<String, dynamic>> get _filteredApprovers {
+    if (_selectedReportingRole == null) return _deptEmployees;
+    return _deptEmployees
+        .where((e) => e['role_name']?.toString() == _selectedReportingRole)
+        .toList();
+  }
+
+  Widget _buildReportingToDropdowns(double sp) {
+    if (_approverRoles.isEmpty) return const SizedBox.shrink();
+
+    // Get filtered approvers by role
+    final filtered = _filteredApprovers;
+
+    // Split into same-dept and others based on selectedDeptId
+    // _deptEmployees has department_id; look it up per emp
+    List<Map<String, dynamic>> sameDept = [];
+    List<Map<String, dynamic>> otherDept = [];
+
+    for (final emp in filtered) {
+      // department_id may be on emp directly or via dept lookup
+      final empDeptId = emp['department_id'] != null
+          ? int.tryParse(emp['department_id'].toString())
+          : null;
+      if (selectedDeptId != null && empDeptId == selectedDeptId) {
+        sameDept.add(emp);
+      } else {
+        otherDept.add(emp);
+      }
+    }
+
+    // Build dropdown items with group headers
+    List<DropdownMenuItem<int>> items = [];
+
+    if (sameDept.isNotEmpty) {
+      items.add(_groupHeader('── Same Department ──'));
+      items.addAll(sameDept.map((emp) => _approverItem(emp)));
+    }
+
+    if (otherDept.isNotEmpty) {
+      items.add(_groupHeader('── Others ──'));
+      items.addAll(otherDept.map((emp) => _approverItem(emp)));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          value: _selectedReportingRole,
+          isExpanded: true,
+          decoration: _inputDec('Reporting To — Filter by Role'),
+          hint: const Text(
+            'All roles',
+            style: TextStyle(color: _textLight, fontSize: 13),
+          ),
+          items: [
+            const DropdownMenuItem<String>(
+              value: null,
+              child: Text('All roles', overflow: TextOverflow.ellipsis),
+            ),
+            ..._reportingRoles.map(
+              (r) => DropdownMenuItem<String>(
+                value: r,
+                child: Text(r, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ],
+          onChanged: (v) => setState(() {
+            _selectedReportingRole = v;
+            selectedTlId = null;
+          }),
+        ),
+        SizedBox(height: sp),
+        DropdownButtonFormField<int>(
+          value: selectedTlId,
+          isExpanded: true,
+          decoration: _inputDec('Reporting To — Select Employee'),
+          hint: const Text(
+            'Select reporting manager',
+            style: TextStyle(color: _textLight, fontSize: 13),
+          ),
+          items: items,
+          onChanged: (v) {
+            if (v != null) setState(() => selectedTlId = v);
+          },
+        ),
+      ],
+    );
+  }
+
+  DropdownMenuItem<int> _groupHeader(String label) {
+    return DropdownMenuItem<int>(
+      value: null,
+      enabled: false,
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: _textMid,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  DropdownMenuItem<int> _approverItem(Map<String, dynamic> emp) {
+    final name = '${emp['first_name'] ?? ''} ${emp['last_name'] ?? ''}'.trim();
+    final dept = emp['department_name']?.toString() ?? '';
+    final id = emp['emp_id'] is int
+        ? emp['emp_id'] as int
+        : int.tryParse(emp['emp_id'].toString());
+    return DropdownMenuItem<int>(
+      value: id,
+      child: Text(
+        dept.isNotEmpty ? '$name ($dept)' : name,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
   void _onDeptChanged(int? deptId) async {
     setState(() {
       selectedDeptId = deptId;
       selectedDesignationId = null;
       designations = [];
+      selectedTlId = null;
+      _selectedReportingRole = null;
+      _deptEmployees = [];
     });
     if (deptId != null) {
       final list = await EmployeeService.fetchDesignations(deptId: deptId);
       if (mounted) setState(() => designations = list);
+      _loadReportingManagers();
     }
   }
 
@@ -4836,12 +5119,16 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
         _initialEdu = list
             .map(
               (e) => {
+                'edu_id': e.eduId,
+                'original_edu_id': e.eduId,
                 'education_level': e.educationLevel ?? '',
                 'stream': e.stream ?? '',
                 'score': e.score ?? '',
                 'year_of_passout': e.yearOfPassout ?? '',
                 'university': e.university ?? '',
                 'college_name': e.collegeName ?? '',
+                'action_type': 'UPDATE',
+                'is_changed': 0,
               },
             )
             .toList();
@@ -5137,6 +5424,8 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
                         padding: EdgeInsets.zero,
                       ),
                       SizedBox(height: sp),
+                      _buildReportingToDropdowns(sp),
+                      SizedBox(height: sp),
                       // ── DOJ optional on edit but validated if filled ──────────
                       FormDateField(
                         dojCtrl,
@@ -5414,7 +5703,7 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
       'work_type': workType,
       'designation_id': selectedDesignationId,
       'role_id': selectedRoleId,
-      'reporting_to_employee_id': null,
+      'tl_id': selectedTlId,
       'permanent_address': permAddrCtrl.text,
       'communication_address': commAddrCtrl.text,
       'status': status,
@@ -5425,7 +5714,7 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
       'pf_number': pfCtrl.text,
       'esic_number': esicCtrl.text,
       'years_experience': int.tryParse(yearsExpCtrl.text),
-      'education': _eduKey.currentState?.getEntries() ?? [],
+      'education': _eduKey.currentState?.getChangedEntries() ?? [],
       'aadhar_number': aadharCtrl.text,
       'pan_number': panCtrl.text,
       'passport_number': passportCtrl.text,
