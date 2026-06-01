@@ -31,6 +31,7 @@ class DeptRoleDesgScreen extends StatefulWidget {
 class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab;
+  int _refreshKey = 0;
 
   @override
   void initState() {
@@ -54,6 +55,14 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         titleSpacing: 20,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: _primary),
+            tooltip: 'Refresh all tabs',
+            onPressed: () => setState(() => _refreshKey++),
+          ),
+          const SizedBox(width: 8),
+        ],
         title: Row(
           children: [
             Container(
@@ -151,11 +160,11 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
       // ── Tab Views ──────────────────────────────────────────────────────────
       body: TabBarView(
         controller: _tab,
-        children: const [
-          _DepartmentsTab(),
-          _DesignationsTab(),
-          _RolesTab(),
-          _PermissionsTab(),
+        children: [
+          _DepartmentsTab(key: ValueKey('dept_$_refreshKey')),
+          _DesignationsTab(key: ValueKey('desg_$_refreshKey')),
+          _RolesTab(key: ValueKey('role_$_refreshKey')),
+          _PermissionsTab(key: ValueKey('perm_$_refreshKey')),
         ],
       ),
     );
@@ -166,7 +175,7 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
 // TAB 1 — DEPARTMENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 class _DepartmentsTab extends StatefulWidget {
-  const _DepartmentsTab();
+  const _DepartmentsTab({super.key});
 
   @override
   State<_DepartmentsTab> createState() => _DepartmentsTabState();
@@ -189,10 +198,9 @@ class _DepartmentsTabState extends State<_DepartmentsTab>
 
   // ✅ Assign future first, THEN call setState synchronously
   void _load() {
-    final f = _svc.fetchAll();
     if (!mounted) return;
     setState(() {
-      _future = f;
+      _future = _svc.fetchAll();
     }); // block body, explicitly returns void
   }
 
@@ -297,7 +305,9 @@ class _DepartmentsTabState extends State<_DepartmentsTab>
           },
         ),
       ),
-    ).then((_) => _load()); // ✅ reload after dialog fully closes
+    ).then((_) {
+      if (mounted) _load();
+    }); // ✅ reload after dialog fully closes
   }
 
   void _confirmDelete(DepartmentModel item) {
@@ -309,7 +319,9 @@ class _DepartmentsTabState extends State<_DepartmentsTab>
           await _svc.delete(item.id);
         },
       ),
-    ).then((_) => _load()); // ✅ reload after dialog fully closes
+    ).then((_) {
+      if (mounted) _load();
+    }); // ✅ reload after dialog fully closes
   }
 }
 
@@ -342,7 +354,7 @@ class _DeptCard extends StatelessWidget {
 // TAB 2 — DESIGNATIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 class _DesignationsTab extends StatefulWidget {
-  const _DesignationsTab();
+  const _DesignationsTab({super.key});
 
   @override
   State<_DesignationsTab> createState() => _DesignationsTabState();
@@ -368,10 +380,9 @@ class _DesignationsTabState extends State<_DesignationsTab>
 
   // ✅ Assign future first, THEN call setState synchronously
   void _load() {
-    final f = _svc.fetchAll();
     if (!mounted) return;
     setState(() {
-      _future = f;
+      _future = _svc.fetchAll();
     }); // block body, explicitly returns void
   }
 
@@ -549,7 +560,9 @@ class _DesignationsTabState extends State<_DesignationsTab>
           },
         ),
       ),
-    ).then((_) => _load()); // ✅ reload after dialog closes
+    ).then((_) {
+      if (mounted) _load();
+    }); // ✅ reload after dialog closes
   }
 
   void _confirmDelete(DesignationModel item) {
@@ -563,7 +576,9 @@ class _DesignationsTabState extends State<_DesignationsTab>
           // ❌ removed _load() from here
         },
       ),
-    ).then((_) => _load()); // ✅ reload after dialog closes
+    ).then((_) {
+      if (mounted) _load();
+    }); // ✅ reload after dialog closes
   }
 }
 
@@ -598,7 +613,7 @@ class _DesgCard extends StatelessWidget {
 // TAB 3 — ROLES
 // ═══════════════════════════════════════════════════════════════════════════════
 class _RolesTab extends StatefulWidget {
-  const _RolesTab();
+  const _RolesTab({super.key});
 
   @override
   State<_RolesTab> createState() => _RolesTabState();
@@ -621,10 +636,9 @@ class _RolesTabState extends State<_RolesTab>
 
   // ✅ Assign future first, THEN call setState synchronously
   void _load() {
-    final f = _svc.fetchAll();
     if (!mounted) return;
     setState(() {
-      _future = f;
+      _future = _svc.fetchAll();
     }); // block body, explicitly returns void
   }
 
@@ -727,7 +741,9 @@ class _RolesTabState extends State<_RolesTab>
           },
         ),
       ),
-    ).then((_) => _load()); // ✅ here
+    ).then((_) {
+      if (mounted) _load();
+    }); // ✅ here
   }
 
   void _confirmDelete(RoleModel item) {
@@ -741,7 +757,9 @@ class _RolesTabState extends State<_RolesTab>
           // ❌ no _load() here
         },
       ),
-    ).then((_) => _load()); // ✅ here
+    ).then((_) {
+      if (mounted) _load();
+    }); // ✅ here
   }
 }
 
@@ -1622,7 +1640,7 @@ class _ErrorView extends StatelessWidget {
 }
 
 class _PermissionsTab extends StatefulWidget {
-  const _PermissionsTab();
+  const _PermissionsTab({super.key});
 
   @override
   State<_PermissionsTab> createState() => _PermissionsTabState();
@@ -1704,6 +1722,8 @@ class _PermissionsTabState extends State<_PermissionsTab>
             ),
           ),
         );
+        // Refresh modules after save
+        await _loadModules(_selectedRole!);
       }
     } catch (e) {
       if (mounted) {

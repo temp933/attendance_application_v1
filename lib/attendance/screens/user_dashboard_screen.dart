@@ -249,11 +249,11 @@ final List<_ModuleDef> _allModules = [
         ),
   ),
   _ModuleDef(
-    key: 'leave_approval',
-    title: 'Leave Approval',
-    icon: Icons.leave_bags_at_home_outlined,
-    selectedIcon: Icons.leave_bags_at_home,
-    navLabel: 'Leave',
+    key: 'dept_management',
+    title: 'Departments & Roles',
+    icon: Icons.apartment_outlined,
+    selectedIcon: Icons.apartment,
+    navLabel: 'Departments',
     builder:
         ({
           required employeeId,
@@ -261,7 +261,7 @@ final List<_ModuleDef> _allModules = [
           required tenantId,
           required authToken,
           required canEdit,
-        }) => LeaveApprovalScreen(),
+        }) => DeptRoleDesgScreen(),
   ),
   _ModuleDef(
     key: 'manage_user',
@@ -278,36 +278,7 @@ final List<_ModuleDef> _allModules = [
           required canEdit,
         }) => ManageUserScreen(roleId: roleId, tenantId: tenantId),
   ),
-  _ModuleDef(
-    key: 'employee_profile',
-    title: 'Employee Profile',
-    icon: Icons.badge_outlined,
-    selectedIcon: Icons.badge,
-    navLabel: 'Emp Profile',
-    builder:
-        ({
-          required employeeId,
-          required roleId,
-          required tenantId,
-          required authToken,
-          required canEdit,
-        }) => EmployeeProfileScreen(employeeId: employeeId),
-  ),
-  _ModuleDef(
-    key: 'dept_management',
-    title: 'Departments & Roles',
-    icon: Icons.apartment_outlined,
-    selectedIcon: Icons.apartment,
-    navLabel: 'Departments',
-    builder:
-        ({
-          required employeeId,
-          required roleId,
-          required tenantId,
-          required authToken,
-          required canEdit,
-        }) => DeptRoleDesgScreen(),
-  ),
+
   _ModuleDef(
     key: 'approval',
     title: 'Approvals',
@@ -338,6 +309,38 @@ final List<_ModuleDef> _allModules = [
           required canEdit,
         }) => AdminFaceApprovalPage(),
   ),
+  _ModuleDef(
+    key: 'leave_approval',
+    title: 'Leave Approval',
+    icon: Icons.leave_bags_at_home_outlined,
+    selectedIcon: Icons.leave_bags_at_home,
+    navLabel: 'Leave',
+    builder:
+        ({
+          required employeeId,
+          required roleId,
+          required tenantId,
+          required authToken,
+          required canEdit,
+        }) => LeaveApprovalScreen(),
+  ),
+
+  // _ModuleDef(
+  //   key: 'employee_profile',
+  //   title: 'Employee Profile',
+  //   icon: Icons.badge_outlined,
+  //   selectedIcon: Icons.badge,
+  //   navLabel: 'Emp Profile',
+  //   builder:
+  //       ({
+  //         required employeeId,
+  //         required roleId,
+  //         required tenantId,
+  //         required authToken,
+  //         required canEdit,
+  //       }) => EmployeeProfileScreen(employeeId: employeeId),
+  // ),
+
   _ModuleDef(
     key: 'session_management',
     title: 'Session Management',
