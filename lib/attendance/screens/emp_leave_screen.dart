@@ -446,9 +446,9 @@ class _LeaveScreenState extends State<LeaveScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => _ApplyLeaveSheet(
         leaveTypes: _leaveTypes,
-        onSuccess: () {
+        onSuccess: (msg) {
           _load();
-          _snack('Leave applied successfully!', success: true);
+          _snack(msg, success: true);
         },
       ),
     );
@@ -752,6 +752,13 @@ class _LeaveCardState extends State<_LeaveCard> {
                   value: leave['current_approver_name'],
                   valueColor: _amber,
                 ),
+                const SizedBox(height: 8),
+                _InfoRow(
+                  icon: Icons.account_tree_outlined,
+                  label: 'Approval Level',
+                  value: 'Level ${leave['current_approval_level'] ?? 1}',
+                  valueColor: _amber,
+                ),
               ],
               if ((leave['last_action_remarks'] ?? '')
                   .toString()
@@ -829,7 +836,7 @@ class _LeaveCardState extends State<_LeaveCard> {
 // ══════════════════════════════════════════════════════════════════════════════
 class _ApplyLeaveSheet extends StatefulWidget {
   final List<Map<String, dynamic>> leaveTypes;
-  final VoidCallback onSuccess;
+  final void Function(String message) onSuccess;
   const _ApplyLeaveSheet({required this.leaveTypes, required this.onSuccess});
 
   @override
@@ -849,6 +856,7 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
   bool _useCompOff = false;
   List<Map<String, dynamic>> _compOffs = [];
   bool _loadingCompOffs = true;
+  Map<String, dynamic>? _attendancePolicy;
   Map<String, dynamic>? get _compOffType => widget.leaveTypes.firstWhereOrNull(
     (lt) => (lt['leave_code'] as String? ?? '').toUpperCase() == 'COMP_OFF',
   );
@@ -859,12 +867,28 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
   void initState() {
     super.initState();
     _fetchCompOffs();
+    _fetchAttendancePolicy();
   }
 
   @override
   void dispose() {
     _reasonCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchAttendancePolicy() async {
+    try {
+      final res = await ApiClient.get('/attendance/policy');
+      if (!mounted) return;
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (body['ok'] == true) {
+        setState(
+          () => _attendancePolicy = body['data'] as Map<String, dynamic>?,
+        );
+      }
+    } catch (_) {
+      // non-fatal — falls back to skipping Sundays only
+    }
   }
 
   Future<void> _fetchCompOffs() async {
@@ -889,11 +913,18 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
 
   int get _days {
     if (_isHalfDay || _fromDate == null || _toDate == null) return 0;
+    final policy = _attendancePolicy;
+    final skipSat = policy?['is_saturday_weekoff'] == 1;
+    final skipSun = policy?['is_sunday_weekoff'] == 1;
     int count = 0;
     DateTime it = DateTime(_fromDate!.year, _fromDate!.month, _fromDate!.day);
     final end = DateTime(_toDate!.year, _toDate!.month, _toDate!.day);
     while (!it.isAfter(end)) {
-      if (it.weekday != DateTime.sunday) count++;
+      final w = it.weekday;
+      if (!(skipSun && w == DateTime.sunday) &&
+          !(skipSat && w == DateTime.saturday)) {
+        count++;
+      }
       it = it.add(const Duration(days: 1));
     }
     return count;
@@ -968,25 +999,13 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
         return;
       }
 
-      // Mark comp-offs used (one per day, soonest-expiring first)
-      if (_useCompOff) {
-        final leaveId = data['leave_id'];
-        final daysUsed = _isHalfDay ? 1 : _days;
-        for (int i = 0; i < daysUsed && i < _compOffs.length; i++) {
-          final compOffId = _compOffs[i]['id'];
-          try {
-            await ApiClient.patch(
-              '/comp-off/$compOffId/use',
-              body: jsonEncode({'leave_id': leaveId}),
-            );
-          } catch (_) {
-            // non-fatal per comp-off
-          }
-        }
-      }
+      final approvalLevels = data['approval_levels'];
+      final msg = (approvalLevels != null && approvalLevels > 0)
+          ? 'Leave applied — pending $approvalLevels level${approvalLevels == 1 ? '' : 's'} of approval'
+          : data['message'] ?? 'Leave applied successfully';
 
       if (mounted) Navigator.pop(context);
-      widget.onSuccess();
+      widget.onSuccess(msg);
     } catch (e) {
       _snack('Error: $e');
     } finally {

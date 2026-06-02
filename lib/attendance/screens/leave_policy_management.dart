@@ -5,27 +5,34 @@ import '../providers/api_client.dart';
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
-class ApprovalStep {
-  String approverType;
-  String? approverEmployeeId;
-  bool isMandatory;
-  final TextEditingController empCtrl;
+class ApprovalRule {
+  double minDays;
+  double? maxDays;
+  int approvalLevels;
 
-  ApprovalStep({
-    this.approverType = 'REPORTING_MANAGER',
-    this.approverEmployeeId,
-    this.isMandatory = true,
-  }) : empCtrl = TextEditingController(text: approverEmployeeId ?? '');
+  ApprovalRule({
+    required this.minDays,
+    this.maxDays,
+    required this.approvalLevels,
+  });
 
-  void dispose() => empCtrl.dispose();
+  Map<String, dynamic> toJson() {
+    return {
+      'min_days': minDays,
+      'max_days': maxDays,
+      'approval_levels': approvalLevels,
+    };
+  }
 
-  Map<String, dynamic> toJson(int level) => {
-    'approval_level': level,
-    'approver_type': approverType,
-    if (approverType == 'SPECIFIC_EMPLOYEE')
-      'approver_employee_id': empCtrl.text.trim(),
-    'is_mandatory': isMandatory,
-  };
+  factory ApprovalRule.fromJson(Map<String, dynamic> json) {
+    return ApprovalRule(
+      minDays: double.parse(json['min_days'].toString()),
+      maxDays: json['max_days'] == null
+          ? null
+          : double.parse(json['max_days'].toString()),
+      approvalLevels: int.parse(json['approval_levels'].toString()),
+    );
+  }
 }
 
 class LeavePolicy {
@@ -53,7 +60,7 @@ class LeavePolicy {
     requiresApproval:
         (j['requires_approval'] == 1 || j['requires_approval'] == true),
     totalApprovalLevels:
-        int.tryParse(j['total_approval_levels']?.toString() ?? '0') ?? 0,
+        int.tryParse(j['total_approval_rules']?.toString() ?? '0') ?? 0,
   );
 }
 
@@ -79,14 +86,6 @@ class _LeavePolicyManagementScreenState
   static const _textMid = Color(0xFF64748B);
   static const _textLight = Color(0xFF94A3B8);
   static const _border = Color(0xFFE2E8F0);
-
-  static const _approverTypes = [
-    'REPORTING_MANAGER',
-    'DEPARTMENT_HEAD',
-    'HR',
-    'ADMIN',
-    'SPECIFIC_EMPLOYEE',
-  ];
 
   // ── State ──────────────────────────────────────────────────────────
   List<LeavePolicy> _policies = [];
@@ -245,13 +244,24 @@ class _LeavePolicyManagementScreenState
               child: Container(
                 color: _primary,
                 padding: EdgeInsets.fromLTRB(
-                  20,
+                  8,
                   MediaQuery.of(context).padding.top + 8,
                   8,
                   12,
                 ),
                 child: Row(
                   children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(),
+                    ),
+                    const SizedBox(width: 4),
                     const Text(
                       'Leave Policies',
                       style: TextStyle(
@@ -883,7 +893,9 @@ class _PolicySheetState extends State<_PolicySheet> {
 
   bool _isPaid = true;
   bool _requiresApproval = true;
-  List<ApprovalStep> _approvalFlow = [ApprovalStep()];
+  List<ApprovalRule> _approvalRules = [
+    ApprovalRule(minDays: 0.5, maxDays: null, approvalLevels: 1),
+  ];
   bool _loading = false;
   bool _isEdit = false;
 
@@ -898,9 +910,7 @@ class _PolicySheetState extends State<_PolicySheet> {
   void dispose() {
     _leaveNameCtrl.dispose();
     _maxDaysCtrl.dispose();
-    for (final s in _approvalFlow) {
-      s.dispose();
-    }
+
     super.dispose();
   }
 
@@ -912,28 +922,24 @@ class _PolicySheetState extends State<_PolicySheet> {
       final body = jsonDecode(resp.body);
       if (resp.statusCode == 200 && body['ok'] == true) {
         final data = body['data'] as Map<String, dynamic>;
-        for (final s in _approvalFlow) {
-          s.dispose();
-        }
+
         _leaveNameCtrl.text = data['leave_name'] ?? '';
         _maxDaysCtrl.text = (data['max_days'] ?? '').toString();
-        final flow = (data['approval_flow'] as List?) ?? [];
-        final newFlow = flow.map((s) {
-          final empId = s['approver_employee_id']?.toString();
-          final step = ApprovalStep(
-            approverType: s['approver_type'] ?? 'REPORTING_MANAGER',
-            approverEmployeeId: empId,
-            isMandatory: (s['is_mandatory'] == 1 || s['is_mandatory'] == true),
-          );
-          if (empId != null) step.empCtrl.text = empId;
-          return step;
-        }).toList();
+        final rules = (data['approval_rules'] as List?) ?? [];
         setState(() {
           _isPaid = (data['is_paid'] == 1 || data['is_paid'] == true);
+
           _requiresApproval =
               (data['requires_approval'] == 1 ||
               data['requires_approval'] == true);
-          _approvalFlow = newFlow.isEmpty ? [ApprovalStep()] : newFlow;
+
+          _approvalRules = rules.isEmpty
+              ? [ApprovalRule(minDays: 0.5, maxDays: 2, approvalLevels: 1)]
+              : rules
+                    .map(
+                      (e) => ApprovalRule.fromJson(e as Map<String, dynamic>),
+                    )
+                    .toList();
         });
       }
     } catch (_) {}
@@ -942,13 +948,7 @@ class _PolicySheetState extends State<_PolicySheet> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    for (int i = 0; i < _approvalFlow.length; i++) {
-      if (_approvalFlow[i].approverType == 'SPECIFIC_EMPLOYEE' &&
-          _approvalFlow[i].empCtrl.text.trim().isEmpty) {
-        _snack('Employee ID required at level ${i + 1}');
-        return;
-      }
-    }
+
     setState(() => _loading = true);
     try {
       final payload = {
@@ -956,11 +956,7 @@ class _PolicySheetState extends State<_PolicySheet> {
         'max_days': int.tryParse(_maxDaysCtrl.text.trim()) ?? 0,
         'is_paid': _isPaid,
         'requires_approval': _requiresApproval,
-        'approval_flow': _approvalFlow
-            .asMap()
-            .entries
-            .map((e) => e.value.toJson(e.key + 1))
-            .toList(),
+        'approval_rules': _approvalRules.map((e) => e.toJson()).toList(),
       };
       final resp = _isEdit
           ? await ApiClient.put(
@@ -996,20 +992,23 @@ class _PolicySheetState extends State<_PolicySheet> {
     );
   }
 
-  void _addLevel() {
-    final next = List<ApprovalStep>.from(_approvalFlow)..add(ApprovalStep());
-    setState(() => _approvalFlow = next);
+  void _addRule() {
+    setState(() {
+      _approvalRules.add(
+        ApprovalRule(minDays: 0, maxDays: null, approvalLevels: 1),
+      );
+    });
   }
 
-  void _removeLevel(int i) {
-    if (_approvalFlow.length <= 1) {
-      _snack('At least one approval level is required');
+  void _removeRule(int index) {
+    if (_approvalRules.length == 1) {
+      _snack('At least one rule required');
       return;
     }
-    final removed = _approvalFlow[i];
-    final next = List<ApprovalStep>.from(_approvalFlow)..removeAt(i);
-    removed.dispose();
-    setState(() => _approvalFlow = next);
+
+    setState(() {
+      _approvalRules.removeAt(index);
+    });
   }
 
   @override
@@ -1139,9 +1138,9 @@ class _PolicySheetState extends State<_PolicySheet> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _label('Approval Flow', inline: true),
+                    _label('Duration Based Approval Rules', inline: true),
                     GestureDetector(
-                      onTap: _addLevel,
+                      onTap: _addRule,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -1173,10 +1172,10 @@ class _PolicySheetState extends State<_PolicySheet> {
                 const SizedBox(height: 10),
 
                 ...List.generate(
-                  _approvalFlow.length,
+                  _approvalRules.length,
                   (i) => KeyedSubtree(
                     key: ValueKey('flow_$i'),
-                    child: _buildFlowRow(i),
+                    child: _buildRuleRow(i),
                   ),
                 ),
 
@@ -1221,178 +1220,142 @@ class _PolicySheetState extends State<_PolicySheet> {
     );
   }
 
-  Widget _buildFlowRow(int index) {
-    if (index >= _approvalFlow.length) return const SizedBox.shrink();
-    final step = _approvalFlow[index];
+  Widget _buildRuleRow(int index) {
+    final rule = _approvalRules[index];
+    final isUnlimited = rule.maxDays == null;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _border),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              // Level badge
               Container(
-                width: 26,
-                height: 26,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
+                  color: _primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                child: Center(
-                  child: Text(
-                    '${index + 1}',
-                    style: const TextStyle(
-                      color: _primary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
+                child: Text(
+                  'Rule ${index + 1}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _primary,
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
-
-              // Dropdown
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _border),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: step.approverType,
-                      dropdownColor: Colors.white,
-                      style: const TextStyle(color: _textDark, fontSize: 12),
-                      icon: const Icon(
-                        Icons.keyboard_arrow_down,
-                        color: _textLight,
-                        size: 16,
-                      ),
-                      isDense: true,
-                      isExpanded: true,
-                      items: _approverTypes
-                          .map(
-                            (t) => DropdownMenuItem(
-                              value: t,
-                              child: Text(
-                                t.replaceAll('_', ' '),
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        if (v == null) return;
-                        step.approverType = v;
-                        if (v != 'SPECIFIC_EMPLOYEE') {
-                          step.approverEmployeeId = null;
-                          step.empCtrl.clear();
-                        }
-                        setState(() {});
-                      },
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-
-              // Mandatory chip
+              const Spacer(),
               GestureDetector(
-                onTap: () {
-                  step.isMandatory = !step.isMandatory;
-                  setState(() {});
-                },
+                onTap: () => _removeRule(index),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: step.isMandatory
-                        ? _orange.withOpacity(0.1)
-                        : _border.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: step.isMandatory
-                          ? _orange.withOpacity(0.4)
-                          : _border,
-                    ),
-                  ),
-                  child: Text(
-                    step.isMandatory ? 'Req' : 'Opt',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: step.isMandatory ? _orange : _textLight,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-
-              // Remove
-              GestureDetector(
-                onTap: () => _removeLevel(index),
-                child: Container(
-                  padding: const EdgeInsets.all(5),
+                  padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: _red.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.close_rounded, color: _red, size: 15),
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    size: 16,
+                    color: _red,
+                  ),
                 ),
               ),
             ],
           ),
-
-          // Employee ID field
-          if (step.approverType == 'SPECIFIC_EMPLOYEE') ...[
-            const SizedBox(height: 10),
-            TextField(
-              controller: step.empCtrl,
-              style: const TextStyle(color: _textDark, fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Employee ID',
-                labelStyle: const TextStyle(color: _textMid, fontSize: 12),
-                hintText: 'Enter employee ID',
-                hintStyle: const TextStyle(color: _textLight, fontSize: 12),
-                prefixIcon: const Icon(
-                  Icons.person_outline,
-                  color: _textLight,
-                  size: 16,
-                ),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: _border),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: _border),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: _primary),
-                ),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  initialValue: rule.minDays.toString(),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  style: const TextStyle(fontSize: 13, color: _textDark),
+                  decoration: _inputDec(
+                    hint: '0.5',
+                    icon: Icons.arrow_forward_rounded,
+                  ).copyWith(labelText: 'Min Days'),
+                  onChanged: (v) => rule.minDays = double.tryParse(v) ?? 0,
                 ),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  enabled: !isUnlimited,
+                  initialValue: isUnlimited ? '' : rule.maxDays.toString(),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  style: const TextStyle(fontSize: 13, color: _textDark),
+                  decoration: _inputDec(
+                    hint: isUnlimited ? '∞' : '30',
+                    icon: Icons.arrow_back_rounded,
+                  ).copyWith(labelText: 'Max Days'),
+                  onChanged: (v) =>
+                      setState(() => rule.maxDays = double.tryParse(v)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  initialValue: rule.approvalLevels.toString(),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(fontSize: 13, color: _textDark),
+                  decoration: _inputDec(
+                    hint: '1',
+                    icon: Icons.account_tree_outlined,
+                  ).copyWith(labelText: 'Levels'),
+                  onChanged: (v) => rule.approvalLevels = int.tryParse(v) ?? 1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          GestureDetector(
+            onTap: () => setState(() {
+              rule.maxDays = isUnlimited ? rule.minDays : null;
+            }),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: isUnlimited ? _primary : Colors.white,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                      color: isUnlimited ? _primary : _border,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: isUnlimited
+                      ? const Icon(
+                          Icons.check_rounded,
+                          size: 12,
+                          color: Colors.white,
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  'No upper limit (unlimited days)',
+                  style: TextStyle(fontSize: 12, color: _textMid),
+                ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -1491,3 +1454,6 @@ class _PolicySheetState extends State<_PolicySheet> {
     ),
   );
 }
+
+
+// this is my current code guide me step by step to chnage to match with the backend code 

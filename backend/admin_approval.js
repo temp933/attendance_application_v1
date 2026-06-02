@@ -504,79 +504,73 @@ router.post(
 
         const [empResult] = await conn.query(
           `
-            INSERT INTO employee_master
-            (
-              tenant_id,
-              employee_code,
-              first_name,
-              mid_name,
-              last_name,
-              email_id,
-              phone_number,
-              date_of_birth,
-              gender,
-              designation_id,
-              role_id,
-              date_of_joining,
-              date_of_relieving,
-              employment_type,
-              work_type,
-              permanent_address,
-              communication_address,
-              aadhar_number,
-              pan_number,
-              passport_number,
-              father_name,
-              emergency_contact_relation,
-              emergency_contact,
-              pf_number,
-              esic_number,
-              years_experience,
-              reporting_to_employee_id,
-              profile_photo,
-              profile_photo_mime,
-              status,
-              created_at
-            )
-            VALUES
-            (
-              ?,?,?,?,?,?,?,?,?,?,
-              ?,?,?,?,?,?,?,?,?,?,
-              ?,?,?,?,?,?,?,?,?,
-              NOW()
-            )
-          `,
+    INSERT INTO employee_master
+    (
+      tenant_id,
+      employee_code,
+      first_name,
+      mid_name,
+      last_name,
+      email_id,
+      phone_number,
+      date_of_birth,
+      gender,
+      designation_id,
+      role_id,
+      date_of_joining,
+      date_of_relieving,
+      employment_type,
+      work_type,
+      permanent_address,
+      communication_address,
+      aadhar_number,
+      pan_number,
+      passport_number,
+      father_name,
+      emergency_contact_relation,
+      emergency_contact,
+      pf_number,
+      esic_number,
+      years_experience,
+      reporting_to_employee_id,
+      profile_photo,
+      profile_photo_mime,
+      status,
+      created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+  `,
           [
-            tenantId,
-            employeeCode,
-            pending.first_name,
-            pending.mid_name,
-            pending.last_name,
-            pending.email_id,
-            pending.phone_number,
-            pending.date_of_birth,
-            pending.gender,
-            pending.designation_id,
-            pending.role_id,
-            pending.date_of_joining,
-            pending.date_of_relieving,
-            pending.employment_type,
-            pending.work_type,
-            pending.permanent_address,
-            pending.communication_address,
-            pending.aadhar_number,
-            pending.pan_number,
-            pending.passport_number,
-            pending.father_name,
-            pending.emergency_contact_relation,
-            pending.emergency_contact,
-            pending.pf_number,
-            pending.esic_number,
-            pending.years_experience,
-            pending.reporting_to_employee_id || null,
-            pending.profile_photo || null,
-            pending.profile_photo_mime || null,
-            pending.status || "Active",
+            tenantId, // 1  tenant_id
+            employeeCode, // 2  employee_code
+            pending.first_name, // 3  first_name
+            pending.mid_name, // 4  mid_name
+            pending.last_name, // 5  last_name
+            pending.email_id, // 6  email_id
+            pending.phone_number, // 7  phone_number
+            pending.date_of_birth, // 8  date_of_birth
+            pending.gender, // 9  gender
+            pending.designation_id, // 10 designation_id
+            pending.role_id, // 11 role_id
+            pending.date_of_joining, // 12 date_of_joining
+            pending.date_of_relieving ?? null, // 13 date_of_relieving
+            pending.employment_type, // 14 employment_type
+            pending.work_type, // 15 work_type
+            pending.permanent_address, // 16 permanent_address
+            pending.communication_address, // 17 communication_address
+            pending.aadhar_number, // 18 aadhar_number
+            pending.pan_number, // 19 pan_number
+            pending.passport_number ?? null, // 20 passport_number
+            pending.father_name, // 21 father_name
+            pending.emergency_contact_relation, // 22 emergency_contact_relation
+            pending.emergency_contact, // 23 emergency_contact
+            pending.pf_number ?? null, // 24 pf_number
+            pending.esic_number ?? null, // 25 esic_number
+            pending.years_experience, // 26 years_experience
+            pending.reporting_to_employee_id ?? null, // 27 reporting_to_employee_id
+            pending.profile_photo ?? null, // 28 profile_photo
+            pending.profile_photo_mime ?? null, // 29 profile_photo_mime
+            pending.status ?? "Active", // 30 status
           ],
         );
 
@@ -682,9 +676,6 @@ router.post(
         ["status", pending.status],
         ["reporting_to_employee_id", pending.reporting_to_employee_id],
       ].filter(([, value]) => value !== null && value !== undefined);
-
-
-      
 
       if (pending.profile_photo) {
         updatable.push(["profile_photo", pending.profile_photo]);

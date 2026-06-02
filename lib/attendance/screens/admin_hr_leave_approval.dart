@@ -83,9 +83,9 @@ class _Leave {
     isHalfDay: (j['is_half_day'] == 1 || j['is_half_day'] == true),
     halfDayPeriod: j['half_day_period'] as String?,
     // Map whichever field your API returns; fall back to null gracefully.
-    department: (j['department_name'] as String?)?.trim().isEmpty == true
-        ? null
-        : j['department_name'] as String?,
+    department: (j['designation_name'] as String?)?.trim().isNotEmpty == true
+        ? j['designation_name'] as String?
+        : null,
   );
 }
 
@@ -251,10 +251,7 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen>
           child: TabBarView(
             controller: _tab,
             physics: const NeverScrollableScrollPhysics(),
-            children: [
-              _PendingPlaceholder(onHistory: () => _tab.animateTo(1)),
-              _historyTab(),
-            ],
+            children: [const _PendingTab(), _historyTab()],
           ),
         ),
       ],
@@ -1268,131 +1265,474 @@ class _ExpandedDetails extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════════════════════
 // Pending Placeholder
 // ═════════════════════════════════════════════════════════════════════════════
-class _PendingPlaceholder extends StatelessWidget {
-  final VoidCallback onHistory;
-  const _PendingPlaceholder({required this.onHistory});
+// ═════════════════════════════════════════════════════════════════════════════
+// Pending Approvals Tab
+// ═════════════════════════════════════════════════════════════════════════════
+class _PendingTab extends StatefulWidget {
+  const _PendingTab();
+  @override
+  State<_PendingTab> createState() => _PendingTabState();
+}
+
+class _PendingTabState extends State<_PendingTab> {
+  List<_Leave> _pending = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/leave/pending-approvals'),
+        headers: ApiConfig.headers,
+      );
+      if (res.statusCode == 200) {
+        final body = json.decode(res.body) as Map<String, dynamic>;
+        if (body['ok'] == true) {
+          final list = (body['data'] as List)
+              .map((e) => _Leave.fromJson(e as Map<String, dynamic>))
+              .toList();
+          if (mounted) setState(() => _pending = list);
+        } else {
+          throw Exception(body['message'] ?? 'Server error');
+        }
+      } else {
+        throw Exception('HTTP ${res.statusCode}');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _approve(int leaveId) async {
+    try {
+      final res = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/leave/approve/$leaveId'),
+        headers: ApiConfig.headers,
+        body: json.encode({'remarks': ''}),
+      );
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      _snack(body['message'] ?? 'Done', success: body['ok'] == true);
+      if (body['ok'] == true) _fetch();
+    } catch (e) {
+      _snack('Error: $e');
+    }
+  }
+
+  Future<void> _reject(int leaveId) async {
+    final ctrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text(
+          'Reject Leave',
+          style: TextStyle(fontWeight: FontWeight.w800, color: _slate900),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Please provide a reason for rejection.',
+              style: TextStyle(fontSize: 13, color: _slate500),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              maxLines: 3,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Rejection remarks…',
+                hintStyle: const TextStyle(color: _slate500, fontSize: 13),
+                filled: true,
+                fillColor: _slate50,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: _slate300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: _r600, width: 1.5),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: _slate500)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: _r600,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              if (ctrl.text.trim().isEmpty) return;
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final res = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/leave/reject/$leaveId'),
+        headers: ApiConfig.headers,
+        body: json.encode({'remarks': ctrl.text.trim()}),
+      );
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      _snack(body['message'] ?? 'Done', success: body['ok'] == true);
+      if (body['ok'] == true) _fetch();
+    } catch (e) {
+      _snack('Error: $e');
+    }
+  }
+
+  void _snack(String msg, {bool success = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              success
+                  ? Icons.check_circle_rounded
+                  : Icons.error_outline_rounded,
+              color: _white,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                msg,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: success ? _g600 : _r600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.of(context).padding.bottom;
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(40, 32, 40, 32 + bottom),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(height: 40),
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: _p50,
-              shape: BoxShape.circle,
-              border: Border.all(color: _p100, width: 2),
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                const Icon(
-                  Icons.pending_actions_rounded,
-                  size: 48,
-                  color: _p100,
-                ),
-                Positioned(
-                  bottom: 14,
-                  right: 14,
-                  child: Container(
-                    width: 26,
-                    height: 26,
-                    decoration: BoxDecoration(
-                      color: _a600,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _white, width: 2),
-                    ),
-                    child: const Icon(
-                      Icons.construction_rounded,
-                      size: 12,
-                      color: _white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Coming Soon',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: _slate900,
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Pending approval actions are being\nrevamped with a better experience.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: _slate500, height: 1.6),
-          ),
-          const SizedBox(height: 28),
-          GestureDetector(
-            onTap: onHistory,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              decoration: BoxDecoration(
-                color: _white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _slate200),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Row(
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: _p700, strokeWidth: 2),
+      );
+    }
+    if (_error != null) {
+      return _ErrorView(msg: _error!, onRetry: _fetch);
+    }
+    if (_pending.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _fetch,
+        color: _p700,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverFillRemaining(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
+                    padding: const EdgeInsets.all(24),
+                    decoration: const BoxDecoration(
                       color: _p50,
-                      borderRadius: BorderRadius.circular(10),
+                      shape: BoxShape.circle,
                     ),
                     child: const Icon(
-                      Icons.history_rounded,
+                      Icons.check_circle_outline_rounded,
+                      size: 40,
                       color: _p700,
-                      size: 19,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'View History',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: _slate900,
-                          ),
-                        ),
-                        Text(
-                          'Browse all processed requests',
-                          style: TextStyle(fontSize: 12, color: _slate500),
-                        ),
-                      ],
+                  const SizedBox(height: 16),
+                  const Text(
+                    'All caught up!',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: _slate900,
                     ),
                   ),
-                  const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 13,
-                    color: _slate500,
+                  const SizedBox(height: 6),
+                  const Text(
+                    'No pending approvals right now.',
+                    style: TextStyle(fontSize: 13, color: _slate500),
                   ),
                 ],
               ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _fetch,
+      color: _p700,
+      child: ListView.builder(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          14,
+          16,
+          16 + MediaQuery.of(context).padding.bottom,
+        ),
+        itemCount: _pending.length,
+        itemBuilder: (_, i) => _PendingCard(
+          leave: _pending[i],
+          onApprove: () => _approve(_pending[i].leaveId),
+          onReject: () => _reject(_pending[i].leaveId),
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingCard extends StatelessWidget {
+  final _Leave leave;
+  final VoidCallback onApprove, onReject;
+  const _PendingCard({
+    required this.leave,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l = leave;
+    final sameDay = _fmt(l.fromDate) == _fmt(l.toDate);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: _white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _v600.withValues(alpha: 0.25), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: _v600.withValues(alpha: 0.07),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // Top accent bar
+          Container(
+            height: 3,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [_v600, _v600.withValues(alpha: 0.4)],
+              ),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Employee row
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: _v100,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _v600.withValues(alpha: 0.2)),
+                      ),
+                      child: Center(
+                        child: Text(
+                          _initials(l.employeeName),
+                          style: const TextStyle(
+                            color: _v600,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l.employeeName,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: _slate900,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              _Tag(l.leaveType, _p700, _p50),
+                              if (l.isHalfDay) ...[
+                                const SizedBox(width: 5),
+                                _Tag('Half Day', _a600, _a100),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Days badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _v100,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: _v600.withValues(alpha: 0.2)),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            '${l.numberOfDays}',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: _v600,
+                              height: 1,
+                            ),
+                          ),
+                          const Text(
+                            'days',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: _v600,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+                const Divider(height: 1, color: _slate100),
+                const SizedBox(height: 12),
+
+                // Date + level info
+                Row(
+                  children: [
+                    Expanded(
+                      child: _InfoCell(
+                        icon: Icons.calendar_today_outlined,
+                        label: 'Date',
+                        value: sameDay
+                            ? _fmt(l.fromDate)
+                            : '${_fmt(l.fromDate)} → ${_fmt(l.toDate)}',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _InfoCell(
+                        icon: Icons.layers_outlined,
+                        label: 'Approval Level',
+                        value: l.currentApprovalLevel != null
+                            ? 'Level ${l.currentApprovalLevel}'
+                            : '—',
+                      ),
+                    ),
+                  ],
+                ),
+
+                if (l.reason != null && l.reason!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _DetailTile(
+                    icon: Icons.notes_rounded,
+                    label: 'Reason',
+                    text: l.reason!,
+                    iconColor: _p700,
+                    bg: _p50,
+                  ),
+                ],
+
+                const SizedBox(height: 14),
+
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onReject,
+                        icon: const Icon(Icons.close_rounded, size: 16),
+                        label: const Text('Reject'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _r600,
+                          side: const BorderSide(color: _r600),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: onApprove,
+                        icon: const Icon(Icons.check_rounded, size: 16),
+                        label: const Text('Approve'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _g600,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
