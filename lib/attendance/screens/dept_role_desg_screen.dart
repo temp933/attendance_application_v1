@@ -53,105 +53,46 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
       appBar: AppBar(
         backgroundColor: _card,
         elevation: 0,
+        toolbarHeight: 0,
         surfaceTintColor: Colors.transparent,
-        titleSpacing: 20,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: _primary),
-            tooltip: 'Refresh all tabs',
-            onPressed: () => setState(() => _refreshKey++),
-          ),
-          const SizedBox(width: 8),
-        ],
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: _primaryLight,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.manage_accounts_rounded,
-                color: _primary,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Master Setup',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: _textDark,
-                letterSpacing: -0.3,
-              ),
-            ),
-          ],
-        ),
+
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
+          preferredSize: const Size.fromHeight(46),
           child: Container(
+            height: 46,
             decoration: const BoxDecoration(
               color: _card,
               border: Border(bottom: BorderSide(color: _border, width: 1)),
             ),
-            child: TabBar(
-              controller: _tab,
-              labelColor: _primary,
-              unselectedLabelColor: _textMid,
-              labelStyle: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-              unselectedLabelStyle: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-              indicatorColor: _primary,
-              indicatorWeight: 2.5,
-              indicatorSize: TabBarIndicatorSize.tab,
-              tabs: const [
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.apartment_rounded, size: 16),
-                      SizedBox(width: 6),
-                      Text('Departments'),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TabBar(
+                    controller: _tab,
+                    labelColor: _primary,
+                    unselectedLabelColor: _textMid,
+                    labelStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    unselectedLabelStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    indicatorColor: _primary,
+                    indicatorWeight: 2.5,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    tabs: const [
+                      Tab(text: 'Departments'),
+                      Tab(text: 'Designations'),
+                      Tab(text: 'Roles'),
+                      Tab(text: 'Permissions'),
                     ],
                   ),
                 ),
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.badge_outlined, size: 16),
-                      SizedBox(width: 6),
-                      Text('Designations'),
-                    ],
-                  ),
-                ),
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.shield_outlined, size: 16),
-                      SizedBox(width: 6),
-                      Text('Roles'),
-                    ],
-                  ),
-                ),
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.tune_rounded, size: 16),
-                      SizedBox(width: 6),
-                      Text('Permissions'),
-                    ],
-                  ),
-                ),
+                // ── Refresh icon sits in the same row as tabs ──────────────
+                Container(width: 1, height: 24, color: _border),
+                 
               ],
             ),
           ),
@@ -1666,18 +1607,23 @@ class _PermissionsTabState extends State<_PermissionsTab>
   @override
   void initState() {
     super.initState();
-    _loadRoles();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadRoles();
+    });
   }
 
   Future<void> _loadRoles() async {
+    if (!mounted) return;
     setState(() => _rolesLoading = true);
     try {
       final list = await _roleSvc.fetchAll();
+      if (!mounted) return;
       setState(() {
         _roles = list;
         _rolesLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString().replaceAll('Exception: ', '');
         _rolesLoading = false;

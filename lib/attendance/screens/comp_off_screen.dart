@@ -70,7 +70,6 @@ class _CompOffScreenState extends State<CompOffScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(),
             _buildSummaryRow(),
             _buildTabBar(),
             Expanded(child: _buildBody()),
@@ -79,45 +78,7 @@ class _CompOffScreenState extends State<CompOffScreen>
       ),
     );
   }
-
-  // ── Header ────────────────────────────────────────────────────────────────
-  Widget _buildHeader() => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              DateFormat('EEE, d MMM yyyy').format(DateTime.now()),
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey.shade500,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 2),
-            const Text(
-              'Comp-Off',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF1A1A2E),
-                letterSpacing: -0.3,
-              ),
-            ),
-          ],
-        ),
-        IconButton(
-          onPressed: _load,
-          icon: Icon(Icons.refresh_rounded, color: Colors.indigo.shade400),
-          tooltip: 'Refresh',
-        ),
-      ],
-    ),
-  );
-
+  
   // ── Summary cards ─────────────────────────────────────────────────────────
   Widget _buildSummaryRow() => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

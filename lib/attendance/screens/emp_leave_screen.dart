@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../providers/api_client.dart';
-import 'responsive_utils.dart';
 
 // ─── Color palette ─────────────────────────────────────────────────────────
 const _primary = Color(0xFF1A56DB);
@@ -169,48 +168,17 @@ class _LeaveScreenState extends State<LeaveScreen>
   Widget _buildAppBar() {
     return SliverToBoxAdapter(
       child: Container(
-        color: _primary,
+        color: _surface,
         padding: EdgeInsets.fromLTRB(
-          24,
-          MediaQuery.of(context).padding.top + 12,
-          12,
           16,
+          MediaQuery.of(context).padding.top + 12,
+          16,
+          8,
         ),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: _kMaxContentWidth),
-            child: Row(
-              children: [
-                const Text(
-                  'My Leaves',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                const Spacer(),
-                _AppBarBtn(
-                  icon: Icons
-                      .calendar_month_rounded, // ← was Icons.approval_rounded
-                  tooltip: 'Holidays',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const HolidaysScreen(), // ← was PendingApprovalsScreen
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                _AppBarBtn(
-                  icon: Icons.refresh_rounded,
-                  tooltip: 'Refresh',
-                  onTap: _loading ? null : _load,
-                ),
-              ],
-            ),
+           
           ),
         ),
       ),
@@ -220,49 +188,44 @@ class _LeaveScreenState extends State<LeaveScreen>
   // ── Stats Bar ─────────────────────────────────────────────────────────────
   Widget _buildStatsBar() {
     return Container(
-      color: _primary,
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      color: _surface,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _kMaxContentWidth),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 16),
+            padding: const EdgeInsets.symmetric(vertical: 18),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.13),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withOpacity(0.18)),
+              border: Border.all(color: _border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Row(
               children: [
-                _StatItem(
-                  value: '$_total',
-                  label: 'Total',
-                  color: Colors.white,
-                ),
-                _StatDivider(),
-                _StatItem(
-                  value: '$_pending',
-                  label: 'Pending',
-                  color: const Color(0xFFFDE68A),
-                ),
+                _StatItem(value: '$_total', label: 'Total', color: _primary),
                 _StatDivider(),
                 _StatItem(
                   value: '$_approved',
                   label: 'Approved',
-                  color: const Color(0xFF6EE7B7),
+                  color: _accent,
                 ),
+                _StatDivider(),
+                _StatItem(value: '$_pending', label: 'Pending', color: _amber),
                 _StatDivider(),
                 _StatItem(
                   value: '$_cancelled',
                   label: 'Cancelled',
-                  color: Colors.white70,
+                  color: _textMid,
                 ),
                 _StatDivider(),
-                _StatItem(
-                  value: '$_rejected',
-                  label: 'Rejected',
-                  color: const Color.fromARGB(179, 255, 255, 255),
-                ),
+                _StatItem(value: '$_rejected', label: 'Rejected', color: _red),
               ],
             ),
           ),
@@ -857,6 +820,7 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
   List<Map<String, dynamic>> _compOffs = [];
   bool _loadingCompOffs = true;
   Map<String, dynamic>? _attendancePolicy;
+  List<String> _holidayDates = [];
   Map<String, dynamic>? get _compOffType => widget.leaveTypes.firstWhereOrNull(
     (lt) => (lt['leave_code'] as String? ?? '').toUpperCase() == 'COMP_OFF',
   );
@@ -878,16 +842,48 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
 
   Future<void> _fetchAttendancePolicy() async {
     try {
-      final res = await ApiClient.get('/attendance/policy');
+      final now = DateTime.now();
+      // Fetch current year and next year to cover cross-year ranges
+      final results = await Future.wait([
+        ApiClient.get('/attendance/policy'),
+        ApiClient.get('/holidays?year=${now.year}'),
+        ApiClient.get('/holidays?year=${now.year + 1}'),
+      ]);
+
       if (!mounted) return;
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
-      if (body['ok'] == true) {
+
+      // Policy
+      final policyBody = jsonDecode(results[0].body) as Map<String, dynamic>;
+      if (policyBody['ok'] == true) {
         setState(
-          () => _attendancePolicy = body['data'] as Map<String, dynamic>?,
+          () => _attendancePolicy = policyBody['data'] as Map<String, dynamic>?,
         );
       }
+
+      // Holidays — combine both year responses
+      final allHolidays = <String>[];
+      for (final res in [results[1], results[2]]) {
+        if (res.statusCode == 200) {
+          final body = jsonDecode(res.body) as Map<String, dynamic>;
+          if (body['success'] == true) {
+            final rows = List<Map<String, dynamic>>.from(body['data'] ?? []);
+            for (final h in rows) {
+              final raw = h['holiday_date'] as String?;
+              if (raw != null) {
+                // Normalize to "YYYY-MM-DD"
+                try {
+                  allHolidays.add(
+                    DateTime.parse(raw).toIso8601String().split('T')[0],
+                  );
+                } catch (_) {}
+              }
+            }
+          }
+        }
+      }
+      if (mounted) setState(() => _holidayDates = allHolidays);
     } catch (_) {
-      // non-fatal — falls back to skipping Sundays only
+      // non-fatal
     }
   }
 
@@ -916,27 +912,28 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
     final policy = _attendancePolicy;
     final skipSat = policy?['is_saturday_weekoff'] == 1;
     final skipSun = policy?['is_sunday_weekoff'] == 1;
+    final holidaySet = _holidayDates.toSet();
+
     int count = 0;
     DateTime it = DateTime(_fromDate!.year, _fromDate!.month, _fromDate!.day);
     final end = DateTime(_toDate!.year, _toDate!.month, _toDate!.day);
+
     while (!it.isAfter(end)) {
       final w = it.weekday;
-      if (!(skipSun && w == DateTime.sunday) &&
-          !(skipSat && w == DateTime.saturday)) {
-        count++;
-      }
+      final dateStr =
+          '${it.year.toString().padLeft(4, '0')}'
+          '-${it.month.toString().padLeft(2, '0')}'
+          '-${it.day.toString().padLeft(2, '0')}';
+
+      final isWeekend =
+          (skipSun && w == DateTime.sunday) ||
+          (skipSat && w == DateTime.saturday);
+      final isHoliday = holidaySet.contains(dateStr);
+
+      if (!isWeekend && !isHoliday) count++;
       it = it.add(const Duration(days: 1));
     }
     return count;
-  }
-
-  String get _daysLabel {
-    if (_isHalfDay) return '0.5 day (${_halfDayPeriod ?? '?'})';
-    final d = _days;
-    if (d == 0) return 'No working days selected';
-    if (_useCompOff)
-      return '$d day${d == 1 ? '' : 's'} — uses $d comp-off${d == 1 ? '' : 's'}';
-    return '$d working day${d == 1 ? '' : 's'}';
   }
 
   void _snack(String msg) {
@@ -1101,12 +1098,17 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
                       spacing: 8,
                       runSpacing: 8,
                       children: widget.leaveTypes
-                          .where(
-                            (t) =>
-                                (t['leave_code'] as String? ?? '')
-                                    .toUpperCase() !=
-                                'COMP_OFF',
-                          )
+                          .where((t) {
+                            final code = (t['leave_code'] as String? ?? '')
+                                .toUpperCase();
+                            final name = (t['leave_name'] as String? ?? '')
+                                .trim();
+                            final id = t['leave_type_id'];
+                            return code != 'COMP_OFF' &&
+                                name.isNotEmpty &&
+                                id != null &&
+                                id != 0;
+                          })
                           .map((t) {
                             final selected =
                                 _selectedType?['leave_type_id'] ==
@@ -1386,26 +1388,6 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
                     horizontal: 12,
                     vertical: 5,
                   ),
-                  decoration: BoxDecoration(
-                    color: (_days == 0 && !_isHalfDay)
-                        ? _redLight
-                        : _useCompOff
-                        ? _tealLight
-                        : _primaryLight,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    _daysLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: (_days == 0 && !_isHalfDay)
-                          ? _red
-                          : _useCompOff
-                          ? _teal
-                          : _primary,
-                    ),
-                  ),
                 ),
               ),
             ],
@@ -1545,448 +1527,7 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
     ),
   );
 }
-// class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
-//   Map<String, dynamic>? _selectedType;
-//   DateTime? _fromDate;
-//   DateTime? _toDate;
-//   bool _isHalfDay = false;
-//   String? _halfDayPeriod;
-//   final _reasonCtrl = TextEditingController();
-//   bool _submitting = false;
 
-//   @override
-//   void dispose() {
-//     _reasonCtrl.dispose();
-//     super.dispose();
-//   }
-
-//   int get _days {
-//     if (_isHalfDay || _fromDate == null || _toDate == null) return 0;
-//     int count = 0;
-//     DateTime it = DateTime(_fromDate!.year, _fromDate!.month, _fromDate!.day);
-//     final end = DateTime(_toDate!.year, _toDate!.month, _toDate!.day);
-//     while (!it.isAfter(end)) {
-//       if (it.weekday != DateTime.sunday) count++;
-//       it = it.add(const Duration(days: 1));
-//     }
-//     return count;
-//   }
-
-//   String get _daysLabel {
-//     if (_isHalfDay) return '0.5 day (${_halfDayPeriod ?? '?'})';
-//     final d = _days;
-//     if (d == 0) return 'No working days selected';
-//     return '$d working day${d == 1 ? '' : 's'}';
-//   }
-
-//   void _snack(String msg) {
-//     ScaffoldMessenger.of(context).showSnackBar(
-//       SnackBar(
-//         content: Text(msg),
-//         backgroundColor: _red,
-//         behavior: SnackBarBehavior.floating,
-//         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-//         margin: const EdgeInsets.all(16),
-//       ),
-//     );
-//   }
-
-//   Future<void> _submit() async {
-//     if (_selectedType == null) return _snack('Please select a leave type');
-//     if (_fromDate == null) return _snack('Please select a start date');
-//     if (_toDate == null) return _snack('Please select an end date');
-//     if (_reasonCtrl.text.trim().isEmpty) return _snack('Reason is required');
-//     if (_isHalfDay && _halfDayPeriod == null)
-//       return _snack('Please select AM or PM for half day');
-//     if (!_isHalfDay && _days == 0)
-//       return _snack('Selected range has no working days');
-
-//     setState(() => _submitting = true);
-//     try {
-//       final body = <String, dynamic>{
-//         'leave_type_id': _selectedType!['leave_type_id'],
-//         'leave_start_date': DateFormat('yyyy-MM-dd').format(_fromDate!),
-//         'leave_end_date': DateFormat('yyyy-MM-dd').format(_toDate!),
-//         'is_half_day': _isHalfDay,
-//         'half_day_period': _isHalfDay ? _halfDayPeriod : null,
-//         'reason': _reasonCtrl.text.trim(),
-//       };
-//       final res = await ApiClient.post('/leave/apply', body);
-//       final data = jsonDecode(res.body) as Map<String, dynamic>;
-//       if (data['ok'] == true) {
-//         if (mounted) Navigator.pop(context);
-//         widget.onSuccess();
-//       } else {
-//         _snack(data['message'] ?? 'Submission failed');
-//       }
-//     } catch (e) {
-//       _snack('Error: $e');
-//     } finally {
-//       if (mounted) setState(() => _submitting = false);
-//     }
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     final bottom = MediaQuery.of(context).viewInsets.bottom;
-//     final screenW = MediaQuery.of(context).size.width;
-//     final isWide = screenW >= _kDesktopBreak;
-
-//     // On desktop — show as centered dialog-style sheet
-//     final sheetContent = Container(
-//       decoration: BoxDecoration(
-//         color: Colors.white,
-//         borderRadius: isWide
-//             ? BorderRadius.circular(24)
-//             : const BorderRadius.vertical(top: Radius.circular(24)),
-//       ),
-//       padding: EdgeInsets.fromLTRB(24, 16, 24, bottom + 28),
-//       child: SingleChildScrollView(
-//         child: Column(
-//           mainAxisSize: MainAxisSize.min,
-//           crossAxisAlignment: CrossAxisAlignment.start,
-//           children: [
-//             // Handle
-//             Center(
-//               child: Container(
-//                 width: 40,
-//                 height: 4,
-//                 decoration: BoxDecoration(
-//                   color: _border,
-//                   borderRadius: BorderRadius.circular(2),
-//                 ),
-//               ),
-//             ),
-//             const SizedBox(height: 18),
-
-//             // Header
-//             Row(
-//               children: [
-//                 Container(
-//                   padding: const EdgeInsets.all(10),
-//                   decoration: BoxDecoration(
-//                     color: _primaryLight,
-//                     borderRadius: BorderRadius.circular(12),
-//                   ),
-//                   child: const Icon(
-//                     Icons.event_available_rounded,
-//                     color: _primary,
-//                     size: 20,
-//                   ),
-//                 ),
-//                 const SizedBox(width: 12),
-//                 Column(
-//                   crossAxisAlignment: CrossAxisAlignment.start,
-//                   children: [
-//                     const Text(
-//                       'Apply for Leave',
-//                       style: TextStyle(
-//                         fontSize: 18,
-//                         fontWeight: FontWeight.w800,
-//                         color: _textDark,
-//                       ),
-//                     ),
-//                     const Text(
-//                       'Fill in the leave details below',
-//                       style: TextStyle(fontSize: 13, color: _textMid),
-//                     ),
-//                   ],
-//                 ),
-//               ],
-//             ),
-//             const SizedBox(height: 24),
-
-//             // ── Leave type ──────────────────────────────────────────────
-//             const _FieldLabel('Leave Type *'),
-//             const SizedBox(height: 10),
-//             widget.leaveTypes.isEmpty
-//                 ? const Text(
-//                     'No leave types configured.',
-//                     style: TextStyle(color: _textMid),
-//                   )
-//                 : Wrap(
-//                     spacing: 8,
-//                     runSpacing: 8,
-//                     children: widget.leaveTypes.map((t) {
-//                       final selected =
-//                           _selectedType?['leave_type_id'] == t['leave_type_id'];
-//                       return GestureDetector(
-//                         onTap: () => setState(() {
-//                           _selectedType = t;
-//                           _isHalfDay = false;
-//                           _halfDayPeriod = null;
-//                         }),
-//                         child: AnimatedContainer(
-//                           duration: const Duration(milliseconds: 150),
-//                           padding: const EdgeInsets.symmetric(
-//                             horizontal: 14,
-//                             vertical: 10,
-//                           ),
-//                           decoration: BoxDecoration(
-//                             color: selected
-//                                 ? _primary.withOpacity(0.08)
-//                                 : Colors.white,
-//                             borderRadius: BorderRadius.circular(12),
-//                             border: Border.all(
-//                               color: selected ? _primary : _border,
-//                               width: selected ? 1.8 : 1,
-//                             ),
-//                             boxShadow: selected
-//                                 ? [
-//                                     BoxShadow(
-//                                       color: _primary.withOpacity(0.12),
-//                                       blurRadius: 8,
-//                                       offset: const Offset(0, 2),
-//                                     ),
-//                                   ]
-//                                 : [],
-//                           ),
-//                           child: Row(
-//                             mainAxisSize: MainAxisSize.min,
-//                             children: [
-//                               Icon(
-//                                 Icons.event_note_rounded,
-//                                 size: 16,
-//                                 color: selected ? _primary : _textMid,
-//                               ),
-//                               const SizedBox(width: 6),
-//                               Text(
-//                                 t['leave_name'] ?? '',
-//                                 style: TextStyle(
-//                                   fontSize: 13,
-//                                   fontWeight: FontWeight.w600,
-//                                   color: selected ? _primary : _textDark,
-//                                 ),
-//                               ),
-//                               if (selected) ...[
-//                                 const SizedBox(width: 6),
-//                                 const Icon(
-//                                   Icons.check_circle_rounded,
-//                                   size: 14,
-//                                   color: _primary,
-//                                 ),
-//                               ],
-//                             ],
-//                           ),
-//                         ),
-//                       );
-//                     }).toList(),
-//                   ),
-
-//             const SizedBox(height: 20),
-
-//             // ── Half day toggle ─────────────────────────────────────────
-//             if (_selectedType != null) ...[
-//               Container(
-//                 padding: const EdgeInsets.symmetric(
-//                   horizontal: 12,
-//                   vertical: 8,
-//                 ),
-//                 decoration: BoxDecoration(
-//                   color: _surface,
-//                   borderRadius: BorderRadius.circular(12),
-//                   border: Border.all(color: _border),
-//                 ),
-//                 child: Row(
-//                   children: [
-//                     Switch(
-//                       value: _isHalfDay,
-//                       activeColor: _primary,
-//                       onChanged: (v) => setState(() {
-//                         _isHalfDay = v;
-//                         if (v)
-//                           _toDate = _fromDate;
-//                         else
-//                           _halfDayPeriod = null;
-//                       }),
-//                     ),
-//                     const Text(
-//                       'Half Day',
-//                       style: TextStyle(
-//                         fontSize: 13,
-//                         color: _textDark,
-//                         fontWeight: FontWeight.w500,
-//                       ),
-//                     ),
-//                     if (_isHalfDay) ...[
-//                       const Spacer(),
-//                       _PeriodChip(
-//                         label: 'AM',
-//                         selected: _halfDayPeriod == 'AM',
-//                         onTap: () => setState(() => _halfDayPeriod = 'AM'),
-//                       ),
-//                       const SizedBox(width: 8),
-//                       _PeriodChip(
-//                         label: 'PM',
-//                         selected: _halfDayPeriod == 'PM',
-//                         onTap: () => setState(() => _halfDayPeriod = 'PM'),
-//                       ),
-//                     ],
-//                   ],
-//                 ),
-//               ),
-//               const SizedBox(height: 16),
-//             ],
-
-//             // ── Date pickers ────────────────────────────────────────────
-//             Row(
-//               children: [
-//                 Expanded(
-//                   child: _DateField(
-//                     label: 'From Date *',
-//                     value: _fromDate,
-//                     onTap: () async {
-//                       final p = await showDatePicker(
-//                         context: context,
-//                         initialDate: _fromDate ?? DateTime.now(),
-//                         firstDate: DateTime.now(),
-//                         lastDate: DateTime(DateTime.now().year + 2),
-//                       );
-//                       if (p != null) {
-//                         setState(() {
-//                           _fromDate = p;
-//                           if (_isHalfDay)
-//                             _toDate = p;
-//                           else if (_toDate != null && _toDate!.isBefore(p))
-//                             _toDate = null;
-//                         });
-//                       }
-//                     },
-//                   ),
-//                 ),
-//                 const SizedBox(width: 12),
-//                 Expanded(
-//                   child: _DateField(
-//                     label: 'To Date *',
-//                     value: _toDate,
-//                     enabled: _fromDate != null && !_isHalfDay,
-//                     onTap: _fromDate == null || _isHalfDay
-//                         ? null
-//                         : () async {
-//                             final p = await showDatePicker(
-//                               context: context,
-//                               initialDate: _toDate ?? _fromDate!,
-//                               firstDate: _fromDate!,
-//                               lastDate: DateTime(DateTime.now().year + 2),
-//                             );
-//                             if (p != null) setState(() => _toDate = p);
-//                           },
-//                   ),
-//                 ),
-//               ],
-//             ),
-
-//             if (_fromDate != null && _toDate != null) ...[
-//               const SizedBox(height: 8),
-//               Align(
-//                 alignment: Alignment.centerRight,
-//                 child: Container(
-//                   padding: const EdgeInsets.symmetric(
-//                     horizontal: 12,
-//                     vertical: 5,
-//                   ),
-//                   decoration: BoxDecoration(
-//                     color: _days == 0 && !_isHalfDay
-//                         ? _redLight
-//                         : _primaryLight,
-//                     borderRadius: BorderRadius.circular(20),
-//                   ),
-//                   child: Text(
-//                     _daysLabel,
-//                     style: TextStyle(
-//                       fontSize: 12,
-//                       fontWeight: FontWeight.w700,
-//                       color: _days == 0 && !_isHalfDay ? _red : _primary,
-//                     ),
-//                   ),
-//                 ),
-//               ),
-//             ],
-
-//             const SizedBox(height: 16),
-
-//             // ── Reason ──────────────────────────────────────────────────
-//             const _FieldLabel('Reason *'),
-//             const SizedBox(height: 8),
-//             TextField(
-//               controller: _reasonCtrl,
-//               maxLines: 3,
-//               decoration: InputDecoration(
-//                 hintText: 'Describe the reason for leave…',
-//                 hintStyle: const TextStyle(color: _textLight, fontSize: 13),
-//                 filled: true,
-//                 fillColor: _surface,
-//                 border: OutlineInputBorder(
-//                   borderRadius: BorderRadius.circular(12),
-//                   borderSide: const BorderSide(color: _border),
-//                 ),
-//                 enabledBorder: OutlineInputBorder(
-//                   borderRadius: BorderRadius.circular(12),
-//                   borderSide: const BorderSide(color: _border),
-//                 ),
-//                 focusedBorder: OutlineInputBorder(
-//                   borderRadius: BorderRadius.circular(12),
-//                   borderSide: const BorderSide(color: _primary, width: 1.5),
-//                 ),
-//               ),
-//             ),
-//             const SizedBox(height: 24),
-
-//             // ── Submit ──────────────────────────────────────────────────
-//             SizedBox(
-//               width: double.infinity,
-//               height: 52,
-//               child: FilledButton(
-//                 style: FilledButton.styleFrom(
-//                   backgroundColor: _primary,
-//                   shape: RoundedRectangleBorder(
-//                     borderRadius: BorderRadius.circular(14),
-//                   ),
-//                 ),
-//                 onPressed: _submitting ? null : _submit,
-//                 child: _submitting
-//                     ? const SizedBox(
-//                         width: 22,
-//                         height: 22,
-//                         child: CircularProgressIndicator(
-//                           strokeWidth: 2,
-//                           color: Colors.white,
-//                         ),
-//                       )
-//                     : const Text(
-//                         'SUBMIT REQUEST',
-//                         style: TextStyle(
-//                           fontWeight: FontWeight.w800,
-//                           letterSpacing: 0.6,
-//                           fontSize: 14,
-//                         ),
-//                       ),
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-
-//     // On desktop — wrap in centered constrained box
-//     if (isWide) {
-//       return Center(
-//         child: ConstrainedBox(
-//           constraints: const BoxConstraints(maxWidth: 560),
-//           child: Padding(
-//             padding: const EdgeInsets.all(32),
-//             child: sheetContent,
-//           ),
-//         ),
-//       );
-//     }
-//     return sheetContent;
-//   }
-// }
-
-// ══════════════════════════════════════════════════════════════════════════════
-// LeaveDetailsScreen
-// ══════════════════════════════════════════════════════════════════════════════
 class LeaveDetailsScreen extends StatefulWidget {
   final int leaveId;
   const LeaveDetailsScreen({super.key, required this.leaveId});
@@ -2585,20 +2126,6 @@ class _HolidayRow extends StatelessWidget {
 // Reusable micro-widgets
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _AppBarBtn extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
-  const _AppBarBtn({required this.icon, required this.tooltip, this.onTap});
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-    icon: Icon(icon, color: Colors.white, size: 22),
-    tooltip: tooltip,
-    onPressed: onTap,
-  );
-}
-
 class _StatItem extends StatelessWidget {
   final String value, label;
   final Color color;
@@ -2611,6 +2138,7 @@ class _StatItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Expanded(
     child: Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           value,
@@ -2620,14 +2148,14 @@ class _StatItem extends StatelessWidget {
             color: color,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 10,
-            color: color.withOpacity(0.75),
+          style: const TextStyle(
+            fontSize: 11,
+            color: _textMid,
             fontWeight: FontWeight.w500,
-            letterSpacing: 0.5,
+            letterSpacing: 0.3,
           ),
         ),
       ],
@@ -2638,7 +2166,7 @@ class _StatItem extends StatelessWidget {
 class _StatDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
-      Container(width: 1, height: 32, color: Colors.white.withOpacity(0.2));
+      Container(width: 1, height: 36, color: _border);
 }
 
 class _FieldLabel extends StatelessWidget {

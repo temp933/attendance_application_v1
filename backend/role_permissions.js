@@ -30,6 +30,10 @@ const ALL_MODULES = [
   { key: "face_approval", label: "Face Approval" },
   { key: "session_management", label: "Session Management" },
   { key: "report", label: "Reports" },
+  { key: "policy_management", label: "Policy Management" },
+  { key: "holiday_management", label: "Holiday Management" },
+  { key: "leave_management", label: "Leave Management" },
+  { key: "payroll", label: "Payroll" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -201,7 +205,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/my-permissions", requireAuth, async (req, res) => {
   const { tenantId } = req.user;
-  const roleId = parseInt(req.user.role_id, 10);
+  const roleId = parseInt(req.user.roleId ?? req.user.role_id, 10);
 
   try {
     const [rows] = await db.query(

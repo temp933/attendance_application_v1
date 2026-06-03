@@ -26,25 +26,21 @@ Future<void> onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
   // Ping every 10 minutes
-  Timer.periodic(const Duration(minutes: 10), (timer) async {
+  // Helper to push one location update
+  Future<void> pushLocation() async {
     final prefs = await SharedPreferences.getInstance();
     final attendanceId = prefs.getInt(_kAttendanceIdKey);
-
-    // No active session stored — stop
     if (attendanceId == null) {
-      timer.cancel();
       service.stopSelf();
       return;
     }
-
     try {
-      // Get current position
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       ).timeout(const Duration(seconds: 15));
 
-      // Call update-location endpoint
       final headers = Map<String, String>.from(ApiConfig.headers);
+      headers['Content-Type'] = 'application/json';
       final res = await http.patch(
         Uri.parse('${ApiConfig.baseUrl}/gps/update-location'),
         headers: headers,
@@ -56,19 +52,22 @@ Future<void> onStart(ServiceInstance service) async {
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body) as Map<String, dynamic>;
-        // Backend says session is no longer active → stop
         if (body['active'] == false) {
           await prefs.remove(_kAttendanceIdKey);
           await prefs.remove(_kCheckinTimeKey);
-          timer.cancel();
           service.stopSelf();
         }
       }
     } catch (_) {
-      // Network / GPS error — silently continue, retry next tick
+      // Network / GPS error — silently retry next tick
     }
-  });
+  }
 
+  // Fire immediately on start, then every 10 minutes
+  await pushLocation();
+  Timer.periodic(const Duration(minutes: 10), (_) async {
+    await pushLocation();
+  });
   // Listen for manual stop signal from UI (on checkout)
   service.on('stopService').listen((_) async {
     final prefs = await SharedPreferences.getInstance();
@@ -566,7 +565,6 @@ class _GpsAttendanceScreenState extends State<GpsAttendanceScreen>
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                       sliver: SliverList(
                         delegate: SliverChildListDelegate([
-                          _buildHeader(),
                           const SizedBox(height: 14),
                           if (_policy != null) ...[
                             _buildPolicyBanner(),
@@ -588,108 +586,6 @@ class _GpsAttendanceScreenState extends State<GpsAttendanceScreen>
                 ),
               ),
       ),
-    );
-  }
-
-  // ── Header ─────────────────────────────────────────────────────────────────
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        // Title (takes all remaining space)
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                DateFormat('EEE, d MMM yyyy').format(_now),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade500,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'GPS Attendance',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1A1A2E),
-                  letterSpacing: -0.3,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Clock
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.access_time_rounded,
-                size: 15,
-                color: Color(0xFF5C6BC0),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                DateFormat('hh:mm:ss a').format(_now),
-                style: const TextStyle(
-                  fontFeatures: [FontFeature.tabularFigures()],
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A2E),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(width: 10),
-
-        // History button
-        GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const AttendanceHistoryScreen(mode: 'gps'),
-              ),
-            );
-          },
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.history_rounded,
-              size: 20,
-              color: Color(0xFF5C6BC0),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -1338,10 +1234,6 @@ class _GpsAttendanceScreenState extends State<GpsAttendanceScreen>
   );
 
   Widget _buildHistoryRow(Map<String, dynamic> row) {
-    // In _buildHistoryRow, at the top:
-    debugPrint(
-      'History row work_date: ${row['work_date']}, checkin: ${row['checkin_time']}',
-    );
     final status = row['status'] as String? ?? 'completed';
     final isActive = status == 'active';
     final isLate = (row['is_late'] as num?)?.toInt() == 1;

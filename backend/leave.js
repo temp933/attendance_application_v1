@@ -1139,21 +1139,52 @@ const send = (res, status, ok, message, data = {}) =>
 
 async function calcDays(conn, tenantId, startDate, endDate, isHalfDay) {
   if (isHalfDay) return 0.5;
+
+  // 1. Fetch attendance policy for weekoff config
   const [[policy]] = await conn.execute(
-    `SELECT is_saturday_weekoff, is_sunday_weekoff FROM attendance_policy
-      WHERE tenant_id = ? LIMIT 1`,
+    `SELECT is_saturday_weekoff, is_sunday_weekoff
+     FROM attendance_policy WHERE tenant_id = ? LIMIT 1`,
     [tenantId],
   );
   const skipSat = policy?.is_saturday_weekoff === 1;
   const skipSun = policy?.is_sunday_weekoff === 1;
+
+  // 2. Fetch all holidays in the date range from holiday_master
+  const startStr = new Date(startDate).toISOString().split("T")[0];
+  const endStr = new Date(endDate).toISOString().split("T")[0];
+
+  const [holidayRows] = await conn.execute(
+    `SELECT holiday_date FROM holiday_master
+     WHERE tenant_id = ?
+       AND holiday_date BETWEEN ? AND ?`,
+    [tenantId, startStr, endStr],
+  );
+
+  // Build a Set of holiday date strings "YYYY-MM-DD" for O(1) lookup
+  const holidaySet = new Set(
+    holidayRows.map((h) => {
+      const d = new Date(h.holiday_date);
+      return d.toISOString().split("T")[0];
+    }),
+  );
+
+  // 3. Count only working days
   let count = 0;
   const cur = new Date(startDate);
   const end = new Date(endDate);
+
   while (cur <= end) {
     const day = cur.getDay();
-    if (!(skipSun && day === 0) && !(skipSat && day === 6)) count++;
+    const dateStr = cur.toISOString().split("T")[0];
+
+    const isWeekend = (skipSun && day === 0) || (skipSat && day === 6);
+    const isHoliday = holidaySet.has(dateStr);
+
+    if (!isWeekend && !isHoliday) count++;
+
     cur.setDate(cur.getDate() + 1);
   }
+
   return count;
 }
 

@@ -407,14 +407,7 @@ class _NormalAttendanceManagementScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      'Attendance Management',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: _textDark,
-                      ),
-                    ),
+                    
                     Text(
                       _isToday
                           ? 'Today — ${DateFormat('dd MMM yyyy').format(_selectedDate)}'
@@ -507,11 +500,7 @@ class _NormalAttendanceManagementScreenState
                   ),
                 ),
               ),
-              IconButton(
-                tooltip: 'Refresh',
-                icon: const Icon(Icons.refresh_rounded, color: _textMid),
-                onPressed: _loadData,
-              ),
+              
             ],
           ),
         ),

@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../providers/api_config.dart';
-import 'holiday_management_screen.dart';
-import 'leave_policy_management.dart';
 
 // ─── Design Tokens ───────────────────────────────────────────────────────────
 const _p900 = Color(0xFF1E3A8A);
@@ -363,166 +361,31 @@ class _Header extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(height: top),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 12, 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [_p700, _p900],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _p700.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
+          Row(
+            children: [
+              Expanded(
+                child: TabBar(
+                  controller: tab,
+                  indicatorColor: _p700,
+                  indicatorWeight: 2.5,
+                  indicatorSize: TabBarIndicatorSize.label,
+                  labelColor: _p700,
+                  unselectedLabelColor: _slate500,
+                  labelStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
                   ),
-                  child: const Icon(
-                    Icons.approval_rounded,
-                    color: _white,
-                    size: 20,
+                  unselectedLabelStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Leave Approval',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: _slate900,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      Text(
-                        'Review & manage leave requests',
-                        style: TextStyle(fontSize: 12, color: _slate500),
-                      ),
-                    ],
-                  ),
-                ),
-                Material(
-                  color: _slate100,
-                  borderRadius: BorderRadius.circular(10),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            const LeavePolicyManagementScreen(),
-                      ),
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.policy_rounded,
-                        color: _slate700,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ),
-                Material(
-                  color: _slate100,
-                  borderRadius: BorderRadius.circular(10),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const HolidayManagementScreen(),
-                      ),
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.calendar_month_rounded,
-                        color: _slate700,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(width: 8),
-
-                Material(
-                  color: _slate100,
-                  borderRadius: BorderRadius.circular(10),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: onRefresh,
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.refresh_rounded,
-                        color: _slate700,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          TabBar(
-            controller: tab,
-            indicatorColor: _p700,
-            indicatorWeight: 2.5,
-            indicatorSize: TabBarIndicatorSize.label,
-            labelColor: _p700,
-            unselectedLabelColor: _slate500,
-            labelStyle: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-            unselectedLabelStyle: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-            tabs: [
-              const Tab(text: 'Pending'),
-              Tab(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('History'),
-                    if (totalCount > 0) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _p700,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '$totalCount',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: _white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
+                  tabs: const [
+                    Tab(text: 'Pending'),
+                    Tab(text: 'History'),
                   ],
                 ),
               ),
+              
             ],
           ),
           const Divider(height: 1, thickness: 1, color: _slate100),

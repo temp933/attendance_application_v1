@@ -427,34 +427,13 @@ class _GpsAttendanceManagementScreenState
           padding: const EdgeInsets.fromLTRB(20, 0, 8, 0),
           child: Row(
             children: [
-              // GPS icon accent
-              Container(
-                width: 32,
-                height: 32,
-                margin: const EdgeInsets.only(right: 10),
-                decoration: BoxDecoration(
-                  color: _primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.gps_fixed_rounded,
-                  size: 17,
-                  color: _primary,
-                ),
-              ),
+              
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      'GPS Attendance',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: _textDark,
-                      ),
-                    ),
+                    
                     Text(
                       _isToday
                           ? 'Today — ${DateFormat('dd MMM yyyy').format(_selectedDate)}'
@@ -545,11 +524,7 @@ class _GpsAttendanceManagementScreenState
                   ),
                 ),
               ),
-              IconButton(
-                tooltip: 'Refresh',
-                icon: const Icon(Icons.refresh_rounded, color: _textMid),
-                onPressed: _loadData,
-              ),
+               
             ],
           ),
         ),

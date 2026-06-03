@@ -366,8 +366,7 @@ class _AdminSessionManagementScreenState
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: _bg,
-    appBar: _buildAppBar(),
+    backgroundColor: _bg, 
     body: Stack(
       children: [
         _buildBody(),
@@ -382,33 +381,7 @@ class _AdminSessionManagementScreenState
     ),
   );
 
-  PreferredSizeWidget _buildAppBar() => AppBar(
-    backgroundColor: Colors.white,
-    foregroundColor: _textDark,
-    elevation: 0,
-    centerTitle: false,
-    title: const Text(
-      'Session Management',
-      style: TextStyle(
-        fontSize: 17,
-        fontWeight: FontWeight.w700,
-        color: _textDark,
-      ),
-    ),
-    bottom: PreferredSize(
-      preferredSize: const Size.fromHeight(1),
-      child: Container(height: 1, color: _border),
-    ),
-    actions: [
-      IconButton(
-        tooltip: 'Refresh',
-        icon: const Icon(Icons.refresh_rounded),
-        onPressed: _loading ? null : _load,
-      ),
-      const SizedBox(width: 8),
-    ],
-  );
-
+   
   Widget _buildBody() {
     if (_loading) return _buildSkeleton();
     if (_error != null) return _buildError();

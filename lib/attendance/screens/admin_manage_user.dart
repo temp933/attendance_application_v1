@@ -596,8 +596,20 @@ class ManageUserScreenState extends State<ManageUserScreen>
     _tabController = TabController(length: 2, vsync: this);
     // ── Hide FAB when on Requests tab ─────────────────────────────────────
     _tabController.addListener(() {
-      if (mounted) {
-        setState(() => _showFab = _tabController.index == 0);
+      if (!mounted) return;
+      // Only act when animation is complete and index actually changed
+      if (_tabController.indexIsChanging) return;
+      setState(() => _showFab = _tabController.index == 0);
+    });
+    // Refresh data when tab animation settles
+    _tabController.animation?.addStatusListener((status) {
+      if (!mounted) return;
+      if (status == AnimationStatus.completed) {
+        if (_tabController.index == 0) {
+          _fetchMaster();
+        } else {
+          _fetchRequests();
+        }
       }
     });
     _fetchAll();
@@ -705,7 +717,7 @@ class ManageUserScreenState extends State<ManageUserScreen>
         ),
       ),
     );
-    if (result == true && mounted) _fetchMaster();
+    if (mounted) _fetchMaster();
   }
 
   Future<void> _onRequestTap(Employee e) async {
@@ -724,7 +736,7 @@ class ManageUserScreenState extends State<ManageUserScreen>
         ),
       ),
     );
-    if (result == true && mounted) _fetchRequests();
+    if (mounted) _fetchRequests();
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -758,45 +770,63 @@ class ManageUserScreenState extends State<ManageUserScreen>
                     ),
                     tabs: [
                       Tab(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.people_rounded, size: 16),
-                            const SizedBox(width: 6),
-                            const Text('Master Employees'),
-                            if (_masterEmployees.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              _tabCount(_masterEmployees.length, _primary),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            if (_tabController.index == 0) _fetchMaster();
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.people_rounded, size: 16),
+                              const SizedBox(width: 5),
+                              const Flexible(
+                                child: Text(
+                                  'Employees',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (_masterEmployees.isNotEmpty) ...[
+                                const SizedBox(width: 5),
+                                _tabCount(_masterEmployees.length, _primary),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
                       Tab(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.pending_actions_rounded, size: 16),
-                            const SizedBox(width: 6),
-                            const Text('Requests'),
-                            if (_requestEmployees.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              _tabCount(_requestEmployees.length, _amber),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            if (_tabController.index == 1) _fetchRequests();
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.pending_actions_rounded,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 5),
+                              const Flexible(
+                                child: Text(
+                                  'Requests',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (_requestEmployees.isNotEmpty) ...[
+                                const SizedBox(width: 5),
+                                _tabCount(_requestEmployees.length, _amber),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
                 // ── Refresh button ────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: IconButton(
-                    icon: const Icon(Icons.refresh_rounded, color: _primary),
-                    tooltip: 'Refresh',
-                    onPressed: _fetchAll,
-                  ),
-                ),
+                
               ],
             ),
           ),
@@ -2317,35 +2347,47 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: _border),
     ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
+    child: Wrap(
+      spacing: 12,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        const Icon(Icons.compare_arrows_rounded, size: 16, color: _textMid),
-        const SizedBox(width: 8),
-        const Text(
-          'Comparing changes:',
-          style: TextStyle(
-            fontSize: 12,
-            color: _textMid,
-            fontWeight: FontWeight.w500,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.compare_arrows_rounded, size: 16, color: _textMid),
+            SizedBox(width: 6),
+            Text(
+              'Changes:',
+              style: TextStyle(
+                fontSize: 12,
+                color: _textMid,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        _legendDot(_beforeLabel, 'Before (Master)'),
-        const SizedBox(width: 12),
-        _legendDot(_afterLabel, 'After (Request)'),
-        const SizedBox(width: 12),
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: _changedBg,
-            borderRadius: BorderRadius.circular(3),
-            border: Border.all(color: _changedBorder),
-          ),
+        _legendDot(_beforeLabel, 'Before'),
+        _legendDot(_afterLabel, 'After'),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: _changedBg,
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: _changedBorder),
+              ),
+            ),
+            const SizedBox(width: 5),
+            const Text(
+              'Changed',
+              style: TextStyle(fontSize: 11, color: _textMid),
+            ),
+          ],
         ),
-        const SizedBox(width: 5),
-        const Text('Changed', style: TextStyle(fontSize: 11, color: _textMid)),
       ],
     ),
   );

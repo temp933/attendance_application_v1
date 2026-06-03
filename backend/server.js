@@ -792,6 +792,10 @@ app.use("/api/comp-off", compOffRoutes);
 const reportRouter = require("./Attendance/attendance_report_routes");
 app.use("/api", authMiddleware, reportRouter);
 
+// leave reports
+const leavereportRouter = require("./leave_report");
+app.use("/api/report", leavereportRouter);
+
 // ── Attendance Sessions
 const attendanceSessionRouter = require("./Attendance/attendance_session_router");
 app.use("/api/attendance_sessions", authMiddleware, attendanceSessionRouter);

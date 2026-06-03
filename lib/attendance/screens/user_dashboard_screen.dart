@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../providers/api_config.dart';
 import '../providers/attendance_provider.dart';
-import '../providers/api_client.dart';
 import '../services/auth_service.dart';
 import '../services/attendance_state.dart';
 import '../services/api_service.dart';
@@ -14,7 +13,6 @@ import 'login_screen.dart';
 import 'notification.dart';
 
 // ── Admin screens ─────────────────────────────────────────────────────────────
-import 'admin_home_screen.dart';
 import 'emp_profile_screen.dart';
 import 'admin_hr_leave_approval.dart';
 import 'admin_manage_user.dart';
@@ -25,7 +23,9 @@ import 'dept_role_desg_screen.dart';
 import './Attendance screens/normal_attendance_management_screen.dart';
 import './Attendance screens/gps_attendance_management_screen.dart';
 import './Attendance screens/face_gps_attendance_management_screen.dart';
-
+import './policy_management_screen.dart';
+import './report_management_screen.dart';
+import './holiday_management_screen.dart';
 // ── Employee screens ──────────────────────────────────────────────────────────
 import 'emp_home_screen.dart';
 import 'emp_leave_screen.dart';
@@ -325,21 +325,21 @@ final List<_ModuleDef> _allModules = [
         }) => LeaveApprovalScreen(),
   ),
 
-  // _ModuleDef(
-  //   key: 'employee_profile',
-  //   title: 'Employee Profile',
-  //   icon: Icons.badge_outlined,
-  //   selectedIcon: Icons.badge,
-  //   navLabel: 'Emp Profile',
-  //   builder:
-  //       ({
-  //         required employeeId,
-  //         required roleId,
-  //         required tenantId,
-  //         required authToken,
-  //         required canEdit,
-  //       }) => EmployeeProfileScreen(employeeId: employeeId),
-  // ),
+  _ModuleDef(
+    key: 'holiday_management',
+    title: 'Holiday Management',
+    icon: Icons.calendar_today_outlined,
+    selectedIcon: Icons.calendar_today,
+    navLabel: 'Holidays',
+    builder:
+        ({
+          required employeeId,
+          required roleId,
+          required tenantId,
+          required authToken,
+          required canEdit,
+        }) => HolidayManagementScreen(),
+  ),
 
   _ModuleDef(
     key: 'session_management',
@@ -369,7 +369,22 @@ final List<_ModuleDef> _allModules = [
           required tenantId,
           required authToken,
           required canEdit,
-        }) => const Center(child: Text('Reports — Coming Soon')),
+        }) => ReportManagementScreen(authToken: authToken, tenantId: tenantId),
+  ),
+  _ModuleDef(
+    key: 'policy_management',
+    title: 'Policy Management',
+    icon: Icons.policy_outlined,
+    selectedIcon: Icons.policy,
+    navLabel: 'Policy',
+    builder:
+        ({
+          required employeeId,
+          required roleId,
+          required tenantId,
+          required authToken,
+          required canEdit,
+        }) => PolicyManagementScreen(authToken: authToken, tenantId: tenantId),
   ),
 ];
 
@@ -416,7 +431,7 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
 
   late final List<_ModuleDef> _visibleModules;
   late final Map<String, bool> _canEditMap;
-  late final List<Widget> _pages;
+  late List<Widget> _pages;
   late final String _authToken;
 
   bool get _isAdmin => widget.userType == 'org_admin';
@@ -528,6 +543,25 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
           ),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+              onPressed: () {
+                // Force rebuild of current page by bumping a key
+                setState(() {
+                  _pages[_selectedIndex] = _visibleModules[_selectedIndex]
+                      .builder(
+                        employeeId: widget.employeeId,
+                        roleId: widget.roleId,
+                        tenantId: widget.tenantId,
+                        authToken: _authToken,
+                        canEdit:
+                            _canEditMap[_visibleModules[_selectedIndex].key] ??
+                            false,
+                      );
+                });
+              },
+            ),
             if (!kIsWeb &&
                 (defaultTargetPlatform == TargetPlatform.android ||
                     defaultTargetPlatform == TargetPlatform.iOS))
@@ -556,7 +590,12 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                   Expanded(
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 250),
-                      child: _pages[_selectedIndex],
+                      child: KeyedSubtree(
+                        key: ValueKey(
+                          '${_selectedIndex}_${_pages[_selectedIndex].hashCode}',
+                        ),
+                        child: _pages[_selectedIndex],
+                      ),
                     ),
                   ),
                 ],

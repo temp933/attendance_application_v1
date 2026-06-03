@@ -173,7 +173,6 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen>
     return Scaffold(
       backgroundColor: _surface,
       extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(),
       body: isLoading
           ? const Center(child: CircularProgressIndicator(color: _primary))
           : errorMessage != null
@@ -348,23 +347,7 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen>
     _Row('ESIC Number', _fmt(employeeData!['esic_number'])),
   ];
 
-  PreferredSizeWidget _buildAppBar() => AppBar(
-    // backgroundColor: _primary,
-    foregroundColor: const Color.fromARGB(255, 5, 5, 5),
-    elevation: 0,
-    // title: const Text(
-    //   'Employee Profile',
-    //   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
-    // ),
-    actions: [
-      IconButton(
-        tooltip: 'Refresh',
-        icon: const Icon(Icons.refresh_rounded),
-        onPressed: _fetchAll,
-      ),
-      const SizedBox(width: 4),
-    ],
-  );
+ 
 
   Widget _buildError(Responsive r) => Center(
     child: Padding(

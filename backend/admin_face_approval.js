@@ -8,7 +8,7 @@ const FormData = require("form-data");
 const fetch = require("node-fetch");
 
 const FACE_SERVICE_URL =
-  process.env.FACE_SERVICE_URL || "http://localhost:8000";
+  process.env.FACE_SERVICE_URL || "http://192.168.29.103:8000";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: call Python face service to get embedding from image bytes
@@ -90,7 +90,7 @@ function nullableDate(value) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: apply education staging rows → education_details
 // ─────────────────────────────────────────────────────────────────────────────
-async function applyEducationChanges(conn, request_id, empId) {
+async function applyEducationChanges(conn, request_id, empId, tenantId) {
   const [eduRows] = await conn.query(
     `SELECT * FROM education_pending_request
       WHERE request_id = ?
@@ -118,10 +118,11 @@ async function applyEducationChanges(conn, request_id, empId) {
       case "ADD":
         await conn.query(
           `INSERT INTO education_details
-              (emp_id, education_level, stream, score,
+               (tenant_id, emp_id, education_level, stream, score,
                year_of_passout, university, college_name)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [
+            tenantId,
             empId,
             edu.education_level,
             edu.stream,
@@ -140,10 +141,11 @@ async function applyEducationChanges(conn, request_id, empId) {
           );
         await conn.query(
           `UPDATE education_details
-              SET education_level = ?, stream = ?, score = ?,
+              SET tenant_id = ?,education_level = ?, stream = ?, score = ?,
                   year_of_passout = ?, university = ?, college_name = ?
             WHERE edu_id = ? AND emp_id = ?`,
           [
+            tenantId,
             edu.education_level,
             edu.stream,
             edu.score,
@@ -558,7 +560,7 @@ router.post(
           ],
         );
 
-        await applyEducationChanges(conn, request_id, newEmpId);
+        await applyEducationChanges(conn, request_id, newEmpId, tenantId);
 
         await conn.query(
           "UPDATE employee_pending_request SET admin_approve = 'APPROVED' WHERE request_id = ?",
@@ -732,7 +734,7 @@ router.post(
         }
       }
 
-      await applyEducationChanges(conn, request_id, empId);
+      await applyEducationChanges(conn, request_id, empId, tenantId);
 
       await conn.query(
         "UPDATE employee_pending_request SET admin_approve = 'APPROVED' WHERE request_id = ?",

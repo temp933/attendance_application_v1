@@ -67,7 +67,8 @@ class LeavePolicy {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 class LeavePolicyManagementScreen extends StatefulWidget {
-  const LeavePolicyManagementScreen({super.key});
+  final bool hideAppBar;
+  const LeavePolicyManagementScreen({super.key, this.hideAppBar = false});
 
   @override
   State<LeavePolicyManagementScreen> createState() =>
@@ -240,63 +241,68 @@ class _LeavePolicyManagementScreenState
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             // ── App Bar ──
-            SliverToBoxAdapter(
-              child: Container(
-                color: _primary,
-                padding: EdgeInsets.fromLTRB(
-                  8,
-                  MediaQuery.of(context).padding.top + 8,
-                  8,
-                  12,
-                ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white,
-                        size: 18,
+            if (!widget.hideAppBar)
+              SliverToBoxAdapter(
+                child: Container(
+                  color: _primary,
+                  padding: EdgeInsets.fromLTRB(
+                    8,
+                    MediaQuery.of(context).padding.top + 8,
+                    8,
+                    12,
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(),
                       ),
-                      onPressed: () => Navigator.pop(context),
-                      padding: const EdgeInsets.all(8),
-                      constraints: const BoxConstraints(),
-                    ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      'Leave Policies',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                      const SizedBox(width: 4),
+                      const Text(
+                        'Leave Policies',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: _listLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
+                      const Spacer(),
+                      IconButton(
+                        icon: _listLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.refresh_rounded,
                                 color: Colors.white,
-                                strokeWidth: 2,
+                                size: 20,
                               ),
-                            )
-                          : const Icon(
-                              Icons.refresh_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                      padding: const EdgeInsets.all(8),
-                      constraints: const BoxConstraints(),
-                      onPressed: _listLoading ? null : _fetchPolicies,
-                    ),
-                  ],
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(),
+                        onPressed: _listLoading ? null : _fetchPolicies,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
             // ── Summary bar ──
-            SliverToBoxAdapter(child: _buildSummaryBar()),
+            // ── Summary bar ──
+            if (!widget.hideAppBar)
+              SliverToBoxAdapter(child: _buildSummaryBar()),
+            if (widget.hideAppBar)
+              SliverToBoxAdapter(child: _buildSummaryBarLight()),
 
             // ── Section header ──
             SliverToBoxAdapter(
@@ -437,6 +443,43 @@ class _LeavePolicyManagementScreenState
 
   Widget _vDiv() =>
       Container(width: 1, height: 28, color: Colors.white.withOpacity(0.2));
+
+  Widget _vDiv2() =>
+      Container(width: 1, height: 28, color: const Color(0xFFE2E8F0));
+
+  Widget _buildSummaryBarLight() {
+    final paid = _policies.where((p) => p.isPaid).length;
+    final unpaid = _policies.where((p) => !p.isPaid).length;
+    final withApproval = _policies.where((p) => p.requiresApproval).length;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          _statItem('${_policies.length}', 'Total', _primary),
+          _vDiv2(),
+          _statItem('$paid', 'Paid', _accent),
+          _vDiv2(),
+          _statItem('$unpaid', 'Unpaid', _orange),
+          _vDiv2(),
+          _statItem('$withApproval', 'Approval', _textMid),
+        ],
+      ),
+    );
+  }
 
   Widget _buildEmptyState() => Center(
     child: Padding(

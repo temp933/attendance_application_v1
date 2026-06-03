@@ -87,7 +87,7 @@ async function autoReject(conn, request_id, reason, errorMsg) {
 // ─────────────────────────────────────────────────────────────────────────────
 // APPLY EDUCATION CHANGES
 // ─────────────────────────────────────────────────────────────────────────────
-async function applyEducationChanges(conn, request_id, empId) {
+async function applyEducationChanges(conn, request_id, empId, tenantId) {
   const [eduRows] = await conn.query(
     `
       SELECT *
@@ -113,6 +113,7 @@ async function applyEducationChanges(conn, request_id, empId) {
           `
             INSERT INTO education_details
             (
+              tenant_id,
               emp_id,
               education_level,
               stream,
@@ -121,9 +122,10 @@ async function applyEducationChanges(conn, request_id, empId) {
               university,
               college_name
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           `,
           [
+            tenantId,
             empId,
             edu.education_level,
             edu.stream,
@@ -140,6 +142,7 @@ async function applyEducationChanges(conn, request_id, empId) {
           `
             UPDATE education_details
             SET
+              tenant_id = ?,
               education_level = ?,
               stream = ?,
               score = ?,
@@ -150,6 +153,7 @@ async function applyEducationChanges(conn, request_id, empId) {
               AND emp_id = ?
           `,
           [
+            tenantId,
             edu.education_level,
             edu.stream,
             edu.score,
@@ -605,7 +609,7 @@ router.post(
           ],
         );
 
-        await applyEducationChanges(conn, request_id, newEmpId);
+        await applyEducationChanges(conn, request_id, newEmpId, tenantId);
 
         await conn.query(
           `
@@ -711,7 +715,7 @@ router.post(
         );
       }
 
-      await applyEducationChanges(conn, request_id, empId);
+      await applyEducationChanges(conn, request_id, empId, tenantId);
 
       await conn.query(
         `

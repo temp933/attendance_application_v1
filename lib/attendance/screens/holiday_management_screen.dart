@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/api_client.dart';
 import '../providers/api_config.dart';
+
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const Color _primary = Color(0xFF1A56DB);
 const Color _accent = Color(0xFF0E9F6E);
@@ -145,7 +146,7 @@ class HolidayService {
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 class HolidayManagementScreen extends StatefulWidget {
-  const HolidayManagementScreen({super.key,});
+  const HolidayManagementScreen({super.key});
 
   @override
   State<HolidayManagementScreen> createState() =>
@@ -308,7 +309,7 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
   );
 
   PreferredSizeWidget _buildAppBar() => PreferredSize(
-    preferredSize: const Size.fromHeight(118),
+    preferredSize: const Size.fromHeight(56),
     child: Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -324,90 +325,16 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(
-                      Icons.arrow_back_rounded,
-                      color: _textDark,
-                      size: 22,
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: _primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.event_note_rounded,
-                      color: _primary,
-                      size: 19,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Holiday Calendar',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            color: _textDark,
-                          ),
-                        ),
-                        Text(
-                          'Manage public & office holidays',
-                          style: TextStyle(fontSize: 11, color: _textMid),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Tooltip(
-                    message: 'Import default holidays from server',
-                    child: IconButton(
-                      onPressed: _showBulkImportDialog,
-                      icon: Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: _purple.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: _purple.withValues(alpha: 0.25),
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.upload_rounded,
-                          color: _purple,
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh_rounded, color: _textDark),
-                    onPressed: _loadHolidays,
-                  ),
-                ],
-              ),
+            Row(
+              children: [
+                Expanded(child: SizedBox(height: 38, child: _buildYearBar())),
+              ],
             ),
-            SizedBox(height: 36, child: _buildYearBar()),
           ],
         ),
       ),
     ),
   );
-
   Widget _buildYearBar() {
     final years = List.generate(5, (i) => DateTime.now().year - 1 + i);
     return ListView.separated(
@@ -1229,7 +1156,10 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
               onPressed: () async {
                 Navigator.pop(ctx);
                 try {
-                  final res = await _svc.bulkImport(importYear, int.tryParse(ApiConfig.loginId) ?? 0);
+                  final res = await _svc.bulkImport(
+                    importYear,
+                    int.tryParse(ApiConfig.loginId) ?? 0,
+                  );
                   _snack(
                     res['message'] ??
                         (res['success'] == true
