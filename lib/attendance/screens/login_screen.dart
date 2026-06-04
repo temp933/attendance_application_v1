@@ -88,14 +88,7 @@ class _LoginScreenState extends State<LoginScreen>
         tenantId: tenantId,
       );
     } 
-    // else if (userType == 'org_admin' || roleId == 1) {
-    //   screen = AdminDashboardScreen(
-    //     loginId: loginId,
-    //     employeeId: empId.toString(),
-    //     roleId: roleId.toString(),
-    //     tenantId: tenantId,
-    //   );
-    // } 
+    
     else {
       // HR, Employee, TL, Manager → permission-filtered dashboard
       screen = UserDashboardScreen(

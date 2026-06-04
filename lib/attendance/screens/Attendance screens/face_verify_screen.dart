@@ -92,9 +92,18 @@ class _FaceVerifyScreenState extends State<FaceVerifyScreen>
   }
 
   // ── Capture + verify ────────────────────────────────────────────────────────
+  // Add this flag at the top of _FaceVerifyScreenState
+  bool _captureInProgress = false;
 
   Future<void> _capture() async {
-    if (_controller == null || !_cameraReady || _verifying) return;
+    // ✅ Guard — prevent multiple simultaneous calls
+    if (_controller == null ||
+        !_cameraReady ||
+        _verifying ||
+        _captureInProgress)
+      return;
+
+    _captureInProgress = true; // ← lock
     setState(() {
       _verifying = true;
       _error = null;
@@ -104,17 +113,15 @@ class _FaceVerifyScreenState extends State<FaceVerifyScreen>
       final xFile = await _controller!.takePicture();
       final bytes = await File(xFile.path).readAsBytes();
 
-      // ✅ Point directly to Python face service on port 8000
       final request =
           http.MultipartRequest(
               'POST',
-              Uri.parse(ApiConfig.face_url + '/compare'), // ← port 8000
+              Uri.parse(ApiConfig.face_url + '/compare'),
             )
-            ..fields['emp_id'] = widget.employeeId
-                .toString() // ← Python expects emp_id
+            ..fields['emp_id'] = widget.employeeId.toString()
             ..files.add(
               http.MultipartFile.fromBytes(
-                'file', // ← Python expects field name 'file'
+                'file',
                 bytes,
                 filename: 'selfie.jpg',
                 contentType: MediaType('image', 'jpeg'),
@@ -153,6 +160,8 @@ class _FaceVerifyScreenState extends State<FaceVerifyScreen>
           _error = 'Verification failed: $e';
         });
       }
+    } finally {
+      _captureInProgress = false; // ← always unlock
     }
   }
 

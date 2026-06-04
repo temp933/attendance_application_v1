@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../providers/api_config.dart';
 import '../../services/normal_attendance_service.dart';
 import 'att_history.dart';
 
@@ -178,8 +177,16 @@ class _NormalAttendanceScreenState extends State<NormalAttendanceScreen>
   Future<void> _fetchHistory() async {
     setState(() => _historyLoading = true);
     try {
-      final list = await AttendanceService.getHistory(limit: 7);
-      if (mounted) setState(() => _history = list);
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final list = await AttendanceService.getHistory(limit: 10);
+      if (mounted) {
+        setState(() {
+          _history = list.where((r) {
+            final d = r['work_date'] as String? ?? '';
+            return d.startsWith(today);
+          }).toList();
+        });
+      }
     } catch (_) {}
     if (mounted) setState(() => _historyLoading = false);
   }
@@ -881,15 +888,43 @@ class _NormalAttendanceScreenState extends State<NormalAttendanceScreen>
                 ),
               ],
             ),
-            InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: _fetchHistory,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  Icons.refresh_rounded,
-                  size: 18,
-                  color: Colors.indigo.shade300,
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const AttendanceHistoryScreen(mode: 'normal'),
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.indigo.shade100),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.history_rounded,
+                      size: 13,
+                      color: Colors.indigo.shade400,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'View All',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.indigo.shade400,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

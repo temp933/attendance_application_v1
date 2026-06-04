@@ -61,6 +61,9 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
       final year = DateTime.now().year;
 
       final modeParam = widget.mode.isNotEmpty ? '&mode=${widget.mode}' : '';
+      debugPrint(
+        '>>> AttendanceHistory mode: "${widget.mode}" | modeParam: "$modeParam"',
+      );
 
       final results = await Future.wait([
         ApiClient.get('/attendance/history?limit=100&offset=0$modeParam'),
@@ -209,10 +212,11 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
       final segs = part.split(':');
       int h = int.parse(segs[0]);
       final m = segs[1];
+      final s = segs.length > 2 ? segs[2] : '00';
       final suffix = h >= 12 ? 'PM' : 'AM';
       h = h % 12;
       if (h == 0) h = 12;
-      return '${h.toString().padLeft(2, '0')}:$m $suffix';
+      return '${h.toString().padLeft(2, '0')}:$m:$s $suffix';
     } catch (_) {
       return '--';
     }
@@ -224,9 +228,11 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
       final parts = raw.split(':').map(int.parse).toList();
       final h = parts[0];
       final m = parts.length > 1 ? parts[1] : 0;
-      if (h == 0 && m == 0) return '--';
-      if (h == 0) return '${m}m';
-      return '${h}h ${m.toString().padLeft(2, '0')}m';
+      final s = parts.length > 2 ? parts[2] : 0;
+      if (h == 0 && m == 0 && s == 0) return '--';
+      if (h == 0 && m == 0) return '${s}s';
+      if (h == 0) return '${m}m ${s.toString().padLeft(2, '0')}s';
+      return '${h}h ${m.toString().padLeft(2, '0')}m ${s.toString().padLeft(2, '0')}s';
     } catch (_) {
       return '--';
     }

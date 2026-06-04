@@ -261,6 +261,7 @@ LIMIT 1`,
       loginId: user.login_id,
       empId: user.emp_id ?? 0,
       roleId: user.role_id,
+      roleName: user.role_name ?? "",
       userType,
       username: user.username,
       sessionToken: rawToken, // client holds raw token
@@ -328,20 +329,30 @@ router.post("/validate-session", async (req, res) => {
         valid: false,
         expired: true,
         force_logout: false,
+        userType: (() => {
+          const rn = (user.role_name || "").toLowerCase().trim();
+          if (rn === "admin") return "org_admin";
+          if (rn === "hr") return "org_hr";
+          if (rn === "team lead" || rn === "tl") return "team_lead";
+          if (rn === "manager") return "manager";
+          return "employee";
+        })(),
+        roleName: user.role_name ?? "",
       });
     }
 
     const hashedToken = hashToken(sessionToken);
 
     const [rows] = await db.query(
-      `
-      SELECT
-        session_token,
-        device_logged_in AS is_logged_in,
-        force_logout
-      FROM login_master
-      WHERE login_id = ?
-      `,
+      `SELECT
+     lm.session_token,
+     lm.device_logged_in AS is_logged_in,
+     lm.force_logout,
+     rm.role_name          -- ✅ ADD THIS
+   FROM login_master lm
+   LEFT JOIN role_master rm 
+     ON rm.role_id = lm.role_id AND rm.tenant_id = lm.tenant_id
+   WHERE lm.login_id = ?`,
       [login_id],
     );
 
@@ -389,6 +400,15 @@ router.post("/validate-session", async (req, res) => {
       valid: true,
       expired: false,
       force_logout: false,
+      userType: (() => {
+        const rn = (user.role_name || "").toLowerCase().trim();
+        if (rn === "admin") return "org_admin";
+        if (rn === "hr") return "org_hr";
+        if (rn === "team lead" || rn === "tl") return "team_lead";
+        if (rn === "manager") return "manager";
+        return "employee";
+      })(),
+      roleName: user.role_name ?? "",
     });
   } catch (err) {
     console.error("[/auth/validate-session]", err);
@@ -400,27 +420,52 @@ router.post("/validate-session", async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+/// ─────────────────────────────────────────────────────────────────────────────
 // POST /auth/logout
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/logout", async (req, res) => {
   const { login_id, sessionToken } = req.body;
 
-  // FIX #5: Actually delete app admin session from memory on logout
   if (login_id == 0 || login_id == "0") {
-    if (sessionToken) {
-      appAdminSessions.delete(sessionToken);
-    }
+    if (sessionToken) appAdminSessions.delete(sessionToken);
     return res.json({ success: true });
   }
 
   if (!login_id) return res.json({ success: true });
 
   try {
-    await db.query(
-      `UPDATE login_master SET session_token = NULL, device_logged_in = 0, session_device = NULL WHERE login_id = ?`,
+    // ── Resolve emp_id from login_id ────────────────────────────────────────
+    const [[loginRow]] = await db.query(
+      `SELECT emp_id FROM login_master WHERE login_id = ? LIMIT 1`,
       [login_id],
     );
+
+    if (loginRow?.emp_id) {
+      // ── Auto-close any open GPS/GPS_FACE attendance on logout ─────────────
+      await db.query(
+        `UPDATE employee_attendance
+         SET
+           checkout_time      = NOW(),
+           status             = 'completed',
+           force_closed       = 1,
+           force_close_reason = 'Auto-closed on logout',
+           force_closed_by    = ?
+         WHERE
+           employee_id        = ?
+           AND status         = 'active'
+           AND attendance_mode IN ('gps', 'gps_face')`,
+        [loginRow.emp_id, loginRow.emp_id],
+      );
+    }
+
+    // ── Invalidate session ──────────────────────────────────────────────────
+    await db.query(
+      `UPDATE login_master
+       SET session_token = NULL, device_logged_in = 0, session_device = NULL
+       WHERE login_id = ?`,
+      [login_id],
+    );
+
     return res.json({ success: true });
   } catch (err) {
     console.error("[/auth/logout]", err);
@@ -728,6 +773,7 @@ LIMIT 1`,
       loginId: user.login_id,
       empId: user.emp_id ?? 0,
       roleId: user.role_id,
+      roleName: user.role_name ?? "",
       userType,
       username: user.username,
       sessionToken: rawToken, // client holds raw token

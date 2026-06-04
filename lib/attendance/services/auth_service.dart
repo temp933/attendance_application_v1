@@ -86,11 +86,13 @@ class AuthService {
     required String username,
     required String sessionToken,
     required String tenantId,
+    String roleName = '',
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('loginId', loginId);
     await prefs.setString('empId', empId);
     await prefs.setString('role', role);
+    await prefs.setString('roleName', roleName);
     await prefs.setString('userType', userType);
     await prefs.setString('username', username);
     await prefs.setString('session_token', sessionToken);
@@ -122,6 +124,7 @@ class AuthService {
       'loginId': loginId,
       'empId': prefs.getString(_kEmpId) ?? '0',
       'role': prefs.getString(_kRole) ?? '',
+      'roleName': prefs.getString('roleName') ?? '',
       'userType': prefs.getString(_kUserType) ?? 'employee',
       'username': prefs.getString(_kUsername) ?? '',
       'sessionToken': prefs.getString(_kToken) ?? '', // ← was 'session_token'
@@ -143,9 +146,6 @@ class AuthService {
     final isAppAdmin = (session['isAppAdmin'] ?? 'false') == 'true';
     if (isAppAdmin) return true;
 
-    final deviceId = await getDeviceId();
-
-    // ✅ Use correct key 'sessionToken' not 'session_token'
     final token = session['sessionToken'] ?? '';
     if (token.isEmpty) return false;
 
@@ -156,9 +156,8 @@ class AuthService {
             headers: ApiConfig.headers,
             body: jsonEncode({
               'login_id': session['loginId'],
-              'session_token':
-                  token, // server expects this key name, value from 'sessionToken'
-              'device_id': deviceId,
+              'session_token': token,
+              'device_id': await getDeviceId(),
             }),
           )
           .timeout(const Duration(seconds: 8));
@@ -170,11 +169,26 @@ class AuthService {
         return false;
       }
 
-      return data['valid'] == true;
+      if (data['valid'] == true) {
+        // ✅ Refresh userType and roleName from server response
+        // This fixes stale admin session being used by employee
+        if (data['userType'] != null || data['roleName'] != null) {
+          final prefs = await SharedPreferences.getInstance();
+          if (data['userType'] != null) {
+            await prefs.setString('userType', data['userType']);
+          }
+          if (data['roleName'] != null) {
+            await prefs.setString('roleName', data['roleName']);
+          }
+        }
+        return true;
+      }
+
+      return false;
     } on SocketException {
-      return true;
+      return true; // offline — trust cached session
     } catch (e) {
-      debugPrint('[validateSession] error (keeping session): $e');
+      debugPrint('[validateSession] error: $e');
       return true;
     }
   }
@@ -218,6 +232,7 @@ class AuthService {
         loginId: data['loginId'].toString(),
         empId: (data['empId'] ?? 0).toString(),
         role: data['roleId'].toString(),
+        roleName: data['roleName']?.toString() ?? '',
         userType: data['userType'] ?? 'employee',
         username: data['username']?.toString() ?? username,
         sessionToken: data['sessionToken'],
@@ -288,6 +303,7 @@ class AuthService {
         loginId: data['loginId'].toString(),
         empId: (data['empId'] ?? 0).toString(),
         role: data['roleId'].toString(),
+        roleName: data['roleName']?.toString() ?? '',
         userType: data['userType'] ?? 'employee',
         username: data['username']?.toString() ?? username,
         sessionToken: data['sessionToken'],

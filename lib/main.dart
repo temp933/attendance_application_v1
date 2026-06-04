@@ -243,10 +243,10 @@ import 'attendance/services/location_services.dart';
 import 'attendance/services/auth_service.dart';
 import 'attendance/services/background_service.dart';
 import 'attendance/services/notify.dart';
-import 'attendance/services/permissions_service.dart';
 import 'attendance/App Admin/app_admin_dashboard_screen.dart';
 import 'attendance/services/app_admin_provider.dart';
 import 'attendance/providers/api_config.dart';
+import 'attendance/services/permissions_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -376,6 +376,15 @@ class _SplashRouterState extends State<SplashRouter> {
       return;
     }
 
+    // ✅ Re-read session after validateSession() so userType is fresh from server
+    final freshSession =
+        await ApiConfig.getSession() ?? await AuthService.getSession();
+    if (!mounted) return;
+    if (freshSession == null) {
+      _go(const LoginScreen());
+      return;
+    }
+
     // ── Re-sync FCM token — mobile only ──────────────────────────────────
     if (!kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.android ||
@@ -384,12 +393,26 @@ class _SplashRouterState extends State<SplashRouter> {
     }
 
     // ── Route by role ─────────────────────────────────────────────────────
-    final int loginId = int.parse(session['loginId']!);
-    final int empId = int.parse(session['empId']!);
-    final int roleId = int.parse(session['role']!);
-    final String userType = session['userType'] ?? 'employee';
-    final String username = session['username'] ?? '';
-    final String tenantId = session['tenantId'] ?? '';
+    final int loginId = int.parse(freshSession['loginId']!);
+    final int empId = int.parse(freshSession['empId']!);
+    final String userType = freshSession['userType'] ?? 'employee';
+    final String roleName = (freshSession['roleName'] ?? '')
+        .toLowerCase()
+        .trim();
+    final String username = freshSession['username'] ?? '';
+    final String tenantId = freshSession['tenantId'] ?? '';
+    final int roleId = int.tryParse(freshSession['role'] ?? '0') ?? 0;
+
+    // ✅ Fetch permissions on every cold start (not just fresh login)
+    List<Map<String, dynamic>>? permissions;
+    if (userType != 'app_admin' && userType != 'org_admin') {
+      permissions = await PermissionsService.getMyPermissions();
+      if (!mounted) return;
+    }
+
+    debugPrint(
+      '[SplashRouter] empId=$empId userType=$userType roleName=$roleName',
+    );
 
     final bool isAppAdmin =
         userType == 'app_admin' || username.toLowerCase() == 'app_admin';
@@ -404,20 +427,15 @@ class _SplashRouterState extends State<SplashRouter> {
         tenantId: tenantId,
       );
     } else {
-      // ── Fetch permissions for non-app-admin users ─────────────────────
-      List<Map<String, dynamic>>? permissions;
-      // if (userType != 'org_admin') {
-      //   permissions = await PermissionsService.getMyPermissions();
-      // }
-      if (!mounted) return;
-
+      // ✅ Route by userType (set from role_name on server — stable across tenants)
+      // Never route by numeric roleId alone
       destination = UserDashboardScreen(
         loginId: loginId,
         employeeId: empId.toString(),
         roleId: roleId.toString(),
         tenantId: tenantId,
         userType: userType,
-        permissions: permissions, // null = full access for org_admin
+        permissions: permissions,
       );
     }
 

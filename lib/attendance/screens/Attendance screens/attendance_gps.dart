@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'att_history.dart';
 import '../../providers/api_config.dart';
+import 'att_history.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -221,6 +222,13 @@ class _GpsAttendanceScreenState extends State<GpsAttendanceScreen>
 
   List<Map<String, dynamic>> _history = [];
   bool _historyLoading = false;
+
+  List<Map<String, dynamic>> get _todayHistory {
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    return _history
+        .where((r) => (r['work_date'] as String? ?? '').startsWith(today))
+        .toList();
+  }
 
   // Live clock
   Timer? _clockTimer;
@@ -1153,6 +1161,67 @@ class _GpsAttendanceScreenState extends State<GpsAttendanceScreen>
     );
   }
 
+  // NEW — add this method
+  List<Map<String, dynamic>> _groupHistoryByDate(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final Map<String, List<Map<String, dynamic>>> byDate = {};
+    for (final row in rows) {
+      final date = row['work_date'] as String? ?? '';
+      byDate.putIfAbsent(date, () => []).add(row);
+    }
+
+    return byDate.entries.map((e) {
+      final dayRows = e.value
+        ..sort(
+          (a, b) =>
+              (a['attendance_id'] as num).compareTo(b['attendance_id'] as num),
+        );
+      final first = dayRows.first;
+      final lastCompleted = dayRows.lastWhere(
+        (r) => r['status'] == 'completed',
+        orElse: () => {},
+      );
+      final last = dayRows.last;
+
+      // Sum work time
+      int totalMinutes = 0;
+      for (final r in dayRows) {
+        final tw = r['total_work_time'] as String?;
+        if (tw != null && tw.isNotEmpty) {
+          final parts = tw.split(':').map(int.tryParse).toList();
+          totalMinutes += ((parts[0] ?? 0) * 60 + (parts[1] ?? 0));
+        }
+      }
+      final sumHH = (totalMinutes ~/ 60).toString().padLeft(2, '0');
+      final sumMM = (totalMinutes % 60).toString().padLeft(2, '0');
+      final summedWork = totalMinutes > 0 ? '$sumHH:$sumMM:00' : null;
+
+      return {
+        ...last,
+        'work_date': e.key,
+        'checkin_time': first['checkin_time'],
+        'checkout_time': lastCompleted.isNotEmpty
+            ? lastCompleted['checkout_time']
+            : null,
+        'checkin_latitude': first['checkin_latitude'],
+        'checkin_longitude': first['checkin_longitude'],
+        'checkout_latitude': lastCompleted.isNotEmpty
+            ? lastCompleted['checkout_latitude']
+            : null,
+        'checkout_longitude': lastCompleted.isNotEmpty
+            ? lastCompleted['checkout_longitude']
+            : null,
+        'total_work_time': summedWork,
+        'is_late': first['is_late'],
+        'late_minutes': first['late_minutes'],
+        'status': last['status'],
+      };
+    }).toList()..sort(
+      (a, b) => (b['work_date'] as String).compareTo(a['work_date'] as String),
+    );
+  }
+
   // ── History section ────────────────────────────────────────────────────────
   Widget _buildHistorySection() {
     return Column(
@@ -1170,7 +1239,7 @@ class _GpsAttendanceScreenState extends State<GpsAttendanceScreen>
                 ),
                 const SizedBox(width: 7),
                 Text(
-                  'Recent GPS Attendance',
+                  "Today's GPS Sessions",
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -1179,15 +1248,42 @@ class _GpsAttendanceScreenState extends State<GpsAttendanceScreen>
                 ),
               ],
             ),
-            InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: _fetchHistory,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  Icons.refresh_rounded,
-                  size: 18,
-                  color: Colors.indigo.shade300,
+            // NEW
+            GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AttendanceHistoryScreen(mode: 'gps'),
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.indigo.shade100),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.history_rounded,
+                      size: 13,
+                      color: Colors.indigo.shade500,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'History',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.indigo.shade600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1201,15 +1297,16 @@ class _GpsAttendanceScreenState extends State<GpsAttendanceScreen>
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
           )
-        else if (_history.isEmpty)
+        else if (_todayHistory.isEmpty)
           _buildEmptyHistory()
         else
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: _history.length,
+            itemCount: _todayHistory.length, // ← was _history.length
             separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (_, i) => _buildHistoryRow(_history[i]),
+            itemBuilder: (_, i) =>
+                _buildHistoryRow(_todayHistory[i]), // ← was _history[i]
           ),
       ],
     );

@@ -21,7 +21,6 @@ class AttendanceService {
     return body['record'] as Map<String, dynamic>?;
   }
 
-
   static Future<Map<String, dynamic>?> getTodayFull() async {
     final res = await http.get(
       Uri.parse('${ApiConfig.baseUrl}/attendance/today'),
@@ -142,9 +141,13 @@ class AttendanceService {
     int limit = 30,
     int offset = 0,
   }) async {
-    final uri = Uri.parse(
-      '${ApiConfig.baseUrl}/attendance/history',
-    ).replace(queryParameters: {'limit': '$limit', 'offset': '$offset'});
+    final uri = Uri.parse('${ApiConfig.baseUrl}/attendance/history').replace(
+      queryParameters: {
+        'limit': '$limit',
+        'offset': '$offset',
+        'mode': 'normal',
+      },
+    );
     final res = await http.get(uri, headers: ApiConfig.headers);
     _check(res);
     final body = _decode(res);

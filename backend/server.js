@@ -766,6 +766,9 @@ app.use("/api/admin", approvalRouter);
 const holidayRoutes = require("./holiday_routes");
 app.use("/api/holidays", holidayRoutes);
 
+// ── Attendance History — must be BEFORE /api/attendance to avoid interception
+app.use("/api/attendance/history", require("./Attendance/history"));
+
 // ── Attendance
 const normalInOutRouter = require("./Attendance/normal_in_out");
 app.use("/api/attendance", normalInOutRouter);
@@ -803,9 +806,6 @@ app.use("/api/attendance_sessions", authMiddleware, attendanceSessionRouter);
 // ── Sessions
 const sessionsRouter = require("./sessions");
 app.use("/api/admin", sessionsRouter);
-
-// ── Attendance History
-app.use("/api/attendance/history", require("./Attendance/history"));
 
 // ── Notifications (tenant employees)
 const { initializeNotificationService } = require("./notify");

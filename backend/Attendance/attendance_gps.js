@@ -83,6 +83,26 @@ function calcLateMinutes(checkinDatetime, officeInTime) {
   return timeToMinutes(timePart) - timeToMinutes(officeInTime);
 }
 
+// NEW
+// ─────────────────────────────────────────────────────────────────────────────
+// Sum all completed GPS sessions for an employee on a given date (sec-precise)
+// ─────────────────────────────────────────────────────────────────────────────
+async function getDailyTotal(tenantId, empId, workDate) {
+  const [[row]] = await db.query(
+    `SELECT SEC_TO_TIME(SUM(TIMESTAMPDIFF(SECOND, checkin_time, checkout_time))) AS daily_total
+     FROM employee_attendance
+     WHERE tenant_id       = ?
+       AND employee_id     = ?
+       AND work_date       = ?
+       AND attendance_mode = 'gps'
+       AND status          = 'completed'
+       AND checkin_time IS NOT NULL
+       AND checkout_time IS NOT NULL`,
+    [tenantId, empId, workDate],
+  );
+  return row?.daily_total ?? null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Fetch policy
 // ─────────────────────────────────────────────────────────────────────────────
@@ -104,13 +124,12 @@ async function getPolicy(tenantId) {
   return policy ?? null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/gps/today
-// ─────────────────────────────────────────────────────────────────────────────
+// NEW
 router.get("/today", requireAuth, async (req, res) => {
   const { tenantId, empId } = req.user;
   try {
-    const [[record]] = await db.query(
+    // All of today's GPS records, oldest first
+    const [rows] = await db.query(
       `SELECT
           attendance_id,
           attendance_mode,
@@ -126,21 +145,59 @@ router.get("/today", requireAuth, async (req, res) => {
           late_minutes,
           total_work_time
        FROM employee_attendance
-       WHERE tenant_id     = ?
-         AND employee_id   = ?
-         AND work_date     = ?
+       WHERE tenant_id       = ?
+         AND employee_id     = ?
+         AND work_date       = ?
          AND attendance_mode = 'gps'
-       ORDER BY attendance_id DESC
-       LIMIT 1`,
+       ORDER BY attendance_id ASC`,
       [tenantId, empId, todayDate()],
     );
 
     const policy = await getPolicy(tenantId);
-    res.json({
-      success: true,
-      record: normalizeRecord(record) ?? null,
-      policy,
-    });
+
+    if (!rows.length) {
+      return res.json({ success: true, record: null, policy });
+    }
+
+    // First check-in of the day
+    const first = rows[0];
+    // Latest record (determines current status)
+    const last = rows[rows.length - 1];
+    // Last completed checkout (for checkout_time display)
+    const lastCompleted = [...rows]
+      .reverse()
+      .find((r) => r.status === "completed");
+
+    // Sum all total_work_time segments (format HH:MM:SS or HH:MM)
+    let totalMinutes = 0;
+    for (const r of rows) {
+      if (r.total_work_time) {
+        const parts = r.total_work_time.split(":").map(Number);
+        totalMinutes += (parts[0] || 0) * 60 + (parts[1] || 0);
+      }
+    }
+    const sumHH = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
+    const sumMM = String(totalMinutes % 60).padStart(2, "0");
+    const summedWork = totalMinutes > 0 ? `${sumHH}:${sumMM}:00` : null;
+
+    // Build a merged record: first checkin + last checkout + summed work
+    const merged = {
+      ...normalizeRecord({ ...last }),
+      checkin_time: normalizeRecord({ ...first }).checkin_time,
+      checkout_time: lastCompleted
+        ? normalizeRecord({ ...lastCompleted }).checkout_time
+        : null,
+      checkin_latitude: first.checkin_latitude,
+      checkin_longitude: first.checkin_longitude,
+      checkout_latitude: lastCompleted?.checkout_latitude ?? null,
+      checkout_longitude: lastCompleted?.checkout_longitude ?? null,
+      total_work_time: summedWork,
+      // is_late based on first check-in
+      is_late: first.is_late,
+      late_minutes: first.late_minutes,
+    };
+
+    res.json({ success: true, record: merged, policy });
   } catch (err) {
     console.error("[GET /gps/today]", err);
     res.status(500).json({ success: false, message: "Server error." });
