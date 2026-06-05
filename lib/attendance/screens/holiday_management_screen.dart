@@ -1,4 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../providers/api_client.dart';
 import '../providers/api_config.dart';
@@ -129,6 +135,38 @@ class HolidayService {
     }
   }
 
+  // GET template download URL (returns the fixed S3/asset URL or generates one)
+  // We generate the template on the client side using the column spec.
+  // POST /api/holidays/import-excel
+  Future<Map<String, dynamic>> importExcel(
+    List<int> fileBytes,
+    String fileName,
+    int loginId,
+  ) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/holidays/import-excel');
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['x-tenant-id'] = ApiConfig.tenantId
+      ..headers['x-session-token'] = ApiConfig.getToken()
+      ..fields['login_id'] = loginId.toString()
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          fileBytes,
+          filename: fileName,
+          contentType: MediaType(
+            'application',
+            'vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          ),
+        ),
+      );
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode != 200)
+      throw Exception(body['message'] ?? 'Import failed');
+    return body;
+  }
+
   // POST /api/holidays/defaults?year=YYYY
   // Uses the server-side default_holiday_master table — no hardcoded list in Dart.
   Future<Map<String, dynamic>> bulkImport(int year, int loginId) async {
@@ -146,7 +184,8 @@ class HolidayService {
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 class HolidayManagementScreen extends StatefulWidget {
-  const HolidayManagementScreen({super.key});
+  final bool canEdit;
+  const HolidayManagementScreen({super.key, this.canEdit = true});
 
   @override
   State<HolidayManagementScreen> createState() =>
@@ -156,6 +195,7 @@ class HolidayManagementScreen extends StatefulWidget {
 class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
   final HolidayService _svc = HolidayService();
 
+  bool get _canEdit => widget.canEdit;
   int _selectedYear = DateTime.now().year;
   List<HolidayModel> _holidays = [];
   bool _loading = true;
@@ -327,6 +367,16 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
           children: [
             Row(
               children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    size: 18,
+                    color: _textDark,
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  constraints: const BoxConstraints(),
+                ),
                 Expanded(child: SizedBox(height: 38, child: _buildYearBar())),
               ],
             ),
@@ -396,6 +446,7 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
                     isSoon: _isSoon,
                     typeColors: _typeColors,
                     typeIcons: _typeIcons,
+                    canEdit: _canEdit,
                     onEdit: () => _showAddEditDialog(holiday: _filtered[i]),
                     onDelete: () => _confirmDelete(_filtered[i]),
                   ),
@@ -528,17 +579,34 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
     ),
   );
 
-  Widget _buildFab() => FloatingActionButton.extended(
-    onPressed: () => _showAddEditDialog(),
-    backgroundColor: _primary,
-    foregroundColor: Colors.white,
-    elevation: 4,
-    icon: const Icon(Icons.add_rounded),
-    label: const Text(
-      'Add Holiday',
-      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-    ),
-  );
+  Widget _buildFab() {
+    if (!_canEdit) return const SizedBox.shrink();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        FloatingActionButton.small(
+          heroTag: 'fab_excel',
+          onPressed: _showExcelImportDialog,
+          backgroundColor: Colors.white,
+          foregroundColor: _accent,
+          elevation: 3,
+          tooltip: 'Import Excel',
+          child: const Icon(Icons.upload_file_rounded),
+        ),
+        const SizedBox(height: 10),
+        FloatingActionButton.small(
+          heroTag: 'fab_add',
+          onPressed: () => _showAddEditDialog(),
+          backgroundColor: Colors.white,
+          foregroundColor: _primary,
+          elevation: 3,
+          tooltip: 'Add Holidays',
+          child: const Icon(Icons.add_rounded),
+        ),
+      ],
+    );
+  }
 
   Widget _buildEmpty() => Center(
     child: Padding(
@@ -1020,168 +1088,360 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
     );
   }
 
-  // ── Bulk Import Dialog ────────────────────────────────────────────────────
-  // Calls POST /api/holidays/defaults?year=YYYY which reads default_holiday_master
-  // from the DB and inserts missing rows — no hardcoded list needed on the client.
-  void _showBulkImportDialog() {
-    int importYear = _selectedYear;
+  void _showExcelImportDialog() {
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, si) => AlertDialog(
-          backgroundColor: _card,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-          contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-          actionsPadding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _purple.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.upload_rounded,
-                  color: _purple,
-                  size: 18,
-                ),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(width: 10),
-              const Text(
-                'Bulk Import',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: _textDark,
-                ),
+              child: const Icon(
+                Icons.upload_file_rounded,
+                color: _accent,
+                size: 18,
               ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _purple.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _purple.withValues(alpha: 0.2)),
-                ),
-                child: const Text(
-                  'Imports your company\'s default holidays from the server for the '
-                  'selected year. Holidays that already exist are skipped automatically.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: _textDark,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              const _FL('Year'),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () => si(() => importYear--),
-                    icon: const Icon(
-                      Icons.remove_circle_outline_rounded,
-                      color: _textMid,
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _surface,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: _border),
-                      ),
-                      child: Text(
-                        '$importYear',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: _textDark,
-                        ),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => si(() => importYear++),
-                    icon: const Icon(
-                      Icons.add_circle_outline_rounded,
-                      color: _textMid,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-            ],
-          ),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _textMid,
-                side: const BorderSide(color: _border),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 10,
-                ),
-              ),
-              child: const Text('Cancel'),
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: _purple,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
-                ),
-              ),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                try {
-                  final res = await _svc.bulkImport(
-                    importYear,
-                    int.tryParse(ApiConfig.loginId) ?? 0,
-                  );
-                  _snack(
-                    res['message'] ??
-                        (res['success'] == true
-                            ? 'Import complete'
-                            : 'Import failed'),
-                    isError: res['success'] != true,
-                  );
-                  if (res['success'] == true) {
-                    setState(() => _selectedYear = importYear);
-                    _loadHolidays();
-                  }
-                } catch (e) {
-                  _snack('Import failed: $e', isError: true);
-                }
-              },
-              child: const Text(
-                'Import',
-                style: TextStyle(fontWeight: FontWeight.w600),
+            const SizedBox(width: 10),
+            const Text(
+              'Import from Excel',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: _textDark,
               ),
             ),
           ],
         ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 12),
+            // Download template
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(ctx);
+                _downloadTemplate();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _accent.withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.download_rounded, size: 16, color: _accent),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Download template with example data',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: _accent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 11,
+                      color: _accent,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _textMid,
+              side: const BorderSide(color: _border),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: _accent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            icon: const Icon(Icons.upload_rounded, size: 16),
+            label: const Text(
+              'Choose File',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _pickAndImportExcel();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tableHeader(String t) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+    child: Text(
+      t,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        color: _textDark,
+      ),
+    ),
+  );
+
+  Widget _tableCell(String t) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    child: Text(t, style: const TextStyle(fontSize: 10, color: _textMid)),
+  );
+
+  void _downloadTemplate() async {
+    try {
+      const csv =
+          'S.No,Date,Holiday Name,Holiday Type,About the Holiday (optional)\n'
+          '1,26/01/2026,Republic Day,National,India\'s Republic Day\n'
+          '2,14/04/2026,Tamil New Year,Public,Puthandu\n'
+          '3,01/05/2026,May Day,National,International Workers Day\n'
+          '4,15/08/2026,Independence Day,National,India\'s Independence Day\n'
+          '5,25/12/2026,Christmas,National,Christmas Day\n';
+      final bytes = utf8.encode(csv);
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/holiday_import_template.csv');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([
+        XFile(file.path, mimeType: 'text/csv'),
+      ], subject: 'holiday_import_template.csv');
+    } catch (e) {
+      _snack('Could not download template: $e', isError: true);
+    }
+  }
+
+  Future<void> _saveAndShareFile(
+    List<int> bytes,
+    String name,
+    String mime,
+  ) async {
+    try {
+      // Share via share_plus or save to downloads
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$name');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([
+        XFile(file.path, mimeType: mime),
+      ], subject: name);
+    } catch (e) {
+      _snack('Could not export template: $e', isError: true);
+    }
+  }
+
+  Future<void> _pickAndImportExcel() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xlsx', 'xls', 'csv'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      if (file.bytes == null) {
+        _snack('Could not read file', isError: true);
+        return;
+      }
+
+      // Show loading dialog — prevents UI freeze perception
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const AlertDialog(
+            backgroundColor: Colors.white,
+            content: Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  CircularProgressIndicator(color: _accent, strokeWidth: 2.5),
+                  SizedBox(width: 20),
+                  Expanded(
+                    child: Text(
+                      'Importing holidays…',
+                      style: TextStyle(fontSize: 13, color: _textDark),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
+      final sw = Stopwatch()..start();
+      debugPrint(
+        '[HolidayImport] Starting upload: ${file.name} (${file.bytes!.length} bytes)',
+      );
+
+      final res = await _svc.importExcel(
+        file.bytes!,
+        file.name,
+        int.tryParse(ApiConfig.loginId) ?? 0,
+      );
+
+      sw.stop();
+      debugPrint(
+        '[HolidayImport] Done in ${sw.elapsedMilliseconds}ms — '
+        'inserted=${res['inserted']} skipped=${res['skipped']} errors=${(res['errors'] as List?)?.length ?? 0}',
+      );
+
+      // Dismiss loading dialog
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+
+      _showImportResultDialog(res);
+      if ((res['inserted'] as int? ?? 0) > 0) _loadHolidays();
+    } catch (e) {
+      // Dismiss loading dialog if still open
+      if (mounted) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (_) {}
+      }
+      debugPrint('[HolidayImport] Error: $e');
+      _snack('Import failed: $e', isError: true);
+    }
+  }
+
+  void _showImportResultDialog(Map<String, dynamic> res) {
+    final inserted = res['inserted'] as int? ?? 0;
+    final skipped = res['skipped'] as int? ?? 0;
+    final errors = (res['errors'] as List?) ?? [];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        title: Row(
+          children: [
+            Icon(
+              errors.isEmpty
+                  ? Icons.check_circle_rounded
+                  : Icons.warning_amber_rounded,
+              color: errors.isEmpty ? _accent : _amber,
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'Import Result',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: _textDark,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _ResultTile('Added', '$inserted', _accent),
+                const SizedBox(width: 10),
+                _ResultTile('Skipped', '$skipped', _amber),
+                if (errors.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  _ResultTile('Errors', '${errors.length}', _red),
+                ],
+              ],
+            ),
+            if (errors.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Row errors:',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _textMid,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 140),
+                decoration: BoxDecoration(
+                  color: _red.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _red.withValues(alpha: 0.15)),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: errors.map((e) {
+                      final err = e as Map<String, dynamic>;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          'Row ${err['row']}: ${err['error']}',
+                          style: const TextStyle(fontSize: 11, color: _red),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 4),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: _primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Done',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1308,6 +1568,7 @@ class _HolidayCard extends StatelessWidget {
   final bool Function(DateTime) isSoon;
   final Map<String, Color> typeColors;
   final Map<String, IconData> typeIcons;
+  final bool canEdit;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -1321,6 +1582,7 @@ class _HolidayCard extends StatelessWidget {
     required this.isSoon,
     required this.typeColors,
     required this.typeIcons,
+    required this.canEdit,
     required this.onEdit,
     required this.onDelete,
   });
@@ -1488,18 +1750,19 @@ class _HolidayCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _ActionBtn(Icons.edit_rounded, _primary, onEdit),
-                        const SizedBox(height: 6),
-                        _ActionBtn(
-                          Icons.delete_outline_rounded,
-                          _red,
-                          onDelete,
-                        ),
-                      ],
-                    ),
+                    if (canEdit)
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _ActionBtn(Icons.edit_rounded, _primary, onEdit),
+                          const SizedBox(height: 6),
+                          _ActionBtn(
+                            Icons.delete_outline_rounded,
+                            _red,
+                            onDelete,
+                          ),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -1668,6 +1931,36 @@ class _DTF extends StatelessWidget {
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: const BorderSide(color: _primary, width: 1.5),
+      ),
+    ),
+  );
+}
+
+class _ResultTile extends StatelessWidget {
+  final String label, value;
+  final Color color;
+  const _ResultTile(this.label, this.value, this.color);
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+          Text(label, style: const TextStyle(fontSize: 11, color: _textMid)),
+        ],
       ),
     ),
   );

@@ -33,17 +33,17 @@ class _PolicyManagementScreenState extends State<PolicyManagementScreen> {
         appBar: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Container(
-            color: _primary,
+            color: const Color(0xFFF0F4FF),
             child: SafeArea(
               bottom: false,
               child: Row(
                 children: [
                   Expanded(
                     child: TabBar(
-                      indicatorColor: Colors.white,
+                      indicatorColor: _primary,
                       indicatorWeight: 3,
-                      labelColor: Colors.white,
-                      unselectedLabelColor: Colors.white60,
+                      labelColor: _primary,
+                      unselectedLabelColor: const Color.fromARGB(153, 35, 34, 34),
                       labelStyle: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 13,

@@ -114,16 +114,27 @@ app.post("/api/auth/send-otp", otpLimiter, async (req, res) => {
       });
     }
 
-    // ── Check duplicate org ──────────────────────────────────────────────────
-    const [existing] = await db.query(
-      "SELECT tenant_id FROM tenants WHERE admin_email = ? OR hr_email = ? LIMIT 1",
-      [admin_email, hr_email],
-    );
-
-    if (existing.length > 0) {
-      return res.status(409).json({ message: "Organization already exists." });
+    /// ── Same-email guard ─────────────────────────────────────────────────────
+    if (admin_email === hr_email) {
+      return res.status(400).json({
+        message: "Admin and HR email addresses must be different.",
+      });
     }
 
+    // ── Check duplicate org ──────────────────────────────────────────────────
+    const [existingRows] = await db.query(
+      `SELECT tenant_id FROM tenants
+       WHERE admin_email IN (?, ?) OR hr_email IN (?, ?)
+       LIMIT 1`,
+      [admin_email, hr_email, admin_email, hr_email],
+    );
+
+    if (existingRows.length > 0) {
+      return res.status(409).json({
+        message:
+          "One or both email addresses are already registered with another organisation.",
+      });
+    }
     const sessionId = generateSessionId();
     const adminOtp = generateOtp();
     const hrOtp = generateOtp();

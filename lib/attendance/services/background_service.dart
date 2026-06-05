@@ -177,6 +177,16 @@ class SyncWorker {
 // initBackgroundService
 // ─────────────────────────────────────────────────────────────────────────────
 Future<void> initBackgroundService() async {
+  // ── Guard: don't configure if no session exists ───────────────────────
+  final prefs = await SharedPreferences.getInstance();
+  final int? empId =
+      prefs.getInt('employee_id') ??
+      int.tryParse(prefs.getString('employeeId') ?? '');
+  if (empId == null) {
+    debugPrint('[BGService] No session — skipping init');
+    return;
+  }
+
   final service = FlutterBackgroundService();
   final notifPlugin = FlutterLocalNotificationsPlugin();
 
@@ -229,12 +239,33 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 void onServiceStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
+  // ── EARLY EXIT: check employee_id before touching any plugins ─────────────
+  // This fires on cold boot when Android auto-restarts the foreground service.
+  // Initializing flutter_local_notifications etc. in a background isolate
+  // without a valid session causes the "main isolate only" crash.
+  final prefs = await SharedPreferences.getInstance();
+  final int? empId =
+      prefs.getInt('employee_id') ??
+      int.tryParse(prefs.getString('employeeId') ?? '');
+  final int? sessionId =
+      prefs.getInt('session_id_$empId') ?? prefs.getInt('session_id');
+
+  debugPrint('[Service] STARTED emp=$empId session=$sessionId');
+
+  if (empId == null) {
+    debugPrint('[Service] No employee_id — stopping');
+    service.stopSelf();
+    return;
+  }
+
+  // ── Only initialize heavy plugins after we know session is valid ──────────
   final notifPlugin = FlutterLocalNotificationsPlugin();
   if (defaultTargetPlatform == TargetPlatform.android) {
     await notifPlugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       ),
+      onDidReceiveNotificationResponse: (NotificationResponse response) {},
     );
   }
 
@@ -257,19 +288,7 @@ void onServiceStart(ServiceInstance service) async {
     );
   }
 
-  // ── Read everything from prefs at boot ────────────────────────────────────
-  final prefs = await SharedPreferences.getInstance();
-  final int? empId = prefs.getInt('employee_id');
-  final int? sessionId = prefs.getInt('session_id_$empId');
   int? currentSiteId;
-
-  debugPrint('[Service] STARTED emp=$empId session=$sessionId');
-
-  if (empId == null) {
-    debugPrint('[Service] No employee_id — stopping');
-    service.stopSelf();
-    return;
-  }
 
   if (defaultTargetPlatform == TargetPlatform.android) {
     if (!await Permission.locationAlways.isGranted) {
@@ -291,6 +310,74 @@ void onServiceStart(ServiceInstance service) async {
   final siteRefreshTimer = Timer.periodic(
     const Duration(minutes: 30),
     (_) => _fire(SiteCache.sync()),
+  );
+
+  // ── GPS-face attendance location update (every 2 min) ─────────────────────
+  Timer? gpsAttendanceTimer;
+
+  // ── Print current location every 1 minute ─────────────────────────────────
+  Timer.periodic(const Duration(minutes: 1), (_) async {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      ).timeout(const Duration(seconds: 15));
+      debugPrint(
+        '[Location] ${DateTime.now().toIso8601String()} '
+        '| lat=${position.latitude.toStringAsFixed(6)} '
+        'lng=${position.longitude.toStringAsFixed(6)} '
+        'acc=${position.accuracy.toStringAsFixed(1)}m',
+      );
+    } catch (e) {
+      debugPrint('[Location] Failed to get location: $e');
+    }
+  });
+
+  Future<void> runGpsAttendanceUpdate() async {
+    final attendanceId = prefs.getInt('gps_active_attendance_id');
+    if (attendanceId == null) return;
+
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      ).timeout(const Duration(seconds: 15));
+
+      final token = prefs.getString('session_token') ?? '';
+      final tenantId = prefs.getString('tenantId') ?? '';
+      final baseUrl =
+          prefs.getString('bg_base_url') ?? 'http://192.168.29.103:5000/api';
+
+      debugPrint(
+        '[GPS-face] baseUrl=$baseUrl token=${token.isNotEmpty ? "SET" : "EMPTY"} tenantId=$tenantId',
+      );
+
+      if (baseUrl.isEmpty || token.isEmpty) return;
+
+      final res = await ApiService.patchGpsLocation(
+        baseUrl: baseUrl,
+        token: token,
+        tenantId: tenantId,
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+
+      if (res == false) {
+        await prefs.remove('gps_active_attendance_id');
+        await prefs.remove('gps_checkin_time');
+        gpsAttendanceTimer?.cancel();
+        debugPrint('[GPS-face] Session ended server-side, timer stopped');
+      } else {
+        debugPrint(
+          '[GPS-face] Location updated: ${position.latitude}, ${position.longitude}',
+        );
+      }
+    } catch (e) {
+      debugPrint('[GPS-face] Location update failed: $e');
+    }
+  }
+
+  gpsAttendanceTimer = Timer.periodic(
+    const Duration(minutes: 2),
+    (_) => _fire(runGpsAttendanceUpdate()),
   );
 
   // ── Shutdown helper ────────────────────────────────────────────────────────
@@ -335,6 +422,7 @@ void onServiceStart(ServiceInstance service) async {
 
     syncTimer.cancel();
     siteRefreshTimer.cancel();
+    gpsAttendanceTimer?.cancel();
     SiteCache.dispose();
     await notifPlugin.cancel(id: kNotifId);
     service.invoke(doneEvent, {});
@@ -557,14 +645,30 @@ Future<void> startBackgroundTracking(int employeeId, {int? sessionId}) async {
     await Future.delayed(const Duration(milliseconds: 800));
   }
 
-  await prefs.setInt('employee_id', employeeId);
+  await prefs.setInt('employee_id', employeeId); // keep for bg service
+  await prefs.setString(
+    'employeeId',
+    employeeId.toString(),
+  ); // keep for ApiConfig
   await prefs.setBool('tracking_active_$employeeId', true);
   await prefs.remove('current_site_id_$employeeId');
   if (sessionId != null) {
     await prefs.setInt('session_id_$employeeId', sessionId);
+    await prefs.setInt('session_id', sessionId);
   }
 
   await SiteCache.init();
+
+  // ── Debug: verify what's actually saved in prefs ──────────────────
+  debugPrint('[startBackgroundTracking] about to start:');
+  debugPrint('  employee_id  = ${prefs.getInt('employee_id')}');
+  debugPrint('  employeeId   = ${prefs.getString('employeeId')}');
+  debugPrint('  session_id   = ${prefs.getInt('session_id')}');
+  debugPrint(
+    '  session_id_$employeeId = ${prefs.getInt('session_id_$employeeId')}',
+  );
+  debugPrint('  passed sessionId param = $sessionId');
+
   await svc.startService();
 
   debugPrint(

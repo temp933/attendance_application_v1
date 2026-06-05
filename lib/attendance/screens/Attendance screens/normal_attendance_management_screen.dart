@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import '../../providers/api_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'attendance_policy_screen.dart';
+// import 'attendance_policy_screen.dart';
 import 'admin_force_close_screen.dart';
 import '../admin_attendance_report.dart';
 
@@ -153,14 +153,15 @@ class NormalAttendanceManagementService {
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
 // ─────────────────────────────────────────────────────────────────────────────
-
 class NormalAttendanceManagementScreen extends StatefulWidget {
   final String authToken;
   final String tenantId;
+  final bool canEdit;
   const NormalAttendanceManagementScreen({
     super.key,
     required this.authToken,
     required this.tenantId,
+    this.canEdit = true,
   });
   @override
   State<NormalAttendanceManagementScreen> createState() =>
@@ -407,7 +408,6 @@ class _NormalAttendanceManagementScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    
                     Text(
                       _isToday
                           ? 'Today — ${DateFormat('dd MMM yyyy').format(_selectedDate)}'
@@ -455,52 +455,38 @@ class _NormalAttendanceManagementScreenState
                     ),
                 ],
               ),
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  IconButton(
-                    tooltip: 'Force close open sessions',
-                    icon: const Icon(Icons.lock_open_rounded, color: _red),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => AdminForceCloseScreen(
-                          loginId: 57,
-                          mode: 'normal', // pass 'gps' or 'gps_face' as needed
+              if (widget.canEdit)
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      tooltip: 'Force close open sessions',
+                      icon: const Icon(Icons.lock_open_rounded, color: _red),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AdminForceCloseScreen(
+                            loginId: 57,
+                            mode: 'normal',
+                          ),
+                        ),
+                      ).then((_) => _loadData()),
+                    ),
+                    if ((_stats?.activeNow ?? 0) > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: _red,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                       ),
-                    ).then((_) => _loadData()),
-                  ),
-                  // Badge — only show when there are active sessions
-                  if ((_stats?.activeNow ?? 0) > 0)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: _red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              IconButton(
-                tooltip: 'Policy settings',
-                icon: const Icon(Icons.tune_rounded, color: _primary),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AttendancePolicyScreen(
-                      authToken: widget.authToken,
-                      tenantId: widget.tenantId,
-                    ),
-                  ),
+                  ],
                 ),
-              ),
-              
             ],
           ),
         ),

@@ -4,16 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../services/auth_service.dart';
 import 'change_password_screen.dart';
-import 'emp_dashboard_screen.dart';
-import 'admin_dashboard.dart';
-import 'hr_dashboard_screen.dart';
 import '../App Admin/app_admin_dashboard_screen.dart';
-import 'team_lead_dashboard.dart';
-import 'manager_dashboard.dart';
 import 'forgot_password_screen.dart';
 import '../providers/api_config.dart';
 import 'user_dashboard_screen.dart';
 import '../services/permissions_service.dart';
+import '../services/background_service.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show TargetPlatform;
 
 // ─── API base ────────────────────────────────────────────────────────────────
 final String _baseUrl = ApiConfig.baseUrl;
@@ -87,9 +85,7 @@ class _LoginScreenState extends State<LoginScreen>
         roleId: roleId.toString(),
         tenantId: tenantId,
       );
-    } 
-    
-    else {
+    } else {
       // HR, Employee, TL, Manager → permission-filtered dashboard
       screen = UserDashboardScreen(
         loginId: loginId,
@@ -548,6 +544,21 @@ class _SignInTabState extends State<_SignInTab> {
       sessionToken: token,
       tenantId: tenantId,
     );
+
+    // ── Start background tracking — mobile only, non-app_admin ───────────
+    if (!kIsWeb &&
+        userType != 'app_admin' &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)) {
+      final int? sessionId =
+          int.tryParse(data['sessionId']?.toString() ?? '') ??
+          int.tryParse(data['session_id']?.toString() ?? '');
+      await initBackgroundService();
+      await startBackgroundTracking(empId, sessionId: sessionId);
+      debugPrint(
+        '[Login] Background tracking started emp=$empId session=$sessionId',
+      );
+    }
 
     if (data['firstLogin'] == true) {
       Navigator.of(context).pushAndRemoveUntil(
@@ -1514,7 +1525,15 @@ class _SignUpTabState extends State<_SignUpTab> {
             label: 'Admin Email ID *',
             icon: Icons.admin_panel_settings_outlined,
             keyboardType: TextInputType.emailAddress,
-            validator: _email,
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'Required';
+              if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(v.trim()))
+                return 'Invalid email';
+              if (v.trim().toLowerCase() ==
+                  _hrEmailCtrl.text.trim().toLowerCase())
+                return 'Must be different from HR email';
+              return null;
+            },
           ),
           const SizedBox(height: 12),
           _AppField(
@@ -1522,7 +1541,15 @@ class _SignUpTabState extends State<_SignUpTab> {
             label: 'HR Email ID *',
             icon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
-            validator: _email,
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'Required';
+              if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(v.trim()))
+                return 'Invalid email';
+              if (v.trim().toLowerCase() ==
+                  _adminEmailCtrl.text.trim().toLowerCase())
+                return 'Must be different from Admin email';
+              return null;
+            },
           ),
           const SizedBox(height: 12),
           _AppField(

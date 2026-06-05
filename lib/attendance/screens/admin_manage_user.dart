@@ -561,10 +561,12 @@ Widget _errorWidget(String msg, VoidCallback retry) => Center(
 class ManageUserScreen extends StatefulWidget {
   final String roleId;
   final String tenantId;
+  final bool canEdit;
   const ManageUserScreen({
     super.key,
     required this.roleId,
     required this.tenantId,
+    this.canEdit = true,
   });
   @override
   State<ManageUserScreen> createState() => ManageUserScreenState();
@@ -712,7 +714,7 @@ class ManageUserScreenState extends State<ManageUserScreen>
         builder: (_) => EmployeeDetailPage(
           id: e.empId.toString(),
           source: 'MASTER',
-          readOnly: false,
+          readOnly: !widget.canEdit,
           userRoleId: widget.roleId,
         ),
       ),
@@ -723,7 +725,6 @@ class ManageUserScreenState extends State<ManageUserScreen>
   Future<void> _onRequestTap(Employee e) async {
     if (e.requestId == null) return;
     final isPending = e.adminApprove?.toUpperCase() == 'PENDING';
-    final isRejected = e.adminApprove?.toUpperCase() == 'REJECTED';
 
     final result = await Navigator.push(
       context,
@@ -731,7 +732,8 @@ class ManageUserScreenState extends State<ManageUserScreen>
         builder: (_) => EmployeeDetailPage(
           id: e.requestId.toString(),
           source: 'REQUEST',
-          readOnly: isPending, // PENDING → read-only, REJECTED → editable
+          // read-only if: no edit permission OR request is pending
+          readOnly: !widget.canEdit || isPending,
           userRoleId: widget.roleId,
         ),
       ),
@@ -770,63 +772,48 @@ class ManageUserScreenState extends State<ManageUserScreen>
                     ),
                     tabs: [
                       Tab(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            if (_tabController.index == 0) _fetchMaster();
-                          },
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.people_rounded, size: 16),
-                              const SizedBox(width: 5),
-                              const Flexible(
-                                child: Text(
-                                  'Employees',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.people_rounded, size: 16),
+                            const SizedBox(width: 5),
+                            const Flexible(
+                              child: Text(
+                                'Employees',
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              if (_masterEmployees.isNotEmpty) ...[
-                                const SizedBox(width: 5),
-                                _tabCount(_masterEmployees.length, _primary),
-                              ],
+                            ),
+                            if (_masterEmployees.isNotEmpty) ...[
+                              const SizedBox(width: 5),
+                              _tabCount(_masterEmployees.length, _primary),
                             ],
-                          ),
+                          ],
                         ),
                       ),
                       Tab(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            if (_tabController.index == 1) _fetchRequests();
-                          },
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.pending_actions_rounded,
-                                size: 16,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.pending_actions_rounded, size: 16),
+                            const SizedBox(width: 5),
+                            const Flexible(
+                              child: Text(
+                                'Requests',
+                                overflow: TextOverflow.ellipsis,
                               ),
+                            ),
+                            if (_requestEmployees.isNotEmpty) ...[
                               const SizedBox(width: 5),
-                              const Flexible(
-                                child: Text(
-                                  'Requests',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (_requestEmployees.isNotEmpty) ...[
-                                const SizedBox(width: 5),
-                                _tabCount(_requestEmployees.length, _amber),
-                              ],
+                              _tabCount(_requestEmployees.length, _amber),
                             ],
-                          ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
+
                 // ── Refresh button ────────────────────────────────
-                
               ],
             ),
           ),
@@ -878,7 +865,7 @@ class ManageUserScreenState extends State<ManageUserScreen>
           ),
         ],
       ),
-      floatingActionButton: _showFab
+      floatingActionButton: (_showFab && widget.canEdit)
           ? FloatingActionButton.extended(
               backgroundColor: _primary,
               foregroundColor: Colors.white,
@@ -2027,6 +2014,8 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
           employeeData = Map<String, dynamic>.from(emp);
           isLoading = false;
         });
+        debugPrint('PENDING emp keys: ${employeeData!.keys.toList()}');
+        debugPrint('PENDING education raw: ${employeeData!['education']}');
 
         // For MASTER → fetch education separately
         if (widget.source == 'MASTER') {
@@ -2054,11 +2043,16 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
                   ? md['data']
                   : md;
               // also fetch master education
+              // also fetch master education
               final er = await ApiClient.get('/employees/$empId/education');
               final masterEmpMap = Map<String, dynamic>.from(masterEmp);
               if (er.statusCode == 200) {
-                masterEmpMap['education'] = jsonDecode(er.body)['data'];
+                final eduBody = jsonDecode(er.body);
+                masterEmpMap['education'] =
+                    eduBody['data'] ?? eduBody['education'] ?? [];
               }
+              debugPrint('MASTER edu: ${masterEmpMap['education']}');
+              debugPrint('PENDING edu: ${employeeData!['education']}');
               if (mounted) setState(() => masterData = masterEmpMap);
             }
           } catch (_) {}
@@ -3033,7 +3027,15 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
     bgColor: const Color(0xFFFFFBEB),
     fields: [
       _CompField('Department', 'department_name', isDate: false),
-      _CompField('Designation', 'role_name', isDate: false),
+      _CompField('Designation', 'designation_name', isDate: false),
+      _CompField('Role', 'role_name', isDate: false),
+      _CompField(
+        'Reporting To',
+        employeeData!['new_reporting_to_name'] != null
+            ? 'new_reporting_to_name'
+            : 'reporting_to_name',
+        isDate: false,
+      ),
       _CompField('Date of Joining', 'date_of_joining', isDate: true),
       _CompField('Employment Type', 'employment_type', isDate: false),
       _CompField('Work Type', 'work_type', isDate: false),
@@ -3371,9 +3373,15 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
   }
 
   Widget _educationCard(_Screen s) {
-    final pendingEdu = _eduListFrom(employeeData);
+    var pendingEdu = _eduListFrom(employeeData);
     final masterEdu = _eduListFrom(masterData);
     final showComparison = _isUpdateRequest && masterData != null;
+
+    // If this is an UPDATE request but no edu changes were sent,
+    // fall back to showing master education as-is
+    if (showComparison && pendingEdu.isEmpty && masterEdu.isNotEmpty) {
+      pendingEdu = masterEdu;
+    }
 
     // Check if any edu row actually has a change
     final hasChangedRows = pendingEdu.any((e) {
@@ -4983,7 +4991,7 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
         if (selectedDeptId != null)
           EmployeeService.fetchDesignations(deptId: selectedDeptId)
         else
-          EmployeeService.fetchDesignations(),
+          Future.value(<Map<String, dynamic>>[]),
       ]);
       if (!mounted) return;
       setState(() {

@@ -535,6 +535,14 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     return pending != current;
   }
 
+  bool _changedByName(String nameField) {
+    if (!_isUpdate || _current == null) return false;
+    final pending = widget.request[nameField]?.toString().trim() ?? '';
+    final current = _current![nameField]?.toString().trim() ?? '';
+    if (pending.isEmpty) return false;
+    return pending != current;
+  }
+
   /// Returns the formatted OLD value for display (struck-through label).
   String _old(String field, {String Function(dynamic)? fmt}) {
     if (_current == null) return '';
@@ -798,32 +806,38 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
     // Count total changed fields for badge
-    final changedFields = [
-      'first_name',
-      'mid_name',
-      'last_name',
-      'email_id',
-      'phone_number',
-      'date_of_birth',
-      'gender',
-      'father_name',
-      'emergency_contact',
-      'emergency_contact_relation',
-      'department_id',
-      'role_id',
-      'date_of_joining',
-      'date_of_relieving',
-      'employment_type',
-      'work_type',
-      'years_experience',
-      'permanent_address',
-      'communication_address',
-      'aadhar_number',
-      'pan_number',
-      'passport_number',
-      'pf_number',
-      'esic_number',
-    ].where(_changed).length;
+    final changedFields =
+        [
+          'first_name',
+          'mid_name',
+          'last_name',
+          'email_id',
+          'phone_number',
+          'date_of_birth',
+          'gender',
+          'father_name',
+          'emergency_contact',
+          'emergency_contact_relation',
+          'date_of_joining',
+          'date_of_relieving',
+          'employment_type',
+          'work_type',
+          'years_experience',
+          'status',
+          'permanent_address',
+          'communication_address',
+          'aadhar_number',
+          'pan_number',
+          'passport_number',
+          'pf_number',
+          'esic_number',
+        ].where(_changed).length +
+        [
+          'department_name',
+          'designation_name',
+          'role_name',
+          'reporting_to_name',
+        ].where(_changedByName).length;
 
     return Container(
       decoration: BoxDecoration(
@@ -1993,6 +2007,7 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                 ),
 
                 // ── EMPLOYMENT INFORMATION ────────────────────────────────
+                // ── EMPLOYMENT INFORMATION ────────────────────────────────
                 _sectionCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2007,21 +2022,42 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         icon: Icons.business_outlined,
                         label: 'Department',
                         value: widget.request['department_name'] ?? '-',
-                        highlight: _changed('department_id'),
-                        oldValue: _old('department_id').isNotEmpty
-                            ? (_current?['department_name'] ??
-                                  _old('department_id'))
-                            : '',
+                        highlight: _changedByName('department_name'),
+                        oldValue:
+                            _current?['department_name']?.toString() ?? '',
+                      ),
+                      _dividerRow(),
+                      _infoTile(
+                        icon: Icons.work_history_outlined,
+                        label: 'Designation',
+                        value: widget.request['designation_name'] ?? '-',
+                        highlight: _changedByName('designation_name'),
+                        oldValue:
+                            _current?['designation_name']?.toString() ?? '',
                       ),
                       _dividerRow(),
                       _infoTile(
                         icon: Icons.badge_outlined,
                         label: 'Role',
                         value: widget.request['role_name'] ?? '-',
-                        highlight: _changed('role_id'),
-                        oldValue: _old('role_id').isNotEmpty
-                            ? (_current?['role_name'] ?? _old('role_id'))
-                            : '',
+                        highlight: _changedByName('role_name'),
+                        oldValue: _current?['role_name']?.toString() ?? '',
+                      ),
+                      _dividerRow(),
+                      _infoTile(
+                        icon: Icons.supervisor_account_outlined,
+                        label: 'Reporting To',
+                        value: () {
+                          final v =
+                              widget.request['reporting_to_name']
+                                  ?.toString()
+                                  .trim() ??
+                              '';
+                          return v.isNotEmpty ? v : '-';
+                        }(),
+                        highlight: _changedByName('reporting_to_name'),
+                        oldValue:
+                            _current?['reporting_to_name']?.toString() ?? '',
                       ),
                       _dividerRow(),
                       _infoTile(
@@ -2064,17 +2100,31 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                       _infoTile(
                         icon: Icons.timeline_rounded,
                         label: 'Experience',
-                        value:
-                            '${widget.request['years_experience'] ?? '-'} yrs',
+                        value: widget.request['years_experience'] != null
+                            ? '${widget.request['years_experience']} yrs'
+                            : '-',
                         highlight: _changed('years_experience'),
                         oldValue: _old('years_experience').isNotEmpty
                             ? '${_old('years_experience')} yrs'
                             : '',
                       ),
+                      if (_isUpdate) ...[
+                        _dividerRow(),
+                        _infoTile(
+                          icon: Icons.toggle_on_outlined,
+                          label: 'Status',
+                          value: widget.request['status']?.toString() ?? '-',
+                          highlight: _changed('status'),
+                          oldValue: _old('status'),
+                          valueColor:
+                              widget.request['status']?.toString() == 'Active'
+                              ? _accent
+                              : _red,
+                        ),
+                      ],
                     ],
                   ),
                 ),
-
                 // ── EDUCATION DETAILS ─────────────────────────────────────
                 _educationSection(
                   (widget.request['education_list'] as List?) ?? [],

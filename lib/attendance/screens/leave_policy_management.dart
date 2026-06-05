@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'holiday_management_screen.dart';
 import '../providers/api_client.dart';
 
 // ─── Models ───────────────────────────────────────────────────────────────────
@@ -218,21 +219,56 @@ class _LeavePolicyManagementScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _surface,
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: _primary,
-        elevation: 4,
-        onPressed: () => _showPolicySheet(context),
-        icon: const Icon(Icons.add_rounded, color: Colors.white, size: 20),
-        label: const Text(
-          'New Policy',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-            letterSpacing: 0.3,
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'fab_holidays',
+            backgroundColor: Colors.white,
+            elevation: 4,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => HolidayManagementScreen(canEdit: true),
+              ),
+            ),
+            icon: const Icon(Icons.celebration_rounded, color: _primary),
+            label: const Text(
+              'Holidays',
+              style: TextStyle(
+                color: _primary,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                letterSpacing: 0.3,
+              ),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: _primary.withOpacity(0.3)),
+            ),
           ),
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          const SizedBox(height: 10),
+          FloatingActionButton.extended(
+            heroTag: 'fab_new_policy',
+            backgroundColor: _primary,
+            elevation: 4,
+            onPressed: () => _showPolicySheet(context),
+            icon: const Icon(Icons.add_rounded, color: Colors.white, size: 20),
+            label: const Text(
+              'New Policy',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                letterSpacing: 0.3,
+              ),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _fetchPolicies,

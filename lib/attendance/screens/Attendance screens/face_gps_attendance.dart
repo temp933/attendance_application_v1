@@ -24,89 +24,6 @@ const String _kCheckinTimeKey = 'gps_checkin_time';
 const int _kMinFaceConfidence = 50;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Background service entry point — runs in a separate isolate
-// ─────────────────────────────────────────────────────────────────────────────
-@pragma('vm:entry-point')
-Future<void> onStart(ServiceInstance service) async {
-  DartPluginRegistrant.ensureInitialized();
-
-  Timer.periodic(const Duration(minutes: 10), (timer) async {
-    final prefs = await SharedPreferences.getInstance();
-    final attendanceId = prefs.getInt(_kAttendanceIdKey);
-
-    if (attendanceId == null) {
-      timer.cancel();
-      service.stopSelf();
-      return;
-    }
-
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      ).timeout(const Duration(seconds: 15));
-
-      final headers = Map<String, String>.from(ApiConfig.headers);
-      final res = await http.patch(
-        Uri.parse('${ApiConfig.baseUrl}/face/update-location'),
-        headers: headers,
-        body: jsonEncode({
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-        }),
-      );
-
-      if (res.statusCode == 200) {
-        final body = jsonDecode(res.body) as Map<String, dynamic>;
-        if (body['active'] == false) {
-          await prefs.remove(_kAttendanceIdKey);
-          await prefs.remove(_kCheckinTimeKey);
-          timer.cancel();
-          service.stopSelf();
-        }
-      }
-    } catch (_) {
-      // GPS / network error — retry next tick
-    }
-  });
-
-  service.on('stopService').listen((_) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kAttendanceIdKey);
-    await prefs.remove(_kCheckinTimeKey);
-    service.stopSelf();
-  });
-}
-
-@pragma('vm:entry-point')
-bool onIosBackground(ServiceInstance service) {
-  WidgetsFlutterBinding.ensureInitialized();
-  return true;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Initialize background service (call once from main.dart / app init)
-// ─────────────────────────────────────────────────────────────────────────────
-Future<void> initGpsBackgroundService() async {
-  final service = FlutterBackgroundService();
-  await service.configure(
-    androidConfiguration: AndroidConfiguration(
-      onStart: onStart,
-      autoStart: false,
-      isForegroundMode: true,
-      notificationChannelId: 'gps_attendance_channel',
-      initialNotificationTitle: 'GPS Attendance',
-      initialNotificationContent: 'Tracking your location while checked in.',
-      foregroundServiceNotificationId: 888,
-    ),
-    iosConfiguration: IosConfiguration(
-      autoStart: false,
-      onForeground: onStart,
-      onBackground: onIosBackground,
-    ),
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Helper — MySQL DECIMAL columns come back as strings over the wire
 // ─────────────────────────────────────────────────────────────────────────────
 double? _toDouble(dynamic v) {
@@ -412,10 +329,7 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
       await prefs.setInt(_kAttendanceIdKey, record.attendanceId);
       await prefs.setString(_kCheckinTimeKey, DateTime.now().toIso8601String());
 
-      // Start background location-update service
-      final service = FlutterBackgroundService();
-      await service.startService();
-
+     
       if (record.isLate && record.lateMinutes > 0) {
         _showSnack(
           'Checked in — ${_fmtDuration(record.lateMinutes)} late 🕐',
@@ -473,7 +387,9 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
 
       // Stop background service
       final service = FlutterBackgroundService();
-      service.invoke('stopService');
+      final prefs = await SharedPreferences.getInstance();
+       await prefs.remove(_kAttendanceIdKey);
+      await prefs.remove(_kCheckinTimeKey);
 
       _showSnack('Checked out. Have a great day! ✅', isError: false);
       await _fetchHistory();
@@ -1066,7 +982,7 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Location updating every 10 minutes',
+                    'Location updating every 02 minutes',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.8),
                       fontSize: 11,
@@ -1514,9 +1430,6 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
   );
 
   Widget _buildHistoryRow(Map<String, dynamic> row) {
-    debugPrint(
-      'History row work_date: ${row['work_date']}, checkin: ${row['checkin_time']}',
-    );
     final status = row['status'] as String? ?? 'completed';
     final isActive = status == 'active';
     final isLate = (row['is_late'] as num?)?.toInt() == 1;

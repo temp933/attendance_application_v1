@@ -31,7 +31,6 @@ const ALL_MODULES = [
   { key: "session_management", label: "Session Management" },
   { key: "report", label: "Reports" },
   { key: "policy_management", label: "Policy Management" },
-  { key: "holiday_management", label: "Holiday Management" },
   { key: "leave_management", label: "Leave Management" },
   { key: "payroll", label: "Payroll" },
 ];

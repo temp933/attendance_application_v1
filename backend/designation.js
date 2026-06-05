@@ -6,6 +6,7 @@ const pool = require("./config/db");
 // GET /api/designations
 router.get("/", async (req, res) => {
   const tenant_id = req.user.tenant_id;
+  const { department_id } = req.query;
   try {
     const [rows] = await pool.query(
       `SELECT d.designation_id AS id, d.designation_name, d.department_id,
@@ -13,8 +14,9 @@ router.get("/", async (req, res) => {
        FROM designation_master d
        LEFT JOIN department_master dm ON dm.department_id = d.department_id AND dm.is_deleted = 0
        WHERE d.tenant_id = ? AND d.is_deleted = 0
+       ${department_id ? "AND d.department_id = ?" : ""}
        ORDER BY d.designation_name ASC`,
-      [tenant_id],
+      department_id ? [tenant_id, department_id] : [tenant_id],
     );
     return res.json({ success: true, data: rows });
   } catch (err) {

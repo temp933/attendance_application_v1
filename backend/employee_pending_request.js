@@ -414,18 +414,19 @@ router.get("/", requireAuth, async (req, res) => {
 
     const [rows] = await db.query(
       `SELECT epr.*,
-              dm.designation_name,
-              dep.department_name,
-              r.role_name
-         FROM employee_pending_request epr
-         LEFT JOIN designation_master dm  ON dm.designation_id = epr.designation_id
-         LEFT JOIN department_master  dep ON dep.department_id = dm.department_id
-         LEFT JOIN role_master        r   ON r.role_id         = epr.role_id
-        WHERE ${where}
-        ORDER BY epr.created_at DESC`,
+          dm.designation_name,
+          dep.department_name,
+          r.role_name,
+          CONCAT(t.first_name, ' ', COALESCE(t.last_name, '')) AS reporting_to_name
+     FROM employee_pending_request epr
+     LEFT JOIN designation_master dm  ON dm.designation_id = epr.designation_id
+     LEFT JOIN department_master  dep ON dep.department_id = dm.department_id
+     LEFT JOIN role_master        r   ON r.role_id         = epr.role_id
+     LEFT JOIN employee_master    t   ON t.emp_id          = epr.reporting_to_employee_id
+    WHERE ${where}
+    ORDER BY epr.created_at DESC`,
       params,
     );
-
     return res.json({ success: true, count: rows.length, data: rows });
   } catch (err) {
     console.error(err);
@@ -445,11 +446,13 @@ router.get("/:id", requireAuth, async (req, res) => {
       `SELECT epr.*,
               dm.designation_name,
               dep.department_name,
-              r.role_name
+              r.role_name,
+              CONCAT(t.first_name, ' ', COALESCE(t.last_name, '')) AS reporting_to_name
          FROM employee_pending_request epr
          LEFT JOIN designation_master dm  ON dm.designation_id = epr.designation_id
          LEFT JOIN department_master  dep ON dep.department_id = dm.department_id
          LEFT JOIN role_master        r   ON r.role_id         = epr.role_id
+         LEFT JOIN employee_master    t   ON t.emp_id          = epr.reporting_to_employee_id
         WHERE epr.request_id = ? AND epr.tenant_id = ?
         LIMIT 1`,
       [id, tenantId],

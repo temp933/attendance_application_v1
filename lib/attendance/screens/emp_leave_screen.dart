@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../providers/api_client.dart';
+import 'holiday_management_screen.dart'; //HolidayManagementScreen(canEdit: false),
 
 // ─── Color palette ─────────────────────────────────────────────────────────
 const _primary = Color(0xFF1A56DB);
@@ -178,7 +179,6 @@ class _LeaveScreenState extends State<LeaveScreen>
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: _kMaxContentWidth),
-           
           ),
         ),
       ),
@@ -313,21 +313,56 @@ class _LeaveScreenState extends State<LeaveScreen>
   }
 
   // ── FAB ───────────────────────────────────────────────────────────────────
+  // ── FAB ───────────────────────────────────────────────────────────────────
   Widget _buildFAB() {
-    return FloatingActionButton.extended(
-      backgroundColor: _primary,
-      elevation: 4,
-      onPressed: _openApplySheet,
-      icon: const Icon(Icons.add_rounded, color: Colors.white),
-      label: const Text(
-        'Apply Leave',
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.3,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        FloatingActionButton.extended(
+          heroTag: 'fab_holidays',
+          backgroundColor: Colors.white,
+          elevation: 4,
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => HolidayManagementScreen(canEdit: false),
+            ),
+          ),
+          icon: const Icon(Icons.celebration_rounded, color: _primary),
+          label: const Text(
+            'Holidays',
+            style: TextStyle(
+              color: _primary,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: _primary.withOpacity(0.3)),
+          ),
         ),
-      ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        const SizedBox(height: 10),
+        FloatingActionButton.extended(
+          heroTag: 'fab_apply',
+          backgroundColor: _primary,
+          elevation: 4,
+          onPressed: _openApplySheet,
+          icon: const Icon(Icons.add_rounded, color: Colors.white),
+          label: const Text(
+            'Apply Leave',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ],
     );
   }
 

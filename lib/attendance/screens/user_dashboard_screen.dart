@@ -210,6 +210,7 @@ final List<_ModuleDef> _allModules = [
         }) => NormalAttendanceManagementScreen(
           tenantId: tenantId,
           authToken: authToken,
+          canEdit: canEdit,
         ),
   ),
   _ModuleDef(
@@ -276,7 +277,11 @@ final List<_ModuleDef> _allModules = [
           required tenantId,
           required authToken,
           required canEdit,
-        }) => ManageUserScreen(roleId: roleId, tenantId: tenantId),
+        }) => ManageUserScreen(
+          roleId: roleId,
+          tenantId: tenantId,
+          canEdit: canEdit,
+        ),
   ),
 
   _ModuleDef(
@@ -323,22 +328,6 @@ final List<_ModuleDef> _allModules = [
           required authToken,
           required canEdit,
         }) => LeaveApprovalScreen(),
-  ),
-
-  _ModuleDef(
-    key: 'holiday_management',
-    title: 'Holiday Management',
-    icon: Icons.calendar_today_outlined,
-    selectedIcon: Icons.calendar_today,
-    navLabel: 'Holidays',
-    builder:
-        ({
-          required employeeId,
-          required roleId,
-          required tenantId,
-          required authToken,
-          required canEdit,
-        }) => HolidayManagementScreen(),
   ),
 
   _ModuleDef(
