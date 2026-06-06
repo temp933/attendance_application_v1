@@ -814,6 +814,9 @@ app.use("/api/report", leavereportRouter);
 const attendanceSessionRouter = require("./Attendance/attendance_session_router");
 app.use("/api/attendance_sessions", authMiddleware, attendanceSessionRouter);
 
+// ── Sites
+const siteRoutes = require('./sites');
+app.use('/api/sites', siteRoutes);
 // ── Sessions
 const sessionsRouter = require("./sessions");
 app.use("/api/admin", sessionsRouter);

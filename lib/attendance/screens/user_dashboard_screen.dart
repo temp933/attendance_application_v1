@@ -24,8 +24,8 @@ import './Attendance screens/normal_attendance_management_screen.dart';
 import './Attendance screens/gps_attendance_management_screen.dart';
 import './Attendance screens/face_gps_attendance_management_screen.dart';
 import './policy_management_screen.dart';
-import './report_management_screen.dart';
-import './holiday_management_screen.dart';
+import './report_management_screen.dart'; 
+import './manage_location.dart';
 // ── Employee screens ──────────────────────────────────────────────────────────
 import 'emp_home_screen.dart';
 import 'emp_leave_screen.dart';
@@ -374,6 +374,22 @@ final List<_ModuleDef> _allModules = [
           required authToken,
           required canEdit,
         }) => PolicyManagementScreen(authToken: authToken, tenantId: tenantId),
+  ),
+
+  _ModuleDef(
+    key: 'Site_management',
+    title: 'Site Management',
+    icon: Icons.lock_clock_outlined,
+    selectedIcon: Icons.lock_clock,
+    navLabel: 'Site',
+    builder:
+        ({
+          required employeeId,
+          required roleId,
+          required tenantId,
+          required authToken,
+          required canEdit,
+        }) => ManageLocationPage(),
   ),
 ];
 

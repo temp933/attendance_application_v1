@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../services/api_service.dart';
+import '../providers/api_client.dart';
 import 'responsive_utils.dart';
 
 // ─── Model ────────────────────────────────────────────────────────────────────
@@ -134,23 +134,33 @@ class _EmployeeAssignmentsScreenState extends State<EmployeeAssignmentsScreen>
       _errorMessage = null;
     });
     try {
-      final raw = await ApiService.getSites();
+      final res = await ApiClient.get('/sites');
       if (!mounted) return;
-      final now = DateTime.now();
-      final sites = (raw)
-          .map((e) => SiteModel.fromJson(e as Map<String, dynamic>))
-          .where((s) {
-            if (s.endDate == null) return true;
-            return !s.endDate!.isBefore(DateTime(now.year, now.month, now.day));
-          })
-          .toList();
-      setState(() {
-        _sites = sites;
-        _isLoading = false;
-      });
-      _animCtrl.forward(from: 0);
+      if (res.statusCode == 200) {
+        final raw = jsonDecode(res.body) as List;
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final sites = raw
+            .map((e) => SiteModel.fromJson(e as Map<String, dynamic>))
+            .where((s) {
+              if (s.endDate == null) return true;
+              return !s.endDate!.isBefore(today);
+            })
+            .toList();
+        setState(() {
+          _sites = sites;
+          _isLoading = false;
+        });
+        _animCtrl.forward(from: 0);
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Server error (${res.statusCode}). Try again.';
+        });
+      }
     } catch (e) {
       if (!mounted) return;
+      debugPrint('_fetchSites error: $e');
       setState(() {
         _isLoading = false;
         _errorMessage = 'Unable to load sites. Check your connection.';

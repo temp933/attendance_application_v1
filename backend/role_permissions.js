@@ -32,6 +32,7 @@ const ALL_MODULES = [
   { key: "report", label: "Reports" },
   { key: "policy_management", label: "Policy Management" },
   { key: "leave_management", label: "Leave Management" },
+   { key: "site_management", label: "Site Management" },
   { key: "payroll", label: "Payroll" },
 ];
 

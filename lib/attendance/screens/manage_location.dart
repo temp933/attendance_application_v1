@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'add_location_dialog.dart';
 import '../providers/api_client.dart';
+import '../providers/api_config.dart';
 
 class ManageLocationPage extends StatefulWidget {
   const ManageLocationPage({super.key});
@@ -27,17 +28,19 @@ class _ManageLocationPageState extends State<ManageLocationPage> {
   Future<void> loadSites() async {
     try {
       final res = await ApiClient.get('/sites');
-
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-
         setState(() {
           sites = List<Map<String, dynamic>>.from(data);
           loading = false;
         });
+      } else {
+        debugPrint("loadSites error: ${res.statusCode} ${res.body}");
+        setState(() => loading = false);
       }
     } catch (e) {
-      debugPrint("Load error: $e");
+      debugPrint("loadSites exception: $e");
+      setState(() => loading = false);
     }
   }
 
@@ -51,30 +54,26 @@ class _ManageLocationPageState extends State<ManageLocationPage> {
     DateTime end,
   ) async {
     final closedPoints = [...points];
-
     if (closedPoints.first != closedPoints.last) {
       closedPoints.add(closedPoints.first);
     }
-
-    final body = jsonEncode({
-      "site_name": name,
-      "polygon_json": closedPoints
-          .map((e) => {"lat": e.latitude, "lng": e.longitude})
-          .toList(),
-      "start_date": start.toIso8601String().split("T")[0],
-      "end_date": end.toIso8601String().split("T")[0],
-    });
-
-    await ApiClient.post('/sites', {
-      "site_name": name,
-      "polygon_json": closedPoints
-          .map((e) => {"lat": e.latitude, "lng": e.longitude})
-          .toList(),
-      "start_date": start.toIso8601String().split("T")[0],
-      "end_date": end.toIso8601String().split("T")[0],
-    });
-
-    loadSites();
+    try {
+      final res = await ApiClient.post('/sites', {
+        "site_name": name,
+        "polygon_json": closedPoints
+            .map((e) => {"lat": e.latitude, "lng": e.longitude})
+            .toList(),
+        "start_date": start.toIso8601String().split("T")[0],
+        "end_date": end.toIso8601String().split("T")[0],
+      });
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        loadSites();
+      } else {
+        debugPrint("saveSite error: ${res.statusCode} ${res.body}");
+      }
+    } catch (e) {
+      debugPrint("saveSite exception: $e");
+    }
   }
 
   // ─────────────────────────────
@@ -88,29 +87,26 @@ class _ManageLocationPageState extends State<ManageLocationPage> {
     DateTime end,
   ) async {
     final closedPoints = [...points];
-
     if (closedPoints.first != closedPoints.last) {
       closedPoints.add(closedPoints.first);
     }
-
-    final body = jsonEncode({
-      "site_name": name,
-      "polygon_json": closedPoints
-          .map((e) => {"lat": e.latitude, "lng": e.longitude})
-          .toList(),
-      "start_date": start.toIso8601String().split("T")[0],
-      "end_date": end.toIso8601String().split("T")[0],
-    });
-
-    await ApiClient.put('/sites/$id', {
-      "site_name": name,
-      "polygon_json": closedPoints
-          .map((e) => {"lat": e.latitude, "lng": e.longitude})
-          .toList(),
-      "start_date": start.toIso8601String().split("T")[0],
-      "end_date": end.toIso8601String().split("T")[0],
-    });
-    loadSites();
+    try {
+      final res = await ApiClient.put('/sites/$id', {
+        "site_name": name,
+        "polygon_json": closedPoints
+            .map((e) => {"lat": e.latitude, "lng": e.longitude})
+            .toList(),
+        "start_date": start.toIso8601String().split("T")[0],
+        "end_date": end.toIso8601String().split("T")[0],
+      });
+      if (res.statusCode == 200) {
+        loadSites();
+      } else {
+        debugPrint("updateSite error: ${res.statusCode} ${res.body}");
+      }
+    } catch (e) {
+      debugPrint("updateSite exception: $e");
+    }
   }
 
   // ─────────────────────────────

@@ -554,10 +554,10 @@ class _MatrixTabState extends State<_MatrixTab>
     const nameW = 170.0;
     const dayW = 28.0;
     const summaryW = 62.0;
+    const hdrTopH = 18.0;
+    const hdrBotH = 22.0;
+    const hdrTotalH = hdrTopH + 1 + hdrBotH; // 41px — includes inner divider
 
-    // 10 summary cols: Present, Absent, Leave, CompOffDays,
-    //                  C.Earned, C.Used, C.Expired, Lv App, Lv Rej, Att%
-    // When comp-off disabled: drop C.Off Earned, C.Off Used, C.Off Expired (3 cols)
     final int summaryCols = _compOffEnabled ? 10 : 7;
     final totalW =
         snoW +
@@ -565,36 +565,74 @@ class _MatrixTabState extends State<_MatrixTab>
         nameW +
         (_dates.length * dayW) +
         (summaryCols * summaryW) +
-        (_dates.length + summaryCols + 2);
+        (_dates.length + summaryCols + 2) -
+        2; // subtract outer border width (1px each side)
 
     Widget div() => Container(width: 1, color: _divCol);
     Widget hdiv(double w) => Container(height: 1, width: w, color: _divCol);
 
-    Widget dayHdr(MatrixDate d, bool isName) {
+    Widget fixedHdr(String label, double w, {bool center = true}) => Container(
+      width: w,
+      constraints: const BoxConstraints(minHeight: 41),
+      color: _hdr2,
+      alignment: center ? Alignment.center : Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 8,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+
+    // Day columns: day-name sub-row on top, day-number sub-row below
+    Widget dayCol(MatrixDate d) {
       final bg = d.isHoliday
           ? const Color(0xFF1D4ED8)
           : d.isWeekend
           ? _purple
           : _hdr2;
-      return Container(
-        width: dayW,
-        height: isName ? 18 : 22,
-        color: bg,
-        alignment: Alignment.center,
-        child: Text(
-          isName ? d.dayLabel : '${d.dayOfMonth}',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 8,
-            fontWeight: FontWeight.w700,
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: dayW,
+            height: hdrTopH,
+            color: bg,
+            alignment: Alignment.center,
+            child: Text(
+              d.dayLabel,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
-        ),
+          Container(height: 1, width: dayW, color: _divCol),
+          Container(
+            width: dayW,
+            height: hdrBotH,
+            color: bg,
+            alignment: Alignment.center,
+            child: Text(
+              '${d.dayOfMonth}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       );
     }
 
+    // Summary columns span the full header height
     Widget summaryHdr(String label, {Color bg = _hdr2}) => Container(
       width: summaryW,
-      height: 40,
       color: bg,
       alignment: Alignment.center,
       child: Text(
@@ -608,9 +646,11 @@ class _MatrixTabState extends State<_MatrixTab>
       ),
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+    return Center(
+      child: IntrinsicWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
         _TableHeader(title: 'Attendance Matrix', count: rows.length),
         Container(
           decoration: BoxDecoration(
@@ -624,64 +664,47 @@ class _MatrixTabState extends State<_MatrixTab>
             behavior: _DragScrollBehavior(),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(right: 1),
               child: Column(
                 children: [
-                  // ── Day-name top row ──────────────────────────────────
-                  Row(
-                    children: [
-                      Container(width: snoW, height: 18, color: _hdr1),
-                      div(),
-                      Container(width: empIdW, height: 18, color: _hdr1),
-                      div(),
-                      Container(width: nameW, height: 18, color: _hdr1),
-                      div(),
-                      for (int i = 0; i < _dates.length; i++) ...[
-                        dayHdr(_dates[i], true),
-                        if (i < _dates.length - 1) div(),
-                      ],
-                      div(),
-                      for (int c = 0; c < summaryCols; c++) ...[
-                        Container(width: summaryW, height: 18, color: _hdr1),
-                        if (c < summaryCols - 1) div(),
-                      ],
-                    ],
-                  ),
-                  hdiv(totalW),
-                  // ── Column header row ─────────────────────────────────
-                  Row(
-                    children: [
-                      _hdrCell('S.No', snoW, 22),
-                      div(),
-                      _hdrCell('Emp ID', empIdW, 22),
-                      div(),
-                      _hdrCell('Employee Name', nameW, 22, center: false),
-                      div(),
-                      for (int i = 0; i < _dates.length; i++) ...[
-                        dayHdr(_dates[i], false),
-                        if (i < _dates.length - 1) div(),
-                      ],
-                      div(),
-                      summaryHdr('Present'),
-                      div(),
-                      summaryHdr('Absent'),
-                      div(),
-                      summaryHdr('Leave'),
-                      if (_compOffEnabled) ...[
+                  // ── Single unified header row ─────────────────────────
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        fixedHdr('S.No', snoW),
                         div(),
-                        summaryHdr('C.Off\nEarned', bg: _orange),
+                        fixedHdr('Emp ID', empIdW),
                         div(),
-                        summaryHdr('C.Off\nUsed', bg: _amber),
+                        fixedHdr('Employee Name', nameW, center: false),
                         div(),
-                        summaryHdr('C.Off\nExpired', bg: _red),
+                        for (int i = 0; i < _dates.length; i++) ...[
+                          dayCol(_dates[i]),
+                          if (i < _dates.length - 1) div(),
+                        ],
+                        div(),
+                        summaryHdr('Present'),
+                        div(),
+                        summaryHdr('Absent'),
+                        div(),
+                        summaryHdr('Leave'),
+                        if (_compOffEnabled) ...[
+                          div(),
+                          summaryHdr('C.Off\nEarned', bg: _orange),
+                          div(),
+                          summaryHdr('C.Off\nUsed', bg: _amber),
+                          div(),
+                          summaryHdr('C.Off\nExpired', bg: _red),
+                        ],
+                        div(),
+                        summaryHdr('Lv\nApp', bg: _accent),
+                        div(),
+                        summaryHdr('Lv\nRej', bg: _red),
+                        div(),
+                        summaryHdr('Att %'),
                       ],
-                      div(),
-                      summaryHdr('Lv\nApp', bg: _accent),
-                      div(),
-                      summaryHdr('Lv\nRej', bg: _red),
-                      div(),
-                      summaryHdr('Att %'),
-                    ],
-                  ),
+                    ),
+                  ), // IntrinsicHeight
                   hdiv(totalW),
                   // ── Data rows ─────────────────────────────────────────
                   for (int i = 0; i < rows.length; i++) ...[
@@ -703,25 +726,10 @@ class _MatrixTabState extends State<_MatrixTab>
           ),
         ),
       ],
-    );
-  }
-
-  Widget _hdrCell(String label, double w, double h, {bool center = true}) =>
-      Container(
-        width: w,
-        height: h,
-        color: _hdr2,
-        alignment: center ? Alignment.center : Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 8,
-            fontWeight: FontWeight.w700,
-          ),
         ),
-      );
+      ), // IntrinsicWidth
+    ); // Center
+  }
 
   Widget _matrixRow(
     MatrixEmp emp,
