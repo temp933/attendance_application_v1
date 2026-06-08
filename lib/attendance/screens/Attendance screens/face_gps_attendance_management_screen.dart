@@ -61,6 +61,8 @@ class FaceGpsAttendanceRecord {
   final double? checkoutLng;
   final String attendanceMode;
   final String? remarks;
+  final double? lastKnownLat;
+  final double? lastKnownLng;
 
   FaceGpsAttendanceRecord({
     required this.attendanceId,
@@ -80,6 +82,8 @@ class FaceGpsAttendanceRecord {
     this.checkoutLng,
     required this.attendanceMode,
     this.remarks,
+    this.lastKnownLat,
+    this.lastKnownLng,
   });
 
   factory FaceGpsAttendanceRecord.fromJson(Map<String, dynamic> j) {
@@ -108,6 +112,8 @@ class FaceGpsAttendanceRecord {
       checkoutLng: parseCoord(j['checkout_longitude']),
       attendanceMode: j['attendance_mode'] ?? 'gps',
       remarks: j['remarks'],
+      lastKnownLat: parseCoord(j['last_known_latitude']),
+      lastKnownLng: parseCoord(j['last_known_longitude']),
     );
   }
 }
@@ -429,13 +435,11 @@ class _FaceGpsAttendanceManagementScreenState
           padding: const EdgeInsets.fromLTRB(20, 0, 8, 0),
           child: Row(
             children: [
-              
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                     
                     Text(
                       _isToday
                           ? 'Today — ${DateFormat('dd MMM yyyy').format(_selectedDate)}'
@@ -529,7 +533,6 @@ class _FaceGpsAttendanceManagementScreenState
                   ),
                 ),
               ),
-               
             ],
           ),
         ),
@@ -1499,6 +1502,62 @@ class _LocationRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          // ── Live button ───────────────────────────────────────────────────
+          if (session.lastKnownLat != null ||
+              (isLive && session.checkinLat != null)) ...[
+            GestureDetector(
+              onTap: () async {
+                final lat = session.lastKnownLat ?? session.checkinLat!;
+                final lng = session.lastKnownLng ?? session.checkinLng!;
+                final uri = Uri.parse(
+                  'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
+                );
+                if (!await launchUrl(
+                  uri,
+                  mode: LaunchMode.externalApplication,
+                )) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Could not open map.')),
+                    );
+                  }
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF9C3),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(
+                    color: const Color(0xFFF59E0B).withOpacity(0.4),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.my_location_rounded,
+                      size: 13,
+                      color: Color(0xFFF59E0B),
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'Live',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFB45309),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
           // ── Pin button — opens inline map sheet ───────────────────────────
           GestureDetector(
             onTap: () => _showMap(context),

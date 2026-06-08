@@ -329,7 +329,6 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
       await prefs.setInt(_kAttendanceIdKey, record.attendanceId);
       await prefs.setString(_kCheckinTimeKey, DateTime.now().toIso8601String());
 
-     
       if (record.isLate && record.lateMinutes > 0) {
         _showSnack(
           'Checked in — ${_fmtDuration(record.lateMinutes)} late 🕐',
@@ -388,7 +387,7 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
       // Stop background service
       final service = FlutterBackgroundService();
       final prefs = await SharedPreferences.getInstance();
-       await prefs.remove(_kAttendanceIdKey);
+      await prefs.remove(_kAttendanceIdKey);
       await prefs.remove(_kCheckinTimeKey);
 
       _showSnack('Checked out. Have a great day! ✅', isError: false);
@@ -522,7 +521,6 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                       sliver: SliverList(
                         delegate: SliverChildListDelegate([
-                          _buildHeader(),
                           const SizedBox(height: 14),
                           if (_policy != null) ...[
                             _buildPolicyBanner(),
@@ -611,106 +609,6 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
   //     ],
   //   );
   // }
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        // Title (takes all remaining space)
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                DateFormat('EEE, d MMM yyyy').format(_now),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade500,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'GPS Attendance',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1A1A2E),
-                  letterSpacing: -0.3,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Clock
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.access_time_rounded,
-                size: 15,
-                color: Color(0xFF5C6BC0),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                DateFormat('hh:mm:ss a').format(_now),
-                style: const TextStyle(
-                  fontFeatures: [FontFeature.tabularFigures()],
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A2E),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(width: 10),
-
-        // History button
-        GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const AttendanceHistoryScreen(mode: 'gps_face'),
-              ),
-            );
-          },
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.history_rounded,
-              size: 20,
-              color: Color(0xFF5C6BC0),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
   // ── Policy banner ──────────────────────────────────────────────────────────
   Widget _buildPolicyBanner() {
@@ -731,23 +629,7 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.gps_fixed_rounded,
-            size: 16,
-            color: Colors.indigo.shade400,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'GPS Mode',
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color: Colors.indigo.shade400,
-              letterSpacing: 0.3,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Container(width: 1, height: 14, color: Colors.grey.shade300),
+          
           const SizedBox(width: 10),
           Icon(Icons.login_rounded, size: 13, color: Colors.green.shade600),
           const SizedBox(width: 4),
@@ -1364,15 +1246,41 @@ class _FaceGpsAttendanceScreenState extends State<FaceGpsAttendanceScreen>
                 ),
               ],
             ),
-            InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: _fetchHistory,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  Icons.refresh_rounded,
-                  size: 18,
-                  color: Colors.indigo.shade300,
+            GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AttendanceHistoryScreen(mode: 'gps'),
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.indigo.shade100),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.history_rounded,
+                      size: 13,
+                      color: Colors.indigo.shade500,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'History',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.indigo.shade600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

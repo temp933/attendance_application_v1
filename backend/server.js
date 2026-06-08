@@ -817,6 +817,11 @@ app.use("/api/attendance_sessions", authMiddleware, attendanceSessionRouter);
 // ── Sites
 const siteRoutes = require('./sites');
 app.use('/api/sites', siteRoutes);
+
+// site entry routes
+const siteEntryRoutes = require('./site_entry_routes');
+app.use('/api/site-entry', siteEntryRoutes);
+
 // ── Sessions
 const sessionsRouter = require("./sessions");
 app.use("/api/admin", sessionsRouter);

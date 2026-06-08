@@ -124,11 +124,11 @@ async function fetchAttendanceDetail(tenantId, date, mode = "normal") {
   const [rows] = await db.query(
     `SELECT
        ea.employee_id,
-       TIME_FORMAT(ea.checkin_time,  '%H:%i') AS check_in,
-       TIME_FORMAT(ea.checkout_time, '%H:%i') AS check_out,
+       DATE_FORMAT(ea.checkin_time,  '%Y-%m-%d %H:%i:%s') AS check_in,
+       DATE_FORMAT(ea.checkout_time, '%Y-%m-%d %H:%i:%s') AS check_out,
        ea.is_late,
        ea.late_minutes,
-       TIMESTAMPDIFF(MINUTE, ea.checkin_time, ea.checkout_time) AS worked_minutes
+       TIMESTAMPDIFF(SECOND, ea.checkin_time, ea.checkout_time) AS worked_seconds
      FROM employee_attendance ea
      WHERE ea.tenant_id = ? AND ea.work_date = ?
        AND ea.attendance_mode = ? AND ea.checkin_time IS NOT NULL`,
@@ -253,26 +253,27 @@ function isWeekendDay(dateStr, policy) {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/attendance/report/daily
 // ─────────────────────────────────────────────────────────────────────────────
-
 router.get("/attendance/report/daily", async (req, res) => {
   const tenant_id = getTenantId(req);
   if (!tenant_id) return send(res, 401, false, "Unauthorized");
 
   const { date, department_id, mode } = req.query;
-  const attendanceMode = (mode ?? "").trim() || null;
+  const attendanceMode = (mode ?? "").trim() || "normal";
+
   if (!date || !isValidDate(date))
     return send(res, 400, false, "Invalid or missing date (YYYY-MM-DD)");
 
   const deptId = department_id ? parseInt(department_id, 10) : null;
 
   try {
-    // Phase 1 — fetch everything that doesn't need empIds
+    const isSiteEntry = attendanceMode === "site_entry";
+
+    // Phase 1 — common fetches
     const [
       policy,
       employees,
       holidayMap,
       leaveMap,
-      attendanceDetail,
       compOffEarnedSet,
       compOffUsedMap,
     ] = await Promise.all([
@@ -280,12 +281,26 @@ router.get("/attendance/report/daily", async (req, res) => {
       fetchEmployees(tenant_id, deptId),
       fetchHolidayMapByDate(tenant_id, date, date),
       fetchLeaveMap(tenant_id, date, date),
-      fetchAttendanceDetail(tenant_id, date, attendanceMode ?? "normal"),
       fetchCompOffSet(tenant_id, date),
       fetchCompOffUsedMap(tenant_id, date, date),
     ]);
 
-    // Phase 2 — summary maps that need the emp list
+    // Phase 1b — mode-specific attendance fetch
+    const [attendanceDetail, siteSessionsMap] = await Promise.all([
+      isSiteEntry
+        ? Promise.resolve(new Map()) // not used for site_entry status calc
+        : fetchAttendanceDetail(tenant_id, date, attendanceMode),
+      isSiteEntry
+        ? fetchSiteSessionsForDay(tenant_id, date)
+        : Promise.resolve(new Map()),
+    ]);
+
+    // For site_entry: an employee is "present" if they have ≥1 session
+    const sitePresenceSet = isSiteEntry
+      ? new Set(siteSessionsMap.keys())
+      : null;
+
+    // Phase 2 — summary maps
     const empIds = employees.map((e) => e.emp_id);
     const [compOffSummaryMap, leaveSummaryMap] = await Promise.all([
       fetchCompOffSummaryMap(tenant_id, empIds),
@@ -297,8 +312,11 @@ router.get("/attendance/report/daily", async (req, res) => {
     const isWeekendDay_ = isWeekendDay(date, policy);
 
     const data = employees.map((emp) => {
-      const detail = attendanceDetail.get(emp.emp_id);
-      const isPresent = !!detail;
+      const isPresent = isSiteEntry
+        ? sitePresenceSet.has(emp.emp_id)
+        : !!attendanceDetail.get(emp.emp_id);
+
+      const detail = isSiteEntry ? null : attendanceDetail.get(emp.emp_id);
       const isLeave = leaveMap.get(emp.emp_id)?.has(date) ?? false;
       const isCompOff = compOffUsedMap.get(emp.emp_id)?.has(date) ?? false;
 
@@ -330,24 +348,51 @@ router.get("/attendance/report/daily", async (req, res) => {
         rejected: 0,
       };
 
+      // Aggregate worked_minutes from sessions for site_entry
+      let workedMinutes = 0;
+      if (isSiteEntry) {
+        const sessions = siteSessionsMap.get(emp.emp_id) ?? [];
+        for (const s of sessions) {
+          if (s.total_work_time) {
+            const [h, m, sec] = s.total_work_time.split(":").map(Number);
+            workedMinutes +=
+              (h || 0) * 60 + (m || 0) + Math.floor((sec || 0) / 60);
+          }
+        }
+      } else {
+        workedMinutes = detail
+          ? Math.floor((detail.worked_seconds ?? 0) / 60)
+          : 0;
+      }
+
+      // For site_entry, take late from the first session (earliest check-in)
+      const firstSession = isSiteEntry
+        ? ((siteSessionsMap.get(emp.emp_id) ?? [])[0] ?? null)
+        : null;
+
       return {
         emp_id: emp.emp_id,
         name: emp.employee_name,
         department: emp.department,
         check_in: detail?.check_in ?? null,
         check_out: detail?.check_out ?? null,
-        worked_minutes: detail?.worked_minutes ?? 0,
-        status: statusLabel,
-        is_late: detail?.is_late === 1,
-        late_minutes: detail?.late_minutes ?? 0,
+        worked_minutes: workedMinutes,
+        worked_seconds: isSiteEntry ? null : (detail?.worked_seconds ?? null),
+        is_late: isSiteEntry
+          ? (firstSession?.is_late ?? false)
+          : detail?.is_late === 1 || false,
+        late_minutes: isSiteEntry
+          ? (firstSession?.late_minutes ?? 0)
+          : (detail?.late_minutes ?? 0),
         comp_off_earned: compOffEarnedSet.has(emp.emp_id),
         holiday_name: isHolidayDay ? holidayName : null,
-        // ── new summary fields ──────────────────────────────────────────
         total_comp_off_earned: coSummary.earned,
         total_comp_off_used: coSummary.used,
         total_comp_off_expired: coSummary.expired,
         total_leave_approved: lvSummary.approved,
         total_leave_rejected: lvSummary.rejected,
+        // sessions only populated for site_entry mode
+        sessions: isSiteEntry ? (siteSessionsMap.get(emp.emp_id) ?? []) : [],
       };
     });
 
@@ -365,7 +410,6 @@ router.get("/attendance/report/daily", async (req, res) => {
     return send(res, 500, false, "Server error");
   }
 });
-
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/attendance/report/matrix
 // ─────────────────────────────────────────────────────────────────────────────
@@ -505,4 +549,48 @@ router.get("/attendance/report/matrix", async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/attendance/report/daily  (site_entry mode — sessions per employee)
+// Already handled by the existing /daily route for status/stats, but the
+// Flutter side also needs sessions[]. We extend the existing daily handler:
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function fetchSiteSessionsForDay(tenantId, date) {
+  const [rows] = await db.query(
+    `SELECT
+       ea.employee_id,
+       sm.site_name,
+       DATE_FORMAT(ea.checkin_time,  '%Y-%m-%d %H:%i:%s') AS checkin_time,
+       DATE_FORMAT(ea.checkout_time, '%Y-%m-%d %H:%i:%s') AS checkout_time,
+       ea.status,
+       ea.total_work_time,
+       ea.total_pause_secs,
+       ea.is_late,
+       ea.late_minutes
+     FROM employee_attendance ea
+     LEFT JOIN sites sm ON sm.id = ea.site_id AND sm.tenant_id = ea.tenant_id
+     WHERE ea.tenant_id = ?
+       AND ea.work_date = ?
+       AND ea.attendance_mode = 'site_entry'
+       AND ea.checkin_time IS NOT NULL
+     ORDER BY ea.employee_id, ea.checkin_time ASC`,
+    [tenantId, date],
+  );
+  // Group sessions by employee_id
+  const map = new Map();
+  for (const r of rows) {
+    if (!map.has(r.employee_id)) map.set(r.employee_id, []);
+    map.get(r.employee_id).push({
+      site_name: r.site_name ?? null,
+      checkin_time: r.checkin_time ?? null,
+      checkout_time: r.checkout_time ?? null,
+      total_work_time: r.total_work_time ?? null,
+      status: r.status ?? "completed",
+      total_pause_secs: Number(r.total_pause_secs ?? 0),
+      is_late: r.is_late === 1,
+      late_minutes: Number(r.late_minutes ?? 0),
+    });
+  }
+  return map;
+}
 module.exports = router;

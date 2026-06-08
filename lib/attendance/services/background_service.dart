@@ -8,12 +8,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'api_service.dart';
 import 'site_cache.dart';
 
 const String kChannelId = 'attendance_tracking';
 const String kNotifTitle = 'Attendance Tracking';
 const int kNotifId = 888;
+
+// Keys used across the background isolate
+const String _kSiteEntryActiveKey = 'site_entry_has_active_session';
+const String _kSiteEntryLastPingKey = 'site_entry_last_ping_ms';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LocalDB
@@ -177,7 +183,6 @@ class SyncWorker {
 // initBackgroundService
 // ─────────────────────────────────────────────────────────────────────────────
 Future<void> initBackgroundService() async {
-  // ── Guard: don't configure if no session exists ───────────────────────
   final prefs = await SharedPreferences.getInstance();
   final int? empId =
       prefs.getInt('employee_id') ??
@@ -234,15 +239,12 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // onServiceStart
+// All timers are declared at function scope so shutdown() can cancel them.
 // ─────────────────────────────────────────────────────────────────────────────
 @pragma('vm:entry-point')
 void onServiceStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
-  // ── EARLY EXIT: check employee_id before touching any plugins ─────────────
-  // This fires on cold boot when Android auto-restarts the foreground service.
-  // Initializing flutter_local_notifications etc. in a background isolate
-  // without a valid session causes the "main isolate only" crash.
   final prefs = await SharedPreferences.getInstance();
   final int? empId =
       prefs.getInt('employee_id') ??
@@ -258,7 +260,7 @@ void onServiceStart(ServiceInstance service) async {
     return;
   }
 
-  // ── Only initialize heavy plugins after we know session is valid ──────────
+  // ── Heavy plugin init (only after session confirmed) ───────────────────
   final notifPlugin = FlutterLocalNotificationsPlugin();
   if (defaultTargetPlatform == TargetPlatform.android) {
     await notifPlugin.initialize(
@@ -303,6 +305,7 @@ void onServiceStart(ServiceInstance service) async {
   String workDate = _todayStr();
   _fire(SyncWorker.flush());
 
+  // ── Timers — declared at function scope so shutdown() can reach them ────
   final syncTimer = Timer.periodic(
     const Duration(minutes: 1),
     (_) => _fire(SyncWorker.flush()),
@@ -312,75 +315,46 @@ void onServiceStart(ServiceInstance service) async {
     (_) => _fire(SiteCache.sync()),
   );
 
-  // ── GPS-face attendance location update (every 2 min) ─────────────────────
-  Timer? gpsAttendanceTimer;
+  // ── GPS-face attendance location update (every 2 min) ──────────────────
+  // FIX: declared here at function scope (was local inside the block before)
+  final Timer gpsAttendanceTimer = Timer.periodic(
+    const Duration(minutes: 2),
+    (_) => _fire(_runGpsFaceUpdate(prefs, updateNotif)),
+  );
 
-  // ── Print current location every 1 minute ─────────────────────────────────
-  Timer.periodic(const Duration(minutes: 1), (_) async {
+  // ── Site-entry location update (every 2 min, offset by 60 s) ───────────
+  // Uses a 60-second initial delay so the two pings don't fire simultaneously.
+  Timer? siteEntryTimer;
+  Future<void> startSiteEntryTimer() async {
+    await Future.delayed(const Duration(seconds: 60));
+    siteEntryTimer = Timer.periodic(
+      const Duration(minutes: 2),
+      (_) => _fire(_runSiteEntryUpdate(prefs, updateNotif, service)),
+    );
+  }
+
+  _fire(startSiteEntryTimer());
+
+  // ── 1-min location logger ───────────────────────────────────────────────
+  final locationLogTimer = Timer.periodic(const Duration(minutes: 1), (
+    _,
+  ) async {
     try {
-      final position = await Geolocator.getCurrentPosition(
+      final pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       ).timeout(const Duration(seconds: 15));
       debugPrint(
         '[Location] ${DateTime.now().toIso8601String()} '
-        '| lat=${position.latitude.toStringAsFixed(6)} '
-        'lng=${position.longitude.toStringAsFixed(6)} '
-        'acc=${position.accuracy.toStringAsFixed(1)}m',
+        '| lat=${pos.latitude.toStringAsFixed(6)} '
+        'lng=${pos.longitude.toStringAsFixed(6)} '
+        'acc=${pos.accuracy.toStringAsFixed(1)}m',
       );
     } catch (e) {
-      debugPrint('[Location] Failed to get location: $e');
+      debugPrint('[Location] Failed: $e');
     }
   });
 
-  Future<void> runGpsAttendanceUpdate() async {
-    final attendanceId = prefs.getInt('gps_active_attendance_id');
-    if (attendanceId == null) return;
-
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      ).timeout(const Duration(seconds: 15));
-
-      final token = prefs.getString('session_token') ?? '';
-      final tenantId = prefs.getString('tenantId') ?? '';
-      final baseUrl =
-          prefs.getString('bg_base_url') ?? 'http://192.168.29.103:5000/api';
-
-      debugPrint(
-        '[GPS-face] baseUrl=$baseUrl token=${token.isNotEmpty ? "SET" : "EMPTY"} tenantId=$tenantId',
-      );
-
-      if (baseUrl.isEmpty || token.isEmpty) return;
-
-      final res = await ApiService.patchGpsLocation(
-        baseUrl: baseUrl,
-        token: token,
-        tenantId: tenantId,
-        latitude: position.latitude,
-        longitude: position.longitude,
-      );
-
-      if (res == false) {
-        await prefs.remove('gps_active_attendance_id');
-        await prefs.remove('gps_checkin_time');
-        gpsAttendanceTimer?.cancel();
-        debugPrint('[GPS-face] Session ended server-side, timer stopped');
-      } else {
-        debugPrint(
-          '[GPS-face] Location updated: ${position.latitude}, ${position.longitude}',
-        );
-      }
-    } catch (e) {
-      debugPrint('[GPS-face] Location update failed: $e');
-    }
-  }
-
-  gpsAttendanceTimer = Timer.periodic(
-    const Duration(minutes: 2),
-    (_) => _fire(runGpsAttendanceUpdate()),
-  );
-
-  // ── Shutdown helper ────────────────────────────────────────────────────────
+  // ── Shutdown helper ────────────────────────────────────────────────────
   Future<void> shutdown({
     required bool writeEndSession,
     required String endReason,
@@ -414,15 +388,20 @@ void onServiceStart(ServiceInstance service) async {
     await prefs.remove('current_site_id_$empId');
     await prefs.remove('tracking_active_$empId');
     await prefs.remove('session_id_$empId');
+    // Clear site_entry active flag
+    await prefs.remove(_kSiteEntryActiveKey);
 
     if (clearAllData) {
       await SiteCache.clear();
       await LocalDB.clearAll();
     }
 
+    // Cancel ALL timers — now possible because all are in scope
     syncTimer.cancel();
     siteRefreshTimer.cancel();
-    gpsAttendanceTimer?.cancel();
+    gpsAttendanceTimer.cancel();
+    siteEntryTimer?.cancel();
+    locationLogTimer.cancel();
     SiteCache.dispose();
     await notifPlugin.cancel(id: kNotifId);
     service.invoke(doneEvent, {});
@@ -430,8 +409,8 @@ void onServiceStart(ServiceInstance service) async {
     debugPrint('[Service] STOPPED');
   }
 
-  // ── END SESSION ────────────────────────────────────────────────────────────
-  service.on('end_session').listen((e) async {
+  // ── END SESSION ────────────────────────────────────────────────────────
+  service.on('end_session').listen((_) async {
     await shutdown(
       writeEndSession: true,
       endReason: 'manual_end',
@@ -440,7 +419,7 @@ void onServiceStart(ServiceInstance service) async {
     );
   });
 
-  // ── FORCE STOP (logout) ────────────────────────────────────────────────────
+  // ── FORCE STOP (logout) ───────────────────────────────────────────────
   service.on('force_stop').listen((_) async {
     await shutdown(
       writeEndSession: true,
@@ -450,7 +429,7 @@ void onServiceStart(ServiceInstance service) async {
     );
   });
 
-  // ── GPS smoothing ──────────────────────────────────────────────────────────
+  // ── GPS smoothing ──────────────────────────────────────────────────────
   final List<({double lat, double lng})> hist = [];
 
   ({double lat, double lng}) smooth(Position pos) {
@@ -472,8 +451,8 @@ void onServiceStart(ServiceInstance service) async {
     return Geolocator.distanceBetween(lastLat!, lastLng!, lat, lng) > 8;
   }
 
-  // ── Location settings ──────────────────────────────────────────────────────
-  LocationSettings locationSettings;
+  // ── Location settings ──────────────────────────────────────────────────
+  final LocationSettings locationSettings;
   if (defaultTargetPlatform == TargetPlatform.iOS) {
     locationSettings = AppleSettings(
       accuracy: LocationAccuracy.bestForNavigation,
@@ -498,7 +477,7 @@ void onServiceStart(ServiceInstance service) async {
     );
   }
 
-  // ── GPS stream ─────────────────────────────────────────────────────────────
+  // ── GPS stream ─────────────────────────────────────────────────────────
   Geolocator.getPositionStream(locationSettings: locationSettings).listen(
     (Position pos) async {
       if (pos.accuracy > 150) return;
@@ -618,22 +597,190 @@ void onServiceStart(ServiceInstance service) async {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GPS-face background ping (every 2 min)
+// Extracted to a top-level function so it is not a closure capturing the
+// local Timer variable — this was the original scoping bug.
+// ─────────────────────────────────────────────────────────────────────────────
+Future<void> _runGpsFaceUpdate(
+  SharedPreferences prefs,
+  void Function(String) updateNotif,
+) async {
+  final attendanceId = prefs.getInt('gps_active_attendance_id');
+  if (attendanceId == null) return;
+
+  try {
+    final pos = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    ).timeout(const Duration(seconds: 15));
+
+    final token = prefs.getString('session_token') ?? '';
+    final tenantId = prefs.getString('tenantId') ?? '';
+    final baseUrl = prefs.getString('bg_base_url') ?? '';
+
+    debugPrint(
+      '[GPS-face] baseUrl=$baseUrl token=${token.isNotEmpty ? "SET" : "EMPTY"}',
+    );
+
+    if (baseUrl.isEmpty || token.isEmpty) return;
+
+    final mode = prefs.getString('gps_active_attendance_mode') ?? 'face';
+    final endpoint = mode == 'gps' ? 'gps' : 'face';
+    final baseUrlFull = '$baseUrl/$endpoint/update-location';
+
+    final response = await http
+        .patch(
+          Uri.parse(baseUrlFull),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+            'x-tenant-id': tenantId,
+          },
+          body: jsonEncode({
+            'latitude': pos.latitude,
+            'longitude': pos.longitude,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final isActive = body['active'] as bool? ?? true;
+      if (!isActive) {
+        await prefs.remove('gps_active_attendance_id');
+        await prefs.remove('gps_checkin_time');
+        await prefs.remove('gps_active_attendance_mode');
+        debugPrint('[$endpoint BG] Session ended server-side');
+      } else {
+        debugPrint('[$endpoint BG] Updated: ${pos.latitude}, ${pos.longitude}');
+      }
+    }
+  } catch (e) {
+    debugPrint('[GPS-face] Update failed: $e');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Site-entry background ping (every 2 min)
+// Calls /api/site-entry/update-location and handles the action response.
+// ─────────────────────────────────────────────────────────────────────────────
+Future<void> _runSiteEntryUpdate(
+  SharedPreferences prefs,
+  void Function(String) updateNotif,
+  ServiceInstance service,
+) async {
+  // Throttle: skip if last ping was less than 110 seconds ago
+  final lastPing = prefs.getInt(_kSiteEntryLastPingKey) ?? 0;
+  final nowMs = DateTime.now().millisecondsSinceEpoch;
+  if (nowMs - lastPing < 110 * 1000) return;
+
+  try {
+    final bool svcEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!svcEnabled) return;
+
+    final perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied ||
+        perm == LocationPermission.deniedForever) {
+      return;
+    }
+
+    Position pos;
+    try {
+      pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      ).timeout(const Duration(seconds: 12));
+    } catch (_) {
+      return; // GPS timeout — skip this cycle
+    }
+
+    final token = prefs.getString('session_token') ?? '';
+    final tenantId = prefs.getString('tenantId') ?? '';
+    final baseUrl = prefs.getString('bg_base_url') ?? '';
+
+    if (baseUrl.isEmpty || token.isEmpty) return;
+
+    final res = await http
+        .patch(
+          Uri.parse('$baseUrl/site-entry/update-location'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+            'x-tenant-id': tenantId,
+          },
+          body: jsonEncode({
+            'latitude': pos.latitude,
+            'longitude': pos.longitude,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    await prefs.setInt(_kSiteEntryLastPingKey, nowMs);
+
+    if (res.statusCode != 200) return;
+
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    final action = body['action'] as String? ?? '';
+
+    debugPrint('[SiteEntry BG] action=$action');
+
+    switch (action) {
+      case 'location_updated':
+        await prefs.setBool(_kSiteEntryActiveKey, true);
+        break;
+
+      case 'paused':
+      case 'still_paused':
+        await prefs.setBool(_kSiteEntryActiveKey, true);
+        final remaining = body['remaining_grace'] as int?;
+        if (remaining != null) {
+          updateNotif('Site attendance paused — ${remaining}m grace remaining');
+        }
+        break;
+
+      case 'auto_checked_out':
+        await prefs.setBool(_kSiteEntryActiveKey, false);
+        updateNotif('Auto checked-out: absent from site >10 min');
+        service.invoke('site_entry_auto_checkout', {
+          'attendance_id': body['attendance_id'],
+          'reason': body['reason'],
+        });
+        break;
+
+      case 'site_switched':
+        await prefs.setBool(_kSiteEntryActiveKey, true);
+        final newSite =
+            (body['new_session'] as Map<String, dynamic>?)?['site_name']
+                as String? ??
+            'new site';
+        updateNotif('Moved to $newSite — new session started');
+        service.invoke('site_entry_switched', {
+          'new_site_id':
+              (body['new_session'] as Map<String, dynamic>?)?['site_id'],
+          'new_site_name': newSite,
+        });
+        break;
+
+      case 'no_active_session':
+        await prefs.setBool(_kSiteEntryActiveKey, false);
+        break;
+    }
+  } catch (e) {
+    debugPrint('[SiteEntry BG] ping failed: $e');
+    // Never throw — background tasks must not crash the isolate
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
-
 String _todayStr() {
   final n = DateTime.now();
-  return '${n.year}-${n.month.toString().padLeft(2, '0')}'
-      '-${n.day.toString().padLeft(2, '0')}';
+  return '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
 }
 
 void _fire(Future<void> f) =>
     f.catchError((e) => debugPrint('[Service] async err: $e'));
 
-Stream<Map<String, dynamic>?> webOn(String e) => const Stream.empty();
-Stream<Map<String, dynamic>?> desktopOn(String e) => const Stream.empty();
-
-// ── START — kill any existing, write prefs, start fresh ───────────────────
+// ── START ──────────────────────────────────────────────────────────────────
 Future<void> startBackgroundTracking(int employeeId, {int? sessionId}) async {
   if (kIsWeb) return;
 
@@ -645,11 +792,8 @@ Future<void> startBackgroundTracking(int employeeId, {int? sessionId}) async {
     await Future.delayed(const Duration(milliseconds: 800));
   }
 
-  await prefs.setInt('employee_id', employeeId); // keep for bg service
-  await prefs.setString(
-    'employeeId',
-    employeeId.toString(),
-  ); // keep for ApiConfig
+  await prefs.setInt('employee_id', employeeId);
+  await prefs.setString('employeeId', employeeId.toString());
   await prefs.setBool('tracking_active_$employeeId', true);
   await prefs.remove('current_site_id_$employeeId');
   if (sessionId != null) {
@@ -659,24 +803,11 @@ Future<void> startBackgroundTracking(int employeeId, {int? sessionId}) async {
 
   await SiteCache.init();
 
-  // ── Debug: verify what's actually saved in prefs ──────────────────
-  debugPrint('[startBackgroundTracking] about to start:');
-  debugPrint('  employee_id  = ${prefs.getInt('employee_id')}');
-  debugPrint('  employeeId   = ${prefs.getString('employeeId')}');
-  debugPrint('  session_id   = ${prefs.getInt('session_id')}');
-  debugPrint(
-    '  session_id_$employeeId = ${prefs.getInt('session_id_$employeeId')}',
-  );
-  debugPrint('  passed sessionId param = $sessionId');
-
+  debugPrint('[startBackgroundTracking] emp=$employeeId session=$sessionId');
   await svc.startService();
-
-  debugPrint(
-    '[startBackgroundTracking] fresh start emp=$employeeId session=$sessionId',
-  );
 }
 
-// ── END — send signal, service handles everything and kills itself ─────────
+// ── END SESSION ────────────────────────────────────────────────────────────
 Future<bool> sendEndSession({required bool stillOnSite}) async {
   if (kIsWeb) return true;
 

@@ -321,10 +321,11 @@ router.post("/checkout", requireAuth, async (req, res) => {
     const [[active]] = await db.query(
       `SELECT attendance_id
        FROM employee_attendance
-       WHERE tenant_id   = ?
-         AND employee_id = ?
-         AND work_date   = ?
-         AND status      = 'active'
+       WHERE tenant_id       = ?
+         AND employee_id     = ?
+         AND work_date       = ?
+         AND attendance_mode = 'gps'
+         AND status          = 'active'
        ORDER BY attendance_id DESC
        LIMIT 1`,
       [tenantId, empId, todayDate()],
@@ -407,6 +408,7 @@ router.patch("/update-location", requireAuth, async (req, res) => {
        WHERE tenant_id   = ?
          AND employee_id = ?
          AND work_date   = ?
+          AND attendance_mode = 'gps'
          AND status      = 'active'
        ORDER BY attendance_id DESC
        LIMIT 1`,
@@ -542,7 +544,10 @@ router.get("/admin/all", requireAuth, requireAdmin, async (req, res) => {
           ea.checkin_longitude,
           ea.checkout_latitude,
           ea.checkout_longitude,
-          ea.attendance_mode
+          ea.attendance_mode,
+          ea.last_known_latitude,
+          ea.last_known_longitude,
+          ea.last_location_updated_at
        FROM employee_attendance ea
        LEFT JOIN employee_master    e  ON e.emp_id          = ea.employee_id
                                       AND CONVERT(e.tenant_id  USING utf8mb4) COLLATE utf8mb4_0900_ai_ci

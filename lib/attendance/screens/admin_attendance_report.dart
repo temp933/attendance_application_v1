@@ -121,7 +121,7 @@ class _AdminAttendanceReportScreenState
               ),
             ),
             Text(
-              'Normal mode only  ·  Export to Excel',
+              '  Export to Excel',
               style: TextStyle(color: Colors.white60, fontSize: 11),
             ),
           ],
@@ -651,81 +651,81 @@ class _MatrixTabState extends State<_MatrixTab>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-        _TableHeader(title: 'Attendance Matrix', count: rows.length),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: _divCol),
-            borderRadius: const BorderRadius.vertical(
-              bottom: Radius.circular(12),
-            ),
-            color: Colors.white,
-          ),
-          child: ScrollConfiguration(
-            behavior: _DragScrollBehavior(),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.only(right: 1),
-              child: Column(
-                children: [
-                  // ── Single unified header row ─────────────────────────
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        fixedHdr('S.No', snoW),
-                        div(),
-                        fixedHdr('Emp ID', empIdW),
-                        div(),
-                        fixedHdr('Employee Name', nameW, center: false),
-                        div(),
-                        for (int i = 0; i < _dates.length; i++) ...[
-                          dayCol(_dates[i]),
-                          if (i < _dates.length - 1) div(),
-                        ],
-                        div(),
-                        summaryHdr('Present'),
-                        div(),
-                        summaryHdr('Absent'),
-                        div(),
-                        summaryHdr('Leave'),
-                        if (_compOffEnabled) ...[
-                          div(),
-                          summaryHdr('C.Off\nEarned', bg: _orange),
-                          div(),
-                          summaryHdr('C.Off\nUsed', bg: _amber),
-                          div(),
-                          summaryHdr('C.Off\nExpired', bg: _red),
-                        ],
-                        div(),
-                        summaryHdr('Lv\nApp', bg: _accent),
-                        div(),
-                        summaryHdr('Lv\nRej', bg: _red),
-                        div(),
-                        summaryHdr('Att %'),
+            _TableHeader(title: 'Attendance Matrix', count: rows.length),
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: _divCol),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(12),
+                ),
+                color: Colors.white,
+              ),
+              child: ScrollConfiguration(
+                behavior: _DragScrollBehavior(),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.only(right: 1),
+                  child: Column(
+                    children: [
+                      // ── Single unified header row ─────────────────────────
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            fixedHdr('S.No', snoW),
+                            div(),
+                            fixedHdr('Emp ID', empIdW),
+                            div(),
+                            fixedHdr('Employee Name', nameW, center: false),
+                            div(),
+                            for (int i = 0; i < _dates.length; i++) ...[
+                              dayCol(_dates[i]),
+                              if (i < _dates.length - 1) div(),
+                            ],
+                            div(),
+                            summaryHdr('Present'),
+                            div(),
+                            summaryHdr('Absent'),
+                            div(),
+                            summaryHdr('Leave'),
+                            if (_compOffEnabled) ...[
+                              div(),
+                              summaryHdr('C.Off\nEarned', bg: _orange),
+                              div(),
+                              summaryHdr('C.Off\nUsed', bg: _amber),
+                              div(),
+                              summaryHdr('C.Off\nExpired', bg: _red),
+                            ],
+                            div(),
+                            summaryHdr('Lv\nApp', bg: _accent),
+                            div(),
+                            summaryHdr('Lv\nRej', bg: _red),
+                            div(),
+                            summaryHdr('Att %'),
+                          ],
+                        ),
+                      ), // IntrinsicHeight
+                      hdiv(totalW),
+                      // ── Data rows ─────────────────────────────────────────
+                      for (int i = 0; i < rows.length; i++) ...[
+                        _matrixRow(
+                          rows[i],
+                          i,
+                          dayW,
+                          snoW,
+                          empIdW,
+                          nameW,
+                          summaryW,
+                          div,
+                        ),
+                        hdiv(totalW),
                       ],
-                    ),
-                  ), // IntrinsicHeight
-                  hdiv(totalW),
-                  // ── Data rows ─────────────────────────────────────────
-                  for (int i = 0; i < rows.length; i++) ...[
-                    _matrixRow(
-                      rows[i],
-                      i,
-                      dayW,
-                      snoW,
-                      empIdW,
-                      nameW,
-                      summaryW,
-                      div,
-                    ),
-                    hdiv(totalW),
-                  ],
-                ],
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+          ],
         ),
       ), // IntrinsicWidth
     ); // Center
@@ -983,7 +983,7 @@ class _DailyTabState extends State<_DailyTab>
     }
     setState(() => _loading = true);
     try {
-      await ReportService.exportDaily(_data, _date);
+      await ReportService.exportDaily(_data, _date, mode: widget.mode);
       _snack('Daily report exported');
     } catch (e) {
       _snack('Export failed: $e', isError: true);
@@ -1078,9 +1078,12 @@ class _DailyTabState extends State<_DailyTab>
                   const SizedBox(height: 12),
                   _SearchBar(onChanged: (v) => setState(() => _search = v)),
                   const SizedBox(height: 12),
-                  _dailyTable(),
-                ],
-              ],
+                  if (widget.mode == 'site_entry')
+                    _siteEntryCards()
+                  else
+                    _dailyTable(),
+                ], // ← closes if (_fetched && !_loading)
+              ], // ← closes Column children
             ),
           ),
         ),
@@ -1371,6 +1374,88 @@ class _DailyTabState extends State<_DailyTab>
           ),
         ],
       ),
+    );
+  }
+  // ── Site-entry helpers ─────────────────────────────────────────────────────
+
+  String _fmtTime(String? dt) {
+    if (dt == null) return '—';
+    try {
+      final p = dt.split(' ');
+      if (p.length < 2) return dt;
+      final tp = p[1].split(':');
+      final h = int.parse(tp[0]);
+      final m = int.parse(tp[1]);
+      final hh = h % 12 == 0 ? 12 : h % 12;
+      final mm = m.toString().padLeft(2, '0');
+      return '$hh:$mm ${h < 12 ? 'AM' : 'PM'}';
+    } catch (_) {
+      return dt.length >= 16 ? dt.substring(11, 16) : dt;
+    }
+  }
+
+  String _fmtWork(String? t) {
+    if (t == null) return '—';
+    final p = t.split(':');
+    if (p.length < 2) return t;
+    final h = int.tryParse(p[0]) ?? 0;
+    final m = int.tryParse(p[1]) ?? 0;
+    if (h == 0 && m == 0) return '< 1m';
+    if (h == 0) return '${m}m';
+    if (m == 0) return '${h}h';
+    return '${h}h ${m}m';
+  }
+
+  String _sumWork(List<SiteSession> sessions) {
+    int secs = 0;
+    for (final s in sessions) {
+      if (s.totalWorkTime != null) {
+        final p = s.totalWorkTime!.split(':');
+        if (p.length >= 2) {
+          secs += (int.tryParse(p[0]) ?? 0) * 3600;
+          secs += (int.tryParse(p[1]) ?? 0) * 60;
+          if (p.length >= 3) secs += int.tryParse(p[2]) ?? 0;
+        }
+      }
+    }
+    final h = secs ~/ 3600;
+    final m = (secs % 3600) ~/ 60;
+    if (h == 0 && m == 0) return '—';
+    if (h == 0) return '${m}m';
+    if (m == 0) return '${h}h';
+    return '${h}h ${m}m';
+  }
+
+  String _fmtPauseSecs(int secs) {
+    if (secs <= 0) return '';
+    final h = secs ~/ 3600;
+    final m = (secs % 3600) ~/ 60;
+    if (h == 0) return '${m}m pause';
+    if (m == 0) return '${h}h pause';
+    return '${h}h ${m}m pause';
+  }
+
+  Widget _siteEntryCards() {
+    final rows = _filtered;
+    if (rows.isEmpty) return const _EmptyState();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _TableHeader(title: 'Site Attendance — Day View', count: rows.length),
+        const SizedBox(height: 8),
+        ...rows.asMap().entries.map(
+          (e) => _SiteEmpDayCard(
+            emp: e.value,
+            index: e.key,
+            fmtTime: _fmtTime,
+            fmtWork: _fmtWork,
+            sumWork: _sumWork,
+            fmtPauseSecs: _fmtPauseSecs,
+            compOffEnabled: _compOffEnabled,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2027,4 +2112,470 @@ class _DragScrollBehavior extends MaterialScrollBehavior {
     PointerDeviceKind.trackpad,
     PointerDeviceKind.stylus,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Site-entry employee day card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SiteEmpDayCard extends StatelessWidget {
+  final EmpDaily emp;
+  final int index;
+  final String Function(String?) fmtTime;
+  final String Function(String?) fmtWork;
+  final String Function(List<SiteSession>) sumWork;
+  final String Function(int) fmtPauseSecs;
+  final bool compOffEnabled;
+
+  const _SiteEmpDayCard({
+    required this.emp,
+    required this.index,
+    required this.fmtTime,
+    required this.fmtWork,
+    required this.sumWork,
+    required this.fmtPauseSecs,
+    required this.compOffEnabled,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sessions = emp.siteSessions;
+    final totalWork = sumWork(sessions);
+    final anyActive = sessions.any((s) => s.status == 'active');
+    final sc =
+        _dailyStatusColors[emp.status] ?? (const Color(0xFFEEF2FF), _primary);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // ── Employee header ──────────────────────────────────────────────
+          Container(
+            color: _hdr1,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Text(
+                      emp.name.isNotEmpty ? emp.name[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        emp.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            '#${emp.empId}',
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 10,
+                            ),
+                          ),
+                          if (emp.department.isNotEmpty) ...[
+                            const Text(
+                              '  ·  ',
+                              style: TextStyle(
+                                color: Colors.white30,
+                                fontSize: 10,
+                              ),
+                            ),
+                            Flexible(
+                              child: Text(
+                                emp.department,
+                                style: const TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 10,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: sc.$1,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    emp.status,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: sc.$2,
+                    ),
+                  ),
+                ),
+                if (anyActive) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: _accent,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // ── Sessions ─────────────────────────────────────────────────────
+          if (sessions.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text(
+                  emp.status == 'Absent'
+                      ? 'No check-in recorded'
+                      : 'No sessions',
+                  style: const TextStyle(fontSize: 12, color: _textMid),
+                ),
+              ),
+            )
+          else
+            ...sessions.asMap().entries.map((e) {
+              final i = e.key;
+              final s = e.value;
+              final isActive = s.status == 'active';
+              final isPaused = isActive && s.totalPauseSecs > 0;
+              final sessionBg = i.isEven
+                  ? Colors.white
+                  : const Color(0xFFF8FAFF);
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: sessionBg,
+                  border: Border(top: BorderSide(color: _border)),
+                ),
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Session number bubble
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: _primary.withValues(alpha: 0.10),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${i + 1}',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: _primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+
+                    // Site name + times
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.location_on_rounded,
+                                size: 11,
+                                color: _purple,
+                              ),
+                              const SizedBox(width: 3),
+                              Flexible(
+                                child: Text(
+                                  s.siteName ?? 'Unknown Site',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: _purple,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (isActive && !isPaused) ...[
+                                const SizedBox(width: 5),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _accent.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'LIVE',
+                                    style: TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.w800,
+                                      color: _accent,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ] else if (isPaused) ...[
+                                const SizedBox(width: 5),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _amber.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'PAUSED',
+                                    style: TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.w800,
+                                      color: _amber,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Row(
+                            children: [
+                              _TimeChip(
+                                icon: Icons.login_rounded,
+                                label: 'In',
+                                time: fmtTime(s.checkIn),
+                                color: _accent,
+                              ),
+                              const SizedBox(width: 10),
+                              _TimeChip(
+                                icon: Icons.logout_rounded,
+                                label: 'Out',
+                                time: fmtTime(s.checkOut),
+                                color: _red,
+                              ),
+                              if (s.totalPauseSecs > 0) ...[
+                                const SizedBox(width: 10),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.pause_circle_outline_rounded,
+                                      size: 10,
+                                      color: _amber,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      fmtPauseSecs(s.totalPauseSecs),
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: _amber,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(width: 10),
+                    // Per-session duration badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? _accent.withValues(alpha: 0.08)
+                            : _purple.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(
+                          color: isActive
+                              ? _accent.withValues(alpha: 0.2)
+                              : _purple.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Text(
+                        fmtWork(s.totalWorkTime),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isActive ? _accent : _purple,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+          // ── Total footer ──────────────────────────────────────────────────
+          if (sessions.isNotEmpty)
+            Container(
+              decoration: BoxDecoration(
+                color: _surface,
+                border: Border(top: BorderSide(color: _border, width: 1.5)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.timer_outlined, size: 13, color: _primary),
+                  const SizedBox(width: 5),
+                  Text(
+                    '${sessions.length} session${sessions.length == 1 ? '' : 's'}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: _textMid,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Text(
+                    'Total worked:',
+                    style: TextStyle(fontSize: 11, color: _textMid),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _primary.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      totalWork,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: _primary,
+                      ),
+                    ),
+                  ),
+                  if (compOffEnabled && emp.compOffEarned) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _orange.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        '✓ CO Earned',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _orange,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared time chip
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TimeChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String time;
+  final Color color;
+
+  const _TimeChip({
+    required this.icon,
+    required this.label,
+    required this.time,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 11, color: color),
+      const SizedBox(width: 3),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 9, color: _textMid)),
+          Text(
+            time,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
 }

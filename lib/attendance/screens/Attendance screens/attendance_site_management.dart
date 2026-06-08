@@ -16,6 +16,7 @@ const Color _accent = Color(0xFF0E9F6E);
 const Color _purple = Color(0xFF7C3AED);
 const Color _amber = Color(0xFFF59E0B);
 const Color _red = Color(0xFFEF4444);
+const Color _orange = Color(0xFFF97316);
 const Color _surface = Color(0xFFF0F4FF);
 const Color _card = Colors.white;
 const Color _textDark = Color(0xFF0F172A);
@@ -36,18 +37,19 @@ class _Screen {
       ? 20
       : 28;
   double get body => isMobile ? 13 : 14;
-  double get caption => isMobile ? 11 : 12;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Models
 // ─────────────────────────────────────────────────────────────────────────────
 
-class GpsAttendanceRecord {
+class SiteAttendanceRecord {
   final int attendanceId;
   final int employeeId;
   final String employeeName;
   final String? department;
+  final int? siteId;
+  final String? siteName;
   final String workDate;
   final String? checkinTime;
   final String? checkoutTime;
@@ -59,17 +61,21 @@ class GpsAttendanceRecord {
   final double? checkinLng;
   final double? checkoutLat;
   final double? checkoutLng;
-  final String attendanceMode;
-  final String? remarks;
   final double? lastKnownLat;
   final double? lastKnownLng;
   final String? lastLocationUpdatedAt;
+  final bool forceClosed;
+  final String? forceCloseReason;
+  final String? pausedAt;
+  final int totalPauseSecs;
 
-  GpsAttendanceRecord({
+  SiteAttendanceRecord({
     required this.attendanceId,
     required this.employeeId,
     required this.employeeName,
     this.department,
+    this.siteId,
+    this.siteName,
     required this.workDate,
     this.checkinTime,
     this.checkoutTime,
@@ -81,14 +87,16 @@ class GpsAttendanceRecord {
     this.checkinLng,
     this.checkoutLat,
     this.checkoutLng,
-    required this.attendanceMode,
-    this.remarks,
     this.lastKnownLat,
     this.lastKnownLng,
     this.lastLocationUpdatedAt,
+    this.forceClosed = false,
+    this.forceCloseReason,
+    this.pausedAt,
+    this.totalPauseSecs = 0,
   });
 
-  factory GpsAttendanceRecord.fromJson(Map<String, dynamic> j) {
+  factory SiteAttendanceRecord.fromJson(Map<String, dynamic> j) {
     double? parseCoord(dynamic v) {
       if (v == null) return null;
       if (v is num) return v.toDouble();
@@ -96,11 +104,15 @@ class GpsAttendanceRecord {
       return null;
     }
 
-    return GpsAttendanceRecord(
+    return SiteAttendanceRecord(
       attendanceId: j['attendance_id'] ?? 0,
       employeeId: j['employee_id'] ?? 0,
       employeeName: j['employee_name'] ?? 'Unknown',
       department: j['department'],
+      siteId: j['site_id'] != null
+          ? int.tryParse(j['site_id'].toString())
+          : null,
+      siteName: j['site_name'],
       workDate: j['work_date'] ?? '',
       checkinTime: j['checkin_time'],
       checkoutTime: j['checkout_time'],
@@ -112,43 +124,55 @@ class GpsAttendanceRecord {
       checkinLng: parseCoord(j['checkin_longitude']),
       checkoutLat: parseCoord(j['checkout_latitude']),
       checkoutLng: parseCoord(j['checkout_longitude']),
-      attendanceMode: j['attendance_mode'] ?? 'gps',
-      remarks: j['remarks'],
       lastKnownLat: parseCoord(j['last_known_latitude']),
       lastKnownLng: parseCoord(j['last_known_longitude']),
       lastLocationUpdatedAt: j['last_location_updated_at'] as String?,
+      forceClosed: (j['force_closed'] == 1 || j['force_closed'] == true),
+      forceCloseReason: j['force_close_reason'],
+      pausedAt: j['paused_at'],
+      totalPauseSecs:
+          int.tryParse(j['total_pause_secs']?.toString() ?? '0') ?? 0,
     );
   }
 }
 
-class GpsAttendanceSummaryStats {
-  final int totalEmployees, presentToday, absentToday, lateToday, activeNow;
-  GpsAttendanceSummaryStats({
-    required this.totalEmployees,
+class SiteAttendanceSummaryStats {
+  final int presentToday, lateToday, activeNow, totalSessions;
+  SiteAttendanceSummaryStats({
     required this.presentToday,
-    required this.absentToday,
     required this.lateToday,
     required this.activeNow,
+    required this.totalSessions,
   });
+}
+
+class SiteOption {
+  final int id;
+  final String name;
+  SiteOption({required this.id, required this.name});
+  factory SiteOption.fromJson(Map<String, dynamic> j) =>
+      SiteOption(id: j['id'] ?? 0, name: j['site_name'] ?? '');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service
 // ─────────────────────────────────────────────────────────────────────────────
 
-class GpsAttendanceManagementService {
+class SiteAttendanceManagementService {
   static Future<Map<String, dynamic>> fetchAll({
     required String authToken,
     required String tenantId,
     required String date,
+    String siteId = '',
     String status = '',
     String search = '',
     int limit = 50,
     int offset = 0,
   }) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/gps/admin/all').replace(
+    final uri = Uri.parse('${ApiConfig.baseUrl}/site-entry/admin/all').replace(
       queryParameters: {
         'date': date,
+        'site_id': siteId,
         'status': status,
         'search': search,
         'limit': '$limit',
@@ -160,7 +184,7 @@ class GpsAttendanceManagementService {
       headers: {'Authorization': 'Bearer $authToken', 'x-tenant-id': tenantId},
     );
     if (res.statusCode == 200) return jsonDecode(res.body);
-    throw Exception('Failed to load GPS attendance data');
+    throw Exception('Failed to load site attendance data');
   }
 }
 
@@ -168,31 +192,33 @@ class GpsAttendanceManagementService {
 // Screen
 // ─────────────────────────────────────────────────────────────────────────────
 
-class GpsAttendanceManagementScreen extends StatefulWidget {
+class SiteAttendanceManagementScreen extends StatefulWidget {
   final String authToken;
   final String tenantId;
-  const GpsAttendanceManagementScreen({
+  const SiteAttendanceManagementScreen({
     super.key,
     required this.authToken,
     required this.tenantId,
   });
 
   @override
-  State<GpsAttendanceManagementScreen> createState() =>
-      _GpsAttendanceManagementScreenState();
+  State<SiteAttendanceManagementScreen> createState() =>
+      _SiteAttendanceManagementScreenState();
 }
 
-class _GpsAttendanceManagementScreenState
-    extends State<GpsAttendanceManagementScreen> {
+class _SiteAttendanceManagementScreenState
+    extends State<SiteAttendanceManagementScreen> {
   bool _loading = true;
   String? _error;
-  List<GpsAttendanceRecord> _records = [];
-  Map<int, List<GpsAttendanceRecord>> _groupedRecords = {};
+  List<SiteAttendanceRecord> _records = [];
+  Map<int, List<SiteAttendanceRecord>> _groupedRecords = {};
   List<int> _employeeOrder = [];
-  GpsAttendanceSummaryStats? _stats;
+  SiteAttendanceSummaryStats? _stats;
+  List<SiteOption> _sites = [];
 
   DateTime _selectedDate = DateTime.now();
   String _statusFilter = '';
+  String _siteFilter = '';
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
 
@@ -208,7 +234,6 @@ class _GpsAttendanceManagementScreenState
     super.dispose();
   }
 
-  // ── Data ──────────────────────────────────────────────────────────────────
   Future<void> _loadData() async {
     setState(() {
       _loading = true;
@@ -216,21 +241,35 @@ class _GpsAttendanceManagementScreenState
     });
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final data = await GpsAttendanceManagementService.fetchAll(
+      final data = await SiteAttendanceManagementService.fetchAll(
         authToken: widget.authToken,
         tenantId: widget.tenantId,
         date: dateStr,
+        siteId: _siteFilter,
         status: _statusFilter,
         search: _searchQuery,
       );
       if (!mounted) return;
 
       final rawRecords = (data['records'] as List? ?? [])
-          .map((e) => GpsAttendanceRecord.fromJson(e as Map<String, dynamic>))
+          .map((e) => SiteAttendanceRecord.fromJson(e as Map<String, dynamic>))
           .toList();
 
+      // Collect unique sites from records for filter chips
+      final siteMap = <int, String>{};
+      for (final r in rawRecords) {
+        if (r.siteId != null && r.siteName != null) {
+          siteMap[r.siteId!] = r.siteName!;
+        }
+      }
+      final sites =
+          siteMap.entries
+              .map((e) => SiteOption(id: e.key, name: e.value))
+              .toList()
+            ..sort((a, b) => a.name.compareTo(b.name));
+
       // Group by employee
-      final grouped = <int, List<GpsAttendanceRecord>>{};
+      final grouped = <int, List<SiteAttendanceRecord>>{};
       final order = <int>[];
       for (final r in rawRecords) {
         if (!grouped.containsKey(r.employeeId)) {
@@ -241,23 +280,21 @@ class _GpsAttendanceManagementScreenState
       }
 
       final rawStats = data['stats'] as Map<String, dynamic>? ?? {};
-      final totalEmp =
-          int.tryParse(rawStats['total_employees']?.toString() ?? '0') ?? 0;
-      final present =
-          int.tryParse(rawStats['present_today']?.toString() ?? '0') ?? 0;
 
       setState(() {
         _records = rawRecords;
         _groupedRecords = grouped;
         _employeeOrder = order;
-        _stats = GpsAttendanceSummaryStats(
-          totalEmployees: totalEmp,
-          presentToday: present,
-          absentToday: totalEmp - present,
+        _sites = sites;
+        _stats = SiteAttendanceSummaryStats(
+          presentToday:
+              int.tryParse(rawStats['present_today']?.toString() ?? '0') ?? 0,
           lateToday:
               int.tryParse(rawStats['late_today']?.toString() ?? '0') ?? 0,
           activeNow:
               int.tryParse(rawStats['active_now']?.toString() ?? '0') ?? 0,
+          totalSessions:
+              int.tryParse(rawStats['total_sessions']?.toString() ?? '0') ?? 0,
         );
         _loading = false;
       });
@@ -289,20 +326,19 @@ class _GpsAttendanceManagementScreenState
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   String _formatTime(String? datetime) {
     if (datetime == null) return '—';
     try {
       final parts = datetime.split(' ');
       if (parts.length < 2) return datetime;
-      final dateParts = parts[0].split('-');
-      final timeParts = parts[1].split(':');
+      final dp = parts[0].split('-');
+      final tp = parts[1].split(':');
       final dt = DateTime(
-        int.parse(dateParts[0]),
-        int.parse(dateParts[1]),
-        int.parse(dateParts[2]),
-        int.parse(timeParts[0]),
-        int.parse(timeParts[1]),
+        int.parse(dp[0]),
+        int.parse(dp[1]),
+        int.parse(dp[2]),
+        int.parse(tp[0]),
+        int.parse(tp[1]),
       );
       return DateFormat('hh:mm a').format(dt);
     } catch (_) {
@@ -317,32 +353,15 @@ class _GpsAttendanceManagementScreenState
         _selectedDate.day == n.day;
   }
 
-  Future<void> _openMap({
-    required double checkinLat,
-    required double checkinLng,
-    double? checkoutLat,
-    double? checkoutLng,
-  }) async {
-    final Uri uri;
-    if (checkoutLat != null && checkoutLng != null) {
-      uri = Uri.parse(
-        'https://www.google.com/maps/dir/$checkinLat,$checkinLng/$checkoutLat,$checkoutLng',
-      );
-    } else {
-      uri = Uri.parse(
-        'https://www.google.com/maps/search/?api=1&query=$checkinLat,$checkinLng',
-      );
-    }
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Could not open map.')));
-      }
-    }
+  String _fmtPause(int secs) {
+    if (secs <= 0) return '0m';
+    final h = secs ~/ 3600;
+    final m = (secs % 3600) ~/ 60;
+    if (h == 0) return '${m}m';
+    if (m == 0) return '${h}h';
+    return '${h}h ${m}m';
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final s = _Screen(MediaQuery.of(context).size.width);
@@ -379,7 +398,7 @@ class _GpsAttendanceManagementScreenState
                         child: Padding(
                           padding: EdgeInsets.fromLTRB(s.pad, 12, s.pad, 4),
                           child: Text(
-                            '${_employeeOrder.length} employee${_employeeOrder.length == 1 ? '' : 's'}',
+                            '${_employeeOrder.length} employee${_employeeOrder.length == 1 ? '' : 's'} · ${_records.length} session${_records.length == 1 ? '' : 's'}',
                             style: const TextStyle(
                               fontSize: 12,
                               color: _textMid,
@@ -402,11 +421,11 @@ class _GpsAttendanceManagementScreenState
                           delegate: SliverChildBuilderDelegate((_, i) {
                             final empId = _employeeOrder[i];
                             final sessions = _groupedRecords[empId]!;
-                            return _GpsEmployeeCard(
+                            return _SiteEmployeeCard(
                               sessions: sessions,
                               formatTime: _formatTime,
+                              fmtPause: _fmtPause,
                               s: s,
-                              openMap: _openMap,
                             );
                           }, childCount: _employeeOrder.length),
                         ),
@@ -466,13 +485,11 @@ class _GpsAttendanceManagementScreenState
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => AdminAttendanceReportScreen(
-                          mode: 'gps', // pass 'gps' or 'gps_face' as needed
-                        ),
+                        builder: (_) =>
+                            AdminAttendanceReportScreen(mode: 'site_entry'),
                       ),
                     ).then((_) => _loadData()),
                   ),
-                  // Badge — only show when there are active sessions
                   if ((_stats?.activeNow ?? 0) > 0)
                     Positioned(
                       right: 8,
@@ -497,12 +514,13 @@ class _GpsAttendanceManagementScreenState
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) =>
-                            AdminForceCloseScreen(loginId: 57, mode: 'gps'),
+                        builder: (_) => AdminForceCloseScreen(
+                          loginId: 57,
+                          mode: 'site_entry',
+                        ),
                       ),
                     ).then((_) => _loadData()),
                   ),
-                  // Badge — only show when there are active sessions
                   if ((_stats?.activeNow ?? 0) > 0)
                     Positioned(
                       right: 8,
@@ -547,10 +565,10 @@ class _GpsAttendanceManagementScreenState
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _statChip(
-            'Total',
-            '${_stats!.totalEmployees}',
-            _primary,
-            Icons.people_alt_rounded,
+            'Sessions',
+            '${_stats!.totalSessions}',
+            _purple,
+            Icons.list_alt_rounded,
           ),
           _vDivider(),
           _statChip(
@@ -558,13 +576,6 @@ class _GpsAttendanceManagementScreenState
             '${_stats!.presentToday}',
             _accent,
             Icons.check_circle_outline_rounded,
-          ),
-          _vDivider(),
-          _statChip(
-            'Absent',
-            '${_stats!.absentToday}',
-            _red,
-            Icons.cancel_outlined,
           ),
           _vDivider(),
           _statChip(
@@ -611,7 +622,9 @@ class _GpsAttendanceManagementScreenState
     color: _card,
     padding: EdgeInsets.fromLTRB(s.pad, 10, s.pad, 12),
     child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Search
         TextField(
           controller: _searchCtrl,
           decoration: InputDecoration(
@@ -654,38 +667,59 @@ class _GpsAttendanceManagementScreenState
           },
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            _chip('All', ''),
-            const SizedBox(width: 8),
-            _chip('Active', 'active'),
-            const SizedBox(width: 8),
-            _chip('Completed', 'completed'),
-          ],
+        // Status chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _chip('All', '', isStatus: true),
+              const SizedBox(width: 8),
+              _chip('Active', 'active', isStatus: true),
+              const SizedBox(width: 8),
+              _chip('Completed', 'completed', isStatus: true),
+              if (_sites.isNotEmpty) ...[
+                const SizedBox(width: 16),
+                Container(width: 1, height: 20, color: _border),
+                const SizedBox(width: 16),
+                _chip('All Sites', '', isStatus: false),
+                ..._sites.map(
+                  (site) => Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: _chip(site.name, '${site.id}', isStatus: false),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ],
     ),
   );
 
-  Widget _chip(String label, String value) {
-    final sel = _statusFilter == value;
+  Widget _chip(String label, String value, {required bool isStatus}) {
+    final current = isStatus ? _statusFilter : _siteFilter;
+    final sel = current == value;
+    final color = isStatus ? _primary : _purple;
     return GestureDetector(
       onTap: () {
-        setState(() => _statusFilter = value);
+        if (isStatus)
+          setState(() => _statusFilter = value);
+        else
+          setState(() => _siteFilter = value);
         _loadData();
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: sel ? _primary : _surface,
+          color: sel ? color : _surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: sel ? _primary : _border),
+          border: Border.all(color: sel ? color : _border),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: FontWeight.w500,
             color: sel ? Colors.white : _textMid,
           ),
@@ -704,11 +738,15 @@ class _GpsAttendanceManagementScreenState
             color: _primary.withOpacity(0.08),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.gps_off_rounded, size: 36, color: _primary),
+          child: const Icon(
+            Icons.location_off_rounded,
+            size: 36,
+            color: _primary,
+          ),
         ),
         const SizedBox(height: 16),
         const Text(
-          'No GPS records found',
+          'No site attendance records',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
@@ -776,33 +814,27 @@ class _GpsAttendanceManagementScreenState
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Employee Card
+// Employee Card — groups all sessions for one employee
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _GpsEmployeeCard extends StatefulWidget {
-  final List<GpsAttendanceRecord> sessions;
+class _SiteEmployeeCard extends StatefulWidget {
+  final List<SiteAttendanceRecord> sessions;
   final String Function(String?) formatTime;
+  final String Function(int) fmtPause;
   final _Screen s;
-  final Future<void> Function({
-    required double checkinLat,
-    required double checkinLng,
-    double? checkoutLat,
-    double? checkoutLng,
-  })
-  openMap;
 
-  const _GpsEmployeeCard({
+  const _SiteEmployeeCard({
     required this.sessions,
     required this.formatTime,
+    required this.fmtPause,
     required this.s,
-    required this.openMap,
   });
 
   @override
-  State<_GpsEmployeeCard> createState() => _GpsEmployeeCardState();
+  State<_SiteEmployeeCard> createState() => _SiteEmployeeCardState();
 }
 
-class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
+class _SiteEmployeeCardState extends State<_SiteEmployeeCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<double> _expandAnim;
@@ -834,20 +866,20 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
     _expanded ? _ctrl.forward() : _ctrl.reverse();
   }
 
-  GpsAttendanceRecord get _latest => widget.sessions.first;
-  GpsAttendanceRecord get _oldest => widget.sessions.last;
+  SiteAttendanceRecord get _latest => widget.sessions.first;
+  SiteAttendanceRecord get _oldest => widget.sessions.last;
   bool get _isMulti => widget.sessions.length > 1;
 
+  bool get _anyActive => widget.sessions.any((s) => s.status == 'active');
+
   Color get _sc {
-    if (_latest.status == 'active') return _accent;
-    if (_latest.status == 'completed') return _primary;
-    return _textLight;
+    if (_anyActive) return _accent;
+    return _primary;
   }
 
   Color get _scBg {
-    if (_latest.status == 'active') return const Color(0xFFECFDF5);
-    if (_latest.status == 'completed') return const Color(0xFFEEF2FF);
-    return const Color(0xFFF8FAFC);
+    if (_anyActive) return const Color(0xFFECFDF5);
+    return const Color(0xFFEEF2FF);
   }
 
   String get _totalWork {
@@ -913,7 +945,7 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          // ── Header row ────────────────────────────────────────────────────
+          // ── Header ────────────────────────────────────────────────────────
           InkWell(
             onTap: _isMulti ? _toggle : null,
             child: Padding(
@@ -968,33 +1000,29 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 3),
-                        Row(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
                           children: [
-                            if (_latest.department != null) ...[
+                            if (_latest.department != null)
                               _tag(
                                 _latest.department!,
                                 _primary.withOpacity(0.08),
                                 _primary,
                               ),
-                              const SizedBox(width: 6),
-                            ],
                             _tag('#${_latest.employeeId}', _surface, _textMid),
-                            const SizedBox(width: 6),
-                            // GPS mode badge
                             _tag(
-                              'GPS',
+                              'Site',
                               const Color(0xFFECFDF5),
                               _accent,
-                              icon: Icons.gps_fixed_rounded,
+                              icon: Icons.location_on_rounded,
                             ),
-                            if (_isMulti) ...[
-                              const SizedBox(width: 6),
+                            if (_isMulti)
                               _tag(
                                 '${widget.sessions.length} sessions',
                                 const Color(0xFFEDE9FE),
                                 _purple,
                               ),
-                            ],
                           ],
                         ),
                       ],
@@ -1026,7 +1054,7 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
                         ),
                         const SizedBox(width: 5),
                         Text(
-                          _latest.status == 'active' ? 'Active' : 'Completed',
+                          _anyActive ? 'Active' : 'Completed',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -1102,11 +1130,15 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
             ),
           ),
 
-          // ── Location row (single session, always visible) ─────────────────
+          // ── Single session: location row ───────────────────────────────────
           if (!_isMulti && _latest.checkinLat != null)
-            _LocationRow(session: _latest, fmtCoord: _fmtCoord),
+            _LocationRow(
+              session: _latest,
+              fmtCoord: _fmtCoord,
+              fmtPause: widget.fmtPause,
+            ),
 
-          // ── Expandable multi-session list ─────────────────────────────────
+          // ── Multi-session expandable ───────────────────────────────────────
           if (_isMulti) ...[
             InkWell(
               onTap: _toggle,
@@ -1152,6 +1184,9 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
                   final idx = e.key;
                   final s = e.value;
                   final isLast = idx == widget.sessions.length - 1;
+                  final isActive = s.status == 'active';
+                  final isPaused = s.pausedAt != null;
+
                   return Container(
                     decoration: BoxDecoration(
                       color: idx.isEven
@@ -1166,12 +1201,11 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
                     ),
                     child: Column(
                       children: [
-                        // Time row
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
                           child: Row(
                             children: [
-                              // Session badge
+                              // Session number
                               Container(
                                 width: 26,
                                 height: 26,
@@ -1191,27 +1225,42 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              _sessionTimeBlock(
-                                Icons.login_rounded,
-                                'In',
-                                widget.formatTime(s.checkinTime),
-                                _accent,
-                              ),
-                              Container(
-                                height: 32,
-                                width: 1,
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 12,
+                              // Site name tag
+                              if (s.siteName != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _purple.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: _purple.withOpacity(0.2),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.location_on_rounded,
+                                        size: 10,
+                                        color: _purple,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        s.siteName!,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: _purple,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                color: _border,
-                              ),
-                              _sessionTimeBlock(
-                                Icons.logout_rounded,
-                                'Out',
-                                widget.formatTime(s.checkoutTime),
-                                _primary,
-                              ),
                               const Spacer(),
+                              // Status/duration badge
                               if (s.totalWorkTime != null)
                                 Container(
                                   padding: const EdgeInsets.symmetric(
@@ -1234,7 +1283,26 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
                                     ),
                                   ),
                                 )
-                              else if (s.status == 'active')
+                              else if (isActive && isPaused)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _amber.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Text(
+                                    'Paused',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: _amber,
+                                    ),
+                                  ),
+                                )
+                              else if (isActive)
                                 Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 8,
@@ -1256,11 +1324,73 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
                             ],
                           ),
                         ),
-                        // Location row inside session
+                        // Time row
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                          child: Row(
+                            children: [
+                              _sessionTimeBlock(
+                                Icons.login_rounded,
+                                'In',
+                                widget.formatTime(s.checkinTime),
+                                _accent,
+                              ),
+                              Container(
+                                height: 32,
+                                width: 1,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                color: _border,
+                              ),
+                              _sessionTimeBlock(
+                                Icons.logout_rounded,
+                                'Out',
+                                widget.formatTime(s.checkoutTime),
+                                _primary,
+                              ),
+                              if (s.totalPauseSecs > 0) ...[
+                                Container(
+                                  height: 32,
+                                  width: 1,
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  color: _border,
+                                ),
+                                _sessionTimeBlock(
+                                  Icons.pause_circle_outline_rounded,
+                                  'Pause',
+                                  widget.fmtPause(s.totalPauseSecs),
+                                  _amber,
+                                ),
+                              ],
+                              if (s.forceClosed) ...[
+                                const Spacer(),
+                                Icon(
+                                  Icons.warning_amber_rounded,
+                                  size: 14,
+                                  color: _orange,
+                                ),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  'Force closed',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: _orange,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        // Location row
                         if (s.checkinLat != null)
                           _LocationRow(
                             session: s,
                             fmtCoord: _fmtCoord,
+                            fmtPause: widget.fmtPause,
                             compact: true,
                           ),
                       ],
@@ -1271,23 +1401,27 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
             ),
           ],
 
-          // ── Remarks ───────────────────────────────────────────────────────
-          if (_latest.remarks != null)
+          // ── Force close reason ────────────────────────────────────────────
+          if (_latest.forceClosed && _latest.forceCloseReason != null)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: const BoxDecoration(
-                color: Color(0xFFF8F9FF),
+                color: Color(0xFFFFF7ED),
                 border: Border(top: BorderSide(color: _border)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.notes_rounded, size: 13, color: _purple),
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    size: 13,
+                    color: _orange,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      _latest.remarks!,
-                      style: const TextStyle(fontSize: 12, color: _textMid),
+                      _latest.forceCloseReason!,
+                      style: const TextStyle(fontSize: 12, color: _orange),
                     ),
                   ),
                 ],
@@ -1399,17 +1533,19 @@ class _GpsEmployeeCardState extends State<_GpsEmployeeCard>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Location Row — shows coords + map button
+// Location Row
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _LocationRow extends StatelessWidget {
-  final GpsAttendanceRecord session;
+  final SiteAttendanceRecord session;
   final String Function(double?) fmtCoord;
+  final String Function(int) fmtPause;
   final bool compact;
 
   const _LocationRow({
     required this.session,
     required this.fmtCoord,
+    required this.fmtPause,
     this.compact = false,
   });
 
@@ -1423,8 +1559,8 @@ class _LocationRow extends StatelessWidget {
   }
 
   void _showLiveMap(BuildContext context) async {
-    final lat = session.lastKnownLat!;
-    final lng = session.lastKnownLng!;
+    final lat = session.lastKnownLat ?? session.checkinLat!;
+    final lng = session.lastKnownLng ?? session.checkinLng!;
     final uri = Uri.parse(
       'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
     );
@@ -1441,55 +1577,100 @@ class _LocationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasCheckout = session.checkoutLat != null;
     final isLive = session.status == 'active';
+    final isPaused = session.pausedAt != null;
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 14, vertical: compact ? 7 : 10),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF0FDF4),
-        border: Border(top: BorderSide(color: _border)),
+      decoration: BoxDecoration(
+        color: isPaused ? const Color(0xFFFFFBEB) : const Color(0xFFF0FDF4),
+        border: const Border(top: BorderSide(color: _border)),
       ),
       child: Row(
         children: [
-          Icon(Icons.login_rounded, size: 12, color: _accent),
+          Icon(
+            Icons.login_rounded,
+            size: 12,
+            color: isPaused ? _amber : _accent,
+          ),
           const SizedBox(width: 4),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Site name
+                if (session.siteName != null) ...[
+                  Row(
+                    children: [
+                      Icon(Icons.location_on_rounded, size: 10, color: _purple),
+                      const SizedBox(width: 3),
+                      Text(
+                        session.siteName!,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: _purple,
+                        ),
+                      ),
+                      if (isPaused) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _amber.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'PAUSED',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: _amber,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ] else if (isLive) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _accent.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'LIVE',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: _accent,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                ],
+                // Check-in coords
                 Row(
                   children: [
                     Flexible(
                       child: Text(
                         '${fmtCoord(session.checkinLat)}, ${fmtCoord(session.checkinLng)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: _accent,
+                          color: isPaused ? _amber : _accent,
                         ),
                       ),
                     ),
-                    if (isLive) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _accent.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'LIVE',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: _accent,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
                 if (hasCheckout) ...[
@@ -1511,16 +1692,37 @@ class _LocationRow extends StatelessWidget {
                     ],
                   ),
                 ],
+                // Pause time
+                if (session.totalPauseSecs > 0) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.pause_circle_outline_rounded,
+                        size: 10,
+                        color: _amber,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        'Paused: ${fmtPause(session.totalPauseSecs)}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: _amber,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
           const SizedBox(width: 8),
-          // ── Pin button — opens inline map sheet ───────────────────────────
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ── Live button — only when last_known coords exist ───────────
-              if (session.lastKnownLat != null) ...[
+              // Live button
+              if (isLive && !isPaused) ...[
                 GestureDetector(
                   onTap: () => _showLiveMap(context),
                   child: Container(
@@ -1558,7 +1760,7 @@ class _LocationRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
               ],
-              // ── Pin button — opens inline map sheet ───────────────────────
+              // Pin button
               GestureDetector(
                 onTap: () => _showMap(context),
                 child: Container(
@@ -1596,8 +1798,12 @@ class _LocationRow extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Location Map Sheet (inline flutter_map)
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _LocationMapSheet extends StatelessWidget {
-  final GpsAttendanceRecord session;
+  final SiteAttendanceRecord session;
   const _LocationMapSheet({required this.session});
 
   @override
@@ -1607,7 +1813,6 @@ class _LocationMapSheet extends StatelessWidget {
         ? LatLng(session.checkoutLat!, session.checkoutLng!)
         : null;
 
-    // Center map between both points if both exist
     final center = checkoutPoint != null
         ? LatLng(
             (checkinPoint.latitude + checkoutPoint.latitude) / 2,
@@ -1623,7 +1828,6 @@ class _LocationMapSheet extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // ── Handle + header ───────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Column(
@@ -1665,6 +1869,15 @@ class _LocationMapSheet extends StatelessWidget {
                               color: _textDark,
                             ),
                           ),
+                          if (session.siteName != null)
+                            Text(
+                              session.siteName!,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: _purple,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           Text(
                             checkoutPoint != null
                                 ? 'Check-in & Check-out locations'
@@ -1688,7 +1901,6 @@ class _LocationMapSheet extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 10),
-                // ── Legend ────────────────────────────────────────────────
                 Row(
                   children: [
                     _legendDot(_accent, 'Check-in'),
@@ -1703,7 +1915,6 @@ class _LocationMapSheet extends StatelessWidget {
             ),
           ),
           const Divider(height: 1, color: _border),
-          // ── Map ───────────────────────────────────────────────────────────
           Expanded(
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(
@@ -1711,8 +1922,15 @@ class _LocationMapSheet extends StatelessWidget {
               ),
               child: FlutterMap(
                 options: MapOptions(
-                  initialCenter: center,
-                  initialZoom: checkoutPoint != null ? 14.0 : 15.0,
+                  initialCameraFit: checkoutPoint != null
+                      ? CameraFit.coordinates(
+                          coordinates: [checkinPoint, checkoutPoint],
+                          padding: const EdgeInsets.all(60),
+                        )
+                      : CameraFit.coordinates(
+                          coordinates: [checkinPoint],
+                          padding: const EdgeInsets.all(80),
+                        ),
                 ),
                 children: [
                   TileLayer(
@@ -1722,11 +1940,11 @@ class _LocationMapSheet extends StatelessWidget {
                   ),
                   MarkerLayer(
                     markers: [
-                      // Check-in marker (green)
                       Marker(
                         point: checkinPoint,
                         width: 40,
                         height: 50,
+                        alignment: Alignment.topCenter,
                         child: Column(
                           children: [
                             Container(
@@ -1753,17 +1971,16 @@ class _LocationMapSheet extends StatelessWidget {
                                 color: Colors.white,
                               ),
                             ),
-                            // Pin tail
                             Container(width: 2, height: 8, color: _accent),
                           ],
                         ),
                       ),
-                      // Check-out marker (red) — only if exists
                       if (checkoutPoint != null)
                         Marker(
                           point: checkoutPoint,
                           width: 40,
                           height: 50,
+                          alignment: Alignment.topCenter,
                           child: Column(
                             children: [
                               Container(
@@ -1796,7 +2013,6 @@ class _LocationMapSheet extends StatelessWidget {
                         ),
                     ],
                   ),
-                  // Draw a line between checkin and checkout if both exist
                   if (checkoutPoint != null)
                     PolylineLayer(
                       polylines: [
@@ -1827,348 +2043,6 @@ class _LocationMapSheet extends StatelessWidget {
       ),
       const SizedBox(width: 5),
       Text(label, style: const TextStyle(fontSize: 11, color: _textMid)),
-    ],
-  );
-}
-
-class _LiveLocationMapSheet extends StatelessWidget {
-  final GpsAttendanceRecord session;
-  const _LiveLocationMapSheet({required this.session});
-
-  String _fmtUpdatedAt(String? raw) {
-    if (raw == null) return 'Unknown';
-    try {
-      final parts = raw.split(' ');
-      if (parts.length < 2) return raw;
-      final dateParts = parts[0].split('-');
-      final timeParts = parts[1].split(':');
-      final dt = DateTime(
-        int.parse(dateParts[0]),
-        int.parse(dateParts[1]),
-        int.parse(dateParts[2]),
-        int.parse(timeParts[0]),
-        int.parse(timeParts[1]),
-      );
-      return DateFormat('hh:mm a, dd MMM').format(dt);
-    } catch (_) {
-      return raw.length >= 16 ? raw.substring(0, 16) : raw;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final checkinPoint = session.checkinLat != null
-        ? LatLng(session.checkinLat!, session.checkinLng!)
-        : null;
-    final checkoutPoint = session.checkoutLat != null
-        ? LatLng(session.checkoutLat!, session.checkoutLng!)
-        : null;
-    final livePoint = LatLng(session.lastKnownLat!, session.lastKnownLng!);
-    const liveColor = Color(0xFFF59E0B);
-
-    // Center on live point
-    final allLats = [
-      if (checkinPoint != null) checkinPoint.latitude,
-      if (checkoutPoint != null) checkoutPoint.latitude,
-      livePoint.latitude,
-    ];
-    final allLngs = [
-      if (checkinPoint != null) checkinPoint.longitude,
-      if (checkoutPoint != null) checkoutPoint.longitude,
-      livePoint.longitude,
-    ];
-    final centerLat = allLats.reduce((a, b) => a + b) / allLats.length;
-    final centerLng = allLngs.reduce((a, b) => a + b) / allLngs.length;
-    final center = LatLng(centerLat, centerLng);
-
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          // ── Handle + header ───────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Column(
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: _border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: liveColor.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.my_location_rounded,
-                        size: 16,
-                        color: liveColor,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            session.employeeName,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: _textDark,
-                            ),
-                          ),
-                          Text(
-                            'Last known location · ${_fmtUpdatedAt(session.lastLocationUpdatedAt)}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: _textMid,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: _textMid,
-                        size: 20,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                // ── Legend ────────────────────────────────────────────────
-                Row(
-                  children: [
-                    if (checkinPoint != null) ...[
-                      _legendDot(_accent, 'Check-in'),
-                      const SizedBox(width: 14),
-                    ],
-                    if (checkoutPoint != null) ...[
-                      _legendDot(_red, 'Check-out'),
-                      const SizedBox(width: 14),
-                    ],
-                    _legendDot(
-                      liveColor,
-                      'Live · ${_fmtUpdatedAt(session.lastLocationUpdatedAt)}',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: _border),
-          // ── Map ───────────────────────────────────────────────────────────
-          Expanded(
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(20),
-              ),
-              child: FlutterMap(
-                options: MapOptions(initialCenter: center, initialZoom: 14.5),
-                children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.example.app',
-                  ),
-                  // Polyline connecting all points
-                  PolylineLayer(
-                    polylines: [
-                      if (checkinPoint != null)
-                        Polyline(
-                          points: [
-                            checkinPoint,
-                            if (checkoutPoint != null) checkoutPoint,
-                            livePoint,
-                          ],
-                          strokeWidth: 2.5,
-                          color: _primary.withOpacity(0.4),
-                          isDotted: true,
-                        ),
-                    ],
-                  ),
-                  MarkerLayer(
-                    markers: [
-                      // Check-in marker (green)
-                      if (checkinPoint != null)
-                        Marker(
-                          point: checkinPoint,
-                          width: 40,
-                          height: 50,
-                          child: Column(
-                            children: [
-                              Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: _accent,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2.5,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _accent.withOpacity(0.4),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.login_rounded,
-                                  size: 16,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              Container(width: 2, height: 8, color: _accent),
-                            ],
-                          ),
-                        ),
-                      // Check-out marker (red)
-                      if (checkoutPoint != null)
-                        Marker(
-                          point: checkoutPoint,
-                          width: 40,
-                          height: 50,
-                          child: Column(
-                            children: [
-                              Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: _red,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2.5,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _red.withOpacity(0.4),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.logout_rounded,
-                                  size: 16,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              Container(width: 2, height: 8, color: _red),
-                            ],
-                          ),
-                        ),
-                      // Live / last known marker (yellow) with time label
-                      Marker(
-                        point: livePoint,
-                        width: 80,
-                        height: 70,
-                        child: Column(
-                          children: [
-                            // Time bubble above marker
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: liveColor,
-                                borderRadius: BorderRadius.circular(6),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: liveColor.withOpacity(0.4),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Text(
-                                _fmtUpdatedAt(
-                                  session.lastLocationUpdatedAt,
-                                ).split(',').first,
-                                style: const TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: liveColor,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 2.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: liveColor.withOpacity(0.5),
-                                    blurRadius: 10,
-                                    spreadRadius: 2,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.my_location_rounded,
-                                size: 16,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _legendDot(Color color, String label) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 10,
-        height: 10,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      ),
-      const SizedBox(width: 5),
-      Flexible(
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 11, color: _textMid),
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
     ],
   );
 }

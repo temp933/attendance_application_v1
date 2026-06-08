@@ -140,14 +140,14 @@ class EmpDaily {
   final String status;
   final bool isLate;
   final int lateMinutes;
-  final bool compOffEarned; // did they earn a comp-off today (bool)
+  final bool compOffEarned;
   final String? holidayName;
-  // ── new summary fields ──────────────────────────────────────────────────
   final int totalCompOffEarned;
   final int totalCompOffUsed;
   final int totalCompOffExpired;
   final int totalLeaveApproved;
   final int totalLeaveRejected;
+  final List<SiteSession> siteSessions; // ← moved up, before constructor
 
   const EmpDaily({
     required this.empId,
@@ -166,6 +166,7 @@ class EmpDaily {
     required this.totalCompOffExpired,
     required this.totalLeaveApproved,
     required this.totalLeaveRejected,
+    this.siteSessions = const [], // ← default empty, const-safe
   });
 
   factory EmpDaily.fromJson(Map<String, dynamic> j) => EmpDaily(
@@ -174,7 +175,9 @@ class EmpDaily {
     department: parseString(j['department']),
     checkIn: j['check_in']?.toString(),
     checkOut: j['check_out']?.toString(),
-    workedMinutes: parseInt(j['worked_minutes']),
+    workedMinutes: j['worked_seconds'] != null
+        ? (parseInt(j['worked_seconds']) ~/ 60)
+        : parseInt(j['worked_minutes']),
     status: parseString(j['status']).isEmpty
         ? 'Absent'
         : parseString(j['status']),
@@ -187,23 +190,29 @@ class EmpDaily {
     totalCompOffExpired: parseInt(j['total_comp_off_expired']),
     totalLeaveApproved: parseInt(j['total_leave_approved']),
     totalLeaveRejected: parseInt(j['total_leave_rejected']),
+    siteSessions: (j['sessions'] as List? ?? [])
+        .map((s) => SiteSession.fromJson(s as Map<String, dynamic>))
+        .toList(),
   );
 
-  String get workedFormatted {
+ String get workedFormatted {
     if (workedMinutes <= 0) return '-';
     final h = workedMinutes ~/ 60;
     final m = workedMinutes % 60;
-    return h > 0 ? '${h}h ${m}m' : '${m}m';
+    if (h > 0 && m > 0) return '${h}h ${m}m';
+    if (h > 0) return '${h}h';
+    return '${m}m';
   }
 
   String get lateFormatted {
     if (lateMinutes <= 0) return '-';
     final h = lateMinutes ~/ 60;
     final m = lateMinutes % 60;
-    return h > 0 ? '${h}h ${m}m' : '${m}m';
+    if (h > 0 && m > 0) return '${h}h ${m}m';
+    if (h > 0) return '${h}h';
+    return '${m}m';
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Status constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -215,4 +224,31 @@ class AttendanceStatus {
   static const holiday = 'H';
   static const weekend = 'W';
   static const compOff = 'C';
+}
+
+class SiteSession {
+  final String? siteName;
+  final String? checkIn;
+  final String? checkOut;
+  final String? totalWorkTime;
+  final String status; // 'active' | 'completed'
+  final int totalPauseSecs;
+
+  SiteSession({
+    this.siteName,
+    this.checkIn,
+    this.checkOut,
+    this.totalWorkTime,
+    this.status = 'completed',
+    this.totalPauseSecs = 0,
+  });
+
+  factory SiteSession.fromJson(Map<String, dynamic> j) => SiteSession(
+    siteName: j['site_name'],
+    checkIn: j['checkin_time'],
+    checkOut: j['checkout_time'],
+    totalWorkTime: j['total_work_time'],
+    status: j['status'] ?? 'completed',
+    totalPauseSecs: int.tryParse(j['total_pause_secs']?.toString() ?? '0') ?? 0,
+  );
 }

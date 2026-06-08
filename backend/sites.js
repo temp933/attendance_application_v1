@@ -1,3 +1,4 @@
+// sites.js - API routes for managing construction sites
 const express = require("express");
 const router = express.Router();
 

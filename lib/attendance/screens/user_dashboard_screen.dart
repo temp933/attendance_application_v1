@@ -23,8 +23,9 @@ import 'dept_role_desg_screen.dart';
 import './Attendance screens/normal_attendance_management_screen.dart';
 import './Attendance screens/gps_attendance_management_screen.dart';
 import './Attendance screens/face_gps_attendance_management_screen.dart';
+import './Attendance screens/attendance_site_management.dart';
 import './policy_management_screen.dart';
-import './report_management_screen.dart'; 
+import './report_management_screen.dart';
 import './manage_location.dart';
 // ── Employee screens ──────────────────────────────────────────────────────────
 import 'emp_home_screen.dart';
@@ -34,6 +35,7 @@ import 'comp_off_screen.dart';
 import './Attendance screens/normal_in_out.dart';
 import './Attendance screens/attendance_gps.dart';
 import './Attendance screens/face_gps_attendance.dart';
+import './Attendance screens/site_entry_attendance_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Module definition
@@ -132,6 +134,24 @@ final List<_ModuleDef> _allModules = [
         }) =>
             FaceGpsAttendanceScreen(employeeId: int.tryParse(employeeId) ?? 0),
   ),
+  _ModuleDef(
+    key: 'emp_site_attendance_face',
+    title: 'Site Entry Face Attendance',
+    icon: Icons.face_outlined,
+    selectedIcon: Icons.face,
+    navLabel: 'site Face',
+    builder:
+        ({
+          required employeeId,
+          required roleId,
+          required tenantId,
+          required authToken,
+          required canEdit,
+        }) => SiteEntryAttendanceScreen(
+          employeeId: int.tryParse(employeeId) ?? 0,
+        ),
+  ),
+
   _ModuleDef(
     key: 'emp_leave',
     title: 'My Leave',
@@ -245,6 +265,25 @@ final List<_ModuleDef> _allModules = [
           required authToken,
           required canEdit,
         }) => FaceGpsAttendanceManagementScreen(
+          tenantId: tenantId,
+          authToken: authToken,
+        ),
+  ),
+
+  _ModuleDef(
+    key: 'admin_attendance_site',
+    title: 'Site Attendance',
+    icon: Icons.face_retouching_natural_outlined,
+    selectedIcon: Icons.face_retouching_natural,
+    navLabel: 'Site Att.',
+    builder:
+        ({
+          required employeeId,
+          required roleId,
+          required tenantId,
+          required authToken,
+          required canEdit,
+        }) => SiteAttendanceManagementScreen(
           tenantId: tenantId,
           authToken: authToken,
         ),
@@ -377,7 +416,7 @@ final List<_ModuleDef> _allModules = [
   ),
 
   _ModuleDef(
-    key: 'Site_management',
+    key: 'site_management',
     title: 'Site Management',
     icon: Icons.lock_clock_outlined,
     selectedIcon: Icons.lock_clock,
