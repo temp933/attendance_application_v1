@@ -6,11 +6,6 @@ const express = require("express");
 const router = express.Router();
 const db = require("./config/db");
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/tenant/attendance-mode
-// Returns the attendance mode the tenant chose at registration.
-// Used by the dashboard to optionally hide/show mode-related UI.
-// ─────────────────────────────────────────────────────────────────────────────
 router.get("/attendance-mode", async (req, res) => {
   const tenantId = req.user?.tenant_id ?? req.headers["x-tenant-id"];
   if (!tenantId) {
@@ -38,11 +33,6 @@ router.get("/attendance-mode", async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/tenant/trial-status
-// Returns trial expiry, days remaining, and whether payment is required.
-// Called by the Flutter app on login to show a trial banner if needed.
-// ─────────────────────────────────────────────────────────────────────────────
 router.get("/trial-status", async (req, res) => {
   const tenantId = req.user?.tenant_id ?? req.headers["x-tenant-id"];
   if (!tenantId) {
