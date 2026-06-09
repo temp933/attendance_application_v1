@@ -143,6 +143,14 @@ class RolePermissionService {
         .toList();
   }
 
+  Future<List<RolePermissionModule>> fetchMyPermissions() async {
+    final res = await ApiClient.get('/role-permissions/my-permissions');
+    final json = _parseOrThrow(res.body);
+    return (json['permissions'] as List<dynamic>)
+        .map((e) => RolePermissionModule.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<void> savePermissions(
     int roleId,
     List<RolePermissionModule> modules,

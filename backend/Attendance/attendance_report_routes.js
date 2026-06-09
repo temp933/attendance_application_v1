@@ -106,18 +106,27 @@ async function fetchLeaveMap(tenantId, from, to) {
 
 async function fetchAttendanceMap(tenantId, from, to, mode = "normal") {
   const [rows] = await db.query(
-    `SELECT DISTINCT employee_id, DATE_FORMAT(work_date, '%Y-%m-%d') AS work_date
+    `SELECT DISTINCT employee_id,
+            DATE_FORMAT(work_date, '%Y-%m-%d') AS work_date,
+            MAX(is_late) AS is_late
      FROM employee_attendance
      WHERE tenant_id = ? AND work_date BETWEEN ? AND ?
-       AND checkin_time IS NOT NULL AND attendance_mode = ?`,
+       AND checkin_time IS NOT NULL AND attendance_mode = ?
+     GROUP BY employee_id, work_date`,
     [tenantId, from, to, mode],
   );
-  const map = new Map();
+  const map = new Map(); // emp_id → Set of present dates
+  const lateMap = new Map(); // emp_id → Set of late dates
   for (const row of rows) {
     if (!map.has(row.employee_id)) map.set(row.employee_id, new Set());
     map.get(row.employee_id).add(row.work_date);
+    if (row.is_late == 1) {
+      if (!lateMap.has(row.employee_id))
+        lateMap.set(row.employee_id, new Set());
+      lateMap.get(row.employee_id).add(row.work_date);
+    }
   }
-  return map;
+  return { map, lateMap };
 }
 
 async function fetchAttendanceDetail(tenantId, date, mode = "normal") {
@@ -201,6 +210,38 @@ async function fetchCompOffSummaryMap(tenantId, empIds) {
 }
 
 // ── NEW: leave approved/rejected totals per employee (all-time) ──────────────
+
+async function fetchLateSummaryMap(
+  tenantId,
+  empIds,
+  from,
+  to,
+  mode = "normal",
+) {
+  if (!empIds.length) return new Map();
+  const [rows] = await db.query(
+    `SELECT
+       employee_id,
+       COUNT(DISTINCT work_date) AS late_days,
+       SUM(late_minutes)         AS total_late_minutes
+     FROM employee_attendance
+     WHERE tenant_id        = ?
+       AND employee_id      IN (?)
+       AND work_date        BETWEEN ? AND ?
+       AND attendance_mode  = ?
+       AND is_late          = 1
+       AND checkin_time     IS NOT NULL
+     GROUP BY employee_id`,
+    [tenantId, empIds, from, to, mode],
+  );
+  const map = new Map();
+  for (const r of rows)
+    map.set(r.employee_id, {
+      lateDays: Number(r.late_days),
+      lateMinutes: Number(r.total_late_minutes ?? 0),
+    });
+  return map;
+}
 
 async function fetchLeaveSummaryMap(tenantId, empIds) {
   if (!empIds.length) return new Map();
@@ -434,7 +475,7 @@ router.get("/attendance/report/matrix", async (req, res) => {
       employees,
       holidayMap,
       leaveMap,
-      attendanceMap,
+      attendanceResult,
       compOffUsedMap,
     ] = await Promise.all([
       fetchPolicy(tenant_id),
@@ -444,13 +485,23 @@ router.get("/attendance/report/matrix", async (req, res) => {
       fetchAttendanceMap(tenant_id, from, to, attendanceMode ?? "normal"),
       fetchCompOffUsedMap(tenant_id, from, to),
     ]);
+    const attendanceMap = attendanceResult.map;
+    const lateAttendanceMap = attendanceResult.lateMap;
 
     // Phase 2
     const empIds = employees.map((e) => e.emp_id);
-    const [compOffSummaryMap, leaveSummaryMap] = await Promise.all([
-      fetchCompOffSummaryMap(tenant_id, empIds),
-      fetchLeaveSummaryMap(tenant_id, empIds),
-    ]);
+    const [compOffSummaryMap, leaveSummaryMap, lateSummaryMap] =
+      await Promise.all([
+        fetchCompOffSummaryMap(tenant_id, empIds),
+        fetchLeaveSummaryMap(tenant_id, empIds),
+        fetchLateSummaryMap(
+          tenant_id,
+          empIds,
+          from,
+          to,
+          attendanceMode ?? "normal",
+        ),
+      ]);
 
     const allDates = dateRange(from, to);
 
@@ -478,6 +529,7 @@ router.get("/attendance/report/matrix", async (req, res) => {
         const isHoliday = holidayMap.has(date);
         const isWeekend = isWeekendDay(date, policy);
         const isPresent = attendanceMap.get(emp.emp_id)?.has(date) ?? false;
+        const isLate = lateAttendanceMap.get(emp.emp_id)?.has(date) ?? false;
         const isLeave = leaveMap.get(emp.emp_id)?.has(date) ?? false;
         const isCompOff = compOffUsedMap.get(emp.emp_id)?.has(date) ?? false;
 
@@ -495,7 +547,8 @@ router.get("/attendance/report/matrix", async (req, res) => {
         if (code === "L") leaveDays++;
         if (code === "C") compOffDays++;
 
-        return code;
+        // "PL" = present but late — Flutter renders it differently
+        return code === "P" && isLate ? "PL" : code;
       });
 
       const percentage =
@@ -514,6 +567,10 @@ router.get("/attendance/report/matrix", async (req, res) => {
         approved: 0,
         rejected: 0,
       };
+      const lateSummary = lateSummaryMap.get(emp.emp_id) ?? {
+        lateDays: 0,
+        lateMinutes: 0,
+      };
 
       return {
         emp_id: emp.emp_id,
@@ -526,12 +583,13 @@ router.get("/attendance/report/matrix", async (req, res) => {
         comp_off_days: compOffDays,
         total_working_days: workingDays,
         percentage,
-        // ── new summary fields ──────────────────────────────────────────
         comp_off_earned: coSummary.earned,
         comp_off_used: coSummary.used,
         comp_off_expired: coSummary.expired,
         leave_approved: lvSummary.approved,
         leave_rejected: lvSummary.rejected,
+        late_days: lateSummary.lateDays,
+        late_minutes: lateSummary.lateMinutes,
       };
     });
 

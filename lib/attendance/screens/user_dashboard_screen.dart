@@ -9,6 +9,7 @@ import '../services/attendance_state.dart';
 import '../services/api_service.dart';
 import '../services/site_cache.dart';
 import 'session_guard_mixin.dart';
+import '../services/trial_service.dart';
 import 'login_screen.dart';
 import 'notification.dart';
 
@@ -472,7 +473,8 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
 
   late int _selectedIndex;
   bool _isExpanded = false;
-
+  TrialStatus? _trialStatus;
+  bool _trialBannerDismissed = false;
   late final List<_ModuleDef> _visibleModules;
   late final Map<String, bool> _canEditMap;
   late List<Widget> _pages;
@@ -492,32 +494,40 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
 
     _resolvePermissions();
     _buildPages();
+    _loadTrialStatus();
+  }
+
+  Future<void> _loadTrialStatus() async {
+    // Only fetch for org_admin (they see the billing banner)
+    if (!_isAdmin) return;
+    final status = await TrialService.fetch();
+    if (mounted) setState(() => _trialStatus = status);
   }
 
   // ── Resolve visible modules ───────────────────────────────────────────────
   void _resolvePermissions() {
-    // org_admin → full access
-    if (_isAdmin || widget.permissions == null) {
-      _visibleModules = List.from(_allModules);
-      _canEditMap = {for (final m in _allModules) m.key: true};
+    // If permissions list provided, always filter by it (even for org_admin)
+    if (widget.permissions != null && widget.permissions!.isNotEmpty) {
+      final permMap = <String, Map<String, dynamic>>{
+        for (final p in widget.permissions!) p['module_key'] as String: p,
+      };
+      _visibleModules = [];
+      _canEditMap = {};
+      for (final module in _allModules) {
+        final perm = permMap[module.key];
+        if (perm != null &&
+            (perm['can_view'] == 1 || perm['can_view'] == true)) {
+          _visibleModules.add(module);
+          _canEditMap[module.key] =
+              perm['can_edit'] == 1 || perm['can_edit'] == true;
+        }
+      }
       return;
     }
 
-    final permMap = <String, Map<String, dynamic>>{
-      for (final p in widget.permissions!) p['module_key'] as String: p,
-    };
-
-    _visibleModules = [];
-    _canEditMap = {};
-
-    for (final module in _allModules) {
-      final perm = permMap[module.key];
-      if (perm != null && (perm['can_view'] == 1 || perm['can_view'] == true)) {
-        _visibleModules.add(module);
-        _canEditMap[module.key] =
-            perm['can_edit'] == 1 || perm['can_edit'] == true;
-      }
-    }
+    // No permissions passed → full access fallback (should only happen in dev)
+    _visibleModules = List.from(_allModules);
+    _canEditMap = {for (final m in _allModules) m.key: true};
   }
 
   // ── Build pages ───────────────────────────────────────────────────────────
@@ -628,18 +638,33 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
             : _mobileDrawer(MediaQuery.of(context).size.width),
         body: _hasNoAccess
             ? _noAccessView()
-            : Row(
+            : Column(
                 children: [
-                  if (isDesktop) _desktopSidebar(),
+                  // Trial banner — shown to org_admin only
+                  if (_isAdmin &&
+                      _trialStatus != null &&
+                      !_trialBannerDismissed)
+                    TrialBanner(
+                      status: _trialStatus!,
+                      onDismiss: () =>
+                          setState(() => _trialBannerDismissed = true),
+                    ),
                   Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      child: KeyedSubtree(
-                        key: ValueKey(
-                          '${_selectedIndex}_${_pages[_selectedIndex].hashCode}',
+                    child: Row(
+                      children: [
+                        if (isDesktop) _desktopSidebar(),
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 250),
+                            child: KeyedSubtree(
+                              key: ValueKey(
+                                '${_selectedIndex}_${_pages[_selectedIndex].hashCode}',
+                              ),
+                              child: _pages[_selectedIndex],
+                            ),
+                          ),
                         ),
-                        child: _pages[_selectedIndex],
-                      ),
+                      ],
                     ),
                   ),
                 ],

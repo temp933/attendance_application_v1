@@ -576,11 +576,8 @@ class _SignInTabState extends State<_SignInTab> {
       return;
     }
 
-    // ── Fetch permissions for non-admin roles ──────────────────────────
     List<Map<String, dynamic>>? permissions;
-    if (userType != 'org_admin') {
-      permissions = await PermissionsService.getMyPermissions();
-    }
+    permissions = await PermissionsService.getMyPermissions();
 
     widget.onNavigate(
       loginId: loginId,
@@ -1014,11 +1011,8 @@ class _SignUpTabState extends State<_SignUpTab> {
   final _hrPfCtrl = TextEditingController();
   final _hrEsicCtrl = TextEditingController();
   final _hrYearsExpCtrl = TextEditingController();
-  Map<String, dynamic>? _selectedPlan;
-  List<Map<String, dynamic>> _plans = [];
-  bool _plansLoading = false;
+  int? _selectedMode; // 1=Normal 2=GPS 3=GPS+Face 4=GPS+Face+Site
   int _profileSection = 0;
-
   bool _loading = false;
   String? _error;
 
@@ -1153,26 +1147,6 @@ class _SignUpTabState extends State<_SignUpTab> {
     return null;
   }
 
-  Future<void> _fetchPlans() async {
-    if (_plans.isNotEmpty) return; // already loaded
-    setState(() => _plansLoading = true);
-    try {
-      final res = await http.get(Uri.parse('$_baseUrl/plans/list'));
-      if (res.statusCode == 200) {
-        final body = jsonDecode(res.body) as Map<String, dynamic>;
-        if (body['success'] == true) {
-          setState(() {
-            _plans = List<Map<String, dynamic>>.from(body['plans'] as List);
-          });
-        }
-      }
-    } catch (_) {
-      // silently fail — user can retry by tapping again
-    } finally {
-      if (mounted) setState(() => _plansLoading = false);
-    }
-  }
-
   Future<void> _pickDate(
     BuildContext context,
     TextEditingController ctrl, {
@@ -1201,9 +1175,10 @@ class _SignUpTabState extends State<_SignUpTab> {
   Future<void> _sendOtp() async {
     if (!_orgFormKey.currentState!.validate()) return;
 
-    // Validate plan selection
-    if (_selectedPlan == null) {
-      setState(() => _error = 'Please select a plan before continuing.');
+    if (_selectedMode == null) {
+      setState(
+        () => _error = 'Please select an attendance mode before continuing.',
+      );
       return;
     }
 
@@ -1219,8 +1194,7 @@ class _SignUpTabState extends State<_SignUpTab> {
           'org_name': _orgNameCtrl.text.trim(),
           'admin_email': _adminEmailCtrl.text.trim(),
           'hr_email': _hrEmailCtrl.text.trim(),
-          'plan_id': _selectedPlan!['plan_id'], // ← ADD
-          'plan_code': _selectedPlan!['plan_code'], // ← ADD
+          'attendance_mode': _selectedMode,
         }),
       );
       final body = jsonDecode(res.body);
@@ -1341,7 +1315,6 @@ class _SignUpTabState extends State<_SignUpTab> {
           'company_address': _addressCtrl.text.trim(),
           'domain_name': _domainCtrl.text.trim(),
           'gst_number': _gstCtrl.text.trim(),
-          'plan_id': _selectedPlan?['plan_id'] ?? 'plan-free-trial',
           'admin_login': {
             'username': _adminUsernameCtrl.text.trim(),
             'password': _adminPassCtrl.text,
@@ -1595,63 +1568,13 @@ class _SignUpTabState extends State<_SignUpTab> {
           ),
 
           const SizedBox(height: 12),
-          FormField<String>(
-            validator: (_) => _selectedPlan == null
-                ? 'Please select a plan to continue'
-                : null,
-            builder: (field) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _PlanPickerField(
-                  selectedPlan: _selectedPlan,
-                  loading: _plansLoading,
-                  hasError: field.hasError,
-                  onTap: () async {
-                    await _fetchPlans();
-                    if (!mounted) return;
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) => _PlanBottomSheet(
-                        plans: _plans,
-                        loading: _plansLoading,
-                        selectedPlanId: _selectedPlan?['plan_id'] as String?,
-                        onSelect: (plan) {
-                          setState(() => _selectedPlan = plan);
-                          field.didChange(plan['plan_id'] as String);
-                          Navigator.pop(context);
-                        },
-                      ),
-                    );
-                  },
-                ),
-                if (field.hasError) ...[
-                  const SizedBox(height: 6),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 12),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.error_outline_rounded,
-                          size: 13,
-                          color: _errorRed,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          field.errorText!,
-                          style: const TextStyle(
-                            color: _errorRed,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
+          _AttendanceModeSelector(
+            selected: _selectedMode,
+            hasError: _selectedMode == null && _error != null,
+            onChanged: (v) => setState(() {
+              _selectedMode = v;
+              _error = null;
+            }),
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -2794,728 +2717,205 @@ class _UpperCase extends TextInputFormatter {
       n.copyWith(text: n.text.toUpperCase(), selection: n.selection);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Plan picker field (tappable, shows selected plan name)
-// ─────────────────────────────────────────────────────────────────────────────
-class _PlanPickerField extends StatelessWidget {
-  final Map<String, dynamic>? selectedPlan;
-  final bool loading;
-  final bool hasError; // ← ADD
-  final VoidCallback onTap;
+class _AttendanceModeSelector extends StatelessWidget {
+  final int? selected;
+  final bool hasError;
+  final ValueChanged<int> onChanged;
 
-  const _PlanPickerField({
-    required this.selectedPlan,
-    required this.loading,
-    required this.onTap,
-    this.hasError = false, // ← ADD
+  const _AttendanceModeSelector({
+    required this.selected,
+    required this.hasError,
+    required this.onChanged,
   });
+
+  static const _modes = [
+    _ModeInfo(
+      value: 1,
+      title: 'Normal In / Out',
+      subtitle: 'Manual check-in and check-out. No GPS or face required.',
+      icon: Icons.touch_app_rounded,
+      color: Color(0xFF0EA5E9),
+    ),
+    _ModeInfo(
+      value: 2,
+      title: 'GPS In / Out',
+      subtitle: 'Location-verified attendance. Employee must be within range.',
+      icon: Icons.gps_fixed_rounded,
+      color: Color(0xFF10B981),
+    ),
+    _ModeInfo(
+      value: 3,
+      title: 'GPS + Face',
+      subtitle: 'GPS check-in with face recognition for identity verification.',
+      icon: Icons.face_rounded,
+      color: Color(0xFF8B5CF6),
+    ),
+    _ModeInfo(
+      value: 4,
+      title: 'GPS + Face + Site',
+      subtitle:
+          'Site-radius enforcement with face recognition. Best for field teams.',
+      icon: Icons.location_city_rounded,
+      color: Color(0xFFF59E0B),
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final hasSelection = selectedPlan != null;
-
-    // Border color: error = red, selected = primary, default = grey
-    final borderColor = hasError
-        ? _errorRed
-        : hasSelection
-        ? _primary.withOpacity(0.5)
-        : Colors.grey.shade200;
-    final borderWidth = (hasError || hasSelection) ? 1.5 : 1.0;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: hasError
-              ? _errorRed.withOpacity(0.03)
-              : const Color(0xFFF5F5FF),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor, width: borderWidth),
-        ),
-        child: Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Label row
+        Row(
           children: [
-            Icon(
-              Icons.workspace_premium_rounded,
-              color: hasError ? _errorRed : _primary,
-              size: 20,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF2FF),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'Attendance Mode *',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _primary,
+                  letterSpacing: 0.3,
+                ),
+              ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
-              child: loading
-                  ? const SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: _primary,
-                      ),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          hasSelection
-                              ? selectedPlan!['plan_name'] as String
-                              : 'Select a Plan *',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: hasSelection
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                            color: hasError
-                                ? _errorRed
-                                : hasSelection
-                                ? _textPrimary
-                                : _textSecondary,
-                          ),
-                        ),
-                        if (hasSelection) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            '₹${selectedPlan!['price_monthly']}/month · '
-                            '${selectedPlan!['total_modules']} modules',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: _primary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-            ),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: hasError ? _errorRed : _textSecondary,
-              size: 22,
+              child: Divider(color: Colors.indigo.shade50, thickness: 1),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Plan bottom sheet — DTH/recharge-style cards
-// ─────────────────────────────────────────────────────────────────────────────
-class _PlanBottomSheet extends StatefulWidget {
-  final List<Map<String, dynamic>> plans;
-  final bool loading;
-  final String? selectedPlanId;
-  final void Function(Map<String, dynamic>) onSelect;
-
-  const _PlanBottomSheet({
-    required this.plans,
-    required this.loading,
-    required this.selectedPlanId,
-    required this.onSelect,
-  });
-
-  @override
-  State<_PlanBottomSheet> createState() => _PlanBottomSheetState();
-}
-
-class _PlanBottomSheetState extends State<_PlanBottomSheet> {
-  String _billing = 'monthly'; // 'monthly' | 'yearly'
-  String? _expandedPlanId;
-
-  // Plan-tier accent colours (matches plan_code order from API)
-  static const _tierColors = [
-    Color(0xFF6B7280), // Free Trial — neutral grey
-    Color(0xFF0EA5E9), // Starter — sky blue
-    Color(0xFF8B5CF6), // Growth — violet
-    Color(0xFFF59E0B), // Enterprise — amber/gold
-  ];
-
-  Color _colorFor(int index) =>
-      _tierColors[index.clamp(0, _tierColors.length - 1)];
-
-  String _formatPrice(dynamic price) {
-    final d = double.tryParse(price.toString()) ?? 0;
-    if (d == 0) return 'Free';
-    // Format Indian style: 2999 → ₹2,999
-    final parts = d.toStringAsFixed(0).split('');
-    if (parts.length > 3) {
-      parts.insert(parts.length - 3, ',');
-    }
-    return '₹${parts.join()}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final sh = MediaQuery.of(context).size.height;
-
-    return Container(
-      height: sh * 0.92,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
-        children: [
-          // ── Handle ──────────────────────────────────────────────────
-          const SizedBox(height: 12),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // ── Header ──────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEEF2FF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.workspace_premium_rounded,
-                    color: _primary,
-                    size: 20,
+        const SizedBox(height: 4),
+        const Text(
+          'Choose how your employees record attendance',
+          style: TextStyle(fontSize: 11, color: _textSecondary),
+        ),
+        const SizedBox(height: 10),
+        ...List.generate(_modes.length, (i) {
+          final mode = _modes[i];
+          final isSelected = selected == mode.value;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: GestureDetector(
+              onTap: () => onChanged(mode.value),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? mode.color.withOpacity(0.07)
+                      : const Color(0xFFF5F5FF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSelected
+                        ? mode.color
+                        : hasError
+                        ? _errorRed.withOpacity(0.5)
+                        : Colors.grey.shade200,
+                    width: isSelected ? 2 : 1,
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Choose Your Plan',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: _textPrimary,
-                        ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: mode.color.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      Text(
-                        'Select the best fit for your organisation',
-                        style: TextStyle(fontSize: 11, color: _textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded, color: _textSecondary),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // ── Billing toggle ───────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0F0FF),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                children: [
-                  _BillingTab(
-                    label: 'Monthly',
-                    active: _billing == 'monthly',
-                    onTap: () => setState(() => _billing = 'monthly'),
-                  ),
-                  _BillingTab(
-                    label: 'Yearly  🏷️ Save ~17%',
-                    active: _billing == 'yearly',
-                    onTap: () => setState(() => _billing = 'yearly'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          const Divider(height: 1),
-
-          // ── Plan cards ───────────────────────────────────────────────
-          Expanded(
-            child: widget.loading
-                ? const Center(
-                    child: CircularProgressIndicator(color: _primary),
-                  )
-                : widget.plans.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No plans available.',
-                      style: TextStyle(color: _textSecondary),
+                      child: Icon(mode.icon, color: mode.color, size: 20),
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                    itemCount: widget.plans.length,
-                    itemBuilder: (_, i) {
-                      final plan = widget.plans[i];
-                      final planId = plan['plan_id'] as String;
-                      final isSelected = planId == widget.selectedPlanId;
-                      final isExpanded = planId == _expandedPlanId;
-                      final color = _colorFor(i);
-                      final price = _billing == 'monthly'
-                          ? plan['price_monthly']
-                          : plan['price_yearly'];
-                      final modules =
-                          (plan['modules'] as List?)?.cast<String>() ?? [];
-                      final totalMods =
-                          (plan['total_modules'] as num?)?.toInt() ?? 0;
-                      final maxUsers =
-                          (plan['max_users'] as num?)?.toInt() ?? 0;
-                      final isFree = double.tryParse(price.toString()) == 0;
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: GestureDetector(
-                          onTap: () => setState(
-                            () => _expandedPlanId = isExpanded ? null : planId,
-                          ),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? color.withOpacity(0.05)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isSelected
-                                    ? color
-                                    : Colors.grey.shade200,
-                                width: isSelected ? 2 : 1,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: color.withOpacity(
-                                    isSelected ? 0.12 : 0.04,
-                                  ),
-                                  blurRadius: isSelected ? 16 : 6,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                // ── Card header ──────────────────
-                                Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      // Left: colour dot + name
-                                      Container(
-                                        width: 44,
-                                        height: 44,
-                                        decoration: BoxDecoration(
-                                          color: color.withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                        child: Icon(
-                                          _planIcon(
-                                            plan['plan_code'] as String,
-                                          ),
-                                          color: color,
-                                          size: 22,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Text(
-                                                  plan['plan_name'] as String,
-                                                  style: TextStyle(
-                                                    fontSize: 15,
-                                                    fontWeight: FontWeight.w800,
-                                                    color: _textPrimary,
-                                                  ),
-                                                ),
-                                                if (plan['plan_code'] ==
-                                                    'GROWTH') ...[
-                                                  const SizedBox(width: 6),
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 2,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: _amber.withOpacity(
-                                                        0.15,
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            4,
-                                                          ),
-                                                    ),
-                                                    child: const Text(
-                                                      '⭐ Popular',
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: _amber,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ],
-                                            ),
-                                            const SizedBox(height: 4),
-                                            // User limit chip
-                                            Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.people_outline,
-                                                  size: 12,
-                                                  color: _textSecondary,
-                                                ),
-                                                const SizedBox(width: 3),
-                                                Text(
-                                                  maxUsers == -1
-                                                      ? 'Unlimited users'
-                                                      : 'Up to $maxUsers users',
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: _textSecondary,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Icon(
-                                                  Icons.grid_view_rounded,
-                                                  size: 12,
-                                                  color: _textSecondary,
-                                                ),
-                                                const SizedBox(width: 3),
-                                                Text(
-                                                  '$totalMods modules',
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: _textSecondary,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      // Right: price
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            isFree
-                                                ? 'Free'
-                                                : _formatPrice(price),
-                                            style: TextStyle(
-                                              fontSize: isFree ? 18 : 20,
-                                              fontWeight: FontWeight.w900,
-                                              color: color,
-                                            ),
-                                          ),
-                                          if (!isFree)
-                                            Text(
-                                              _billing == 'monthly'
-                                                  ? '/month'
-                                                  : '/year',
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                color: _textSecondary,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                // ── Module chips row ──────────────
-                                if (modules.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      16,
-                                      0,
-                                      16,
-                                      0,
-                                    ),
-                                    child: SizedBox(
-                                      height: 26,
-                                      child: ListView.separated(
-                                        scrollDirection: Axis.horizontal,
-                                        itemCount: isExpanded
-                                            ? modules.length
-                                            : modules.take(5).length,
-                                        separatorBuilder: (_, __) =>
-                                            const SizedBox(width: 6),
-                                        itemBuilder: (_, mi) {
-                                          final mod = modules[mi];
-                                          return Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: color.withOpacity(0.08),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              mod,
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
-                                                color: color,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-
-                                // ── Expanded: full module grid ────
-                                if (isExpanded && modules.isNotEmpty) ...[
-                                  const SizedBox(height: 12),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                    ),
-                                    child: Wrap(
-                                      spacing: 6,
-                                      runSpacing: 6,
-                                      children: modules.map((mod) {
-                                        return Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 5,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: color.withOpacity(0.08),
-                                            borderRadius: BorderRadius.circular(
-                                              6,
-                                            ),
-                                            border: Border.all(
-                                              color: color.withOpacity(0.2),
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.check_rounded,
-                                                size: 10,
-                                                color: color,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                mod,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: color,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ),
-                                ],
-
-                                // ── Bottom bar: expand + select ───
-                                const SizedBox(height: 12),
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    12,
-                                    0,
-                                    12,
-                                    12,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      // View details toggle
-                                      TextButton.icon(
-                                        onPressed: () => setState(
-                                          () => _expandedPlanId = isExpanded
-                                              ? null
-                                              : planId,
-                                        ),
-                                        icon: Icon(
-                                          isExpanded
-                                              ? Icons.keyboard_arrow_up_rounded
-                                              : Icons
-                                                    .keyboard_arrow_down_rounded,
-                                          size: 16,
-                                          color: color,
-                                        ),
-                                        label: Text(
-                                          isExpanded
-                                              ? 'Hide details'
-                                              : 'View details',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: color,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 6,
-                                          ),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      // Select button
-                                      SizedBox(
-                                        height: 36,
-                                        child: isSelected
-                                            ? OutlinedButton.icon(
-                                                onPressed: () =>
-                                                    widget.onSelect(plan),
-                                                icon: Icon(
-                                                  Icons.check_circle_rounded,
-                                                  size: 15,
-                                                  color: color,
-                                                ),
-                                                label: Text(
-                                                  'Selected',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: color,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                                ),
-                                                style: OutlinedButton.styleFrom(
-                                                  side: BorderSide(
-                                                    color: color,
-                                                  ),
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 14,
-                                                      ),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          10,
-                                                        ),
-                                                  ),
-                                                ),
-                                              )
-                                            : ElevatedButton(
-                                                onPressed: () =>
-                                                    widget.onSelect(plan),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: color,
-                                                  foregroundColor: Colors.white,
-                                                  elevation: 0,
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 20,
-                                                      ),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          10,
-                                                        ),
-                                                  ),
-                                                ),
-                                                child: const Text(
-                                                  'Select',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                                ),
-                                              ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            mode.title,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected ? mode.color : _textPrimary,
                             ),
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            mode.subtitle,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: _textSecondary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSelected ? mode.color : Colors.transparent,
+                        border: Border.all(
+                          color: isSelected ? mode.color : Colors.grey.shade300,
+                          width: 2,
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                      child: isSelected
+                          ? const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 12,
+                            )
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+        if (hasError && selected == null) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: const [
+              Icon(Icons.error_outline_rounded, size: 13, color: _errorRed),
+              SizedBox(width: 5),
+              Text(
+                'Please select an attendance mode',
+                style: TextStyle(
+                  color: _errorRed,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ],
-      ),
+      ],
     );
-  }
-
-  IconData _planIcon(String code) {
-    switch (code) {
-      case 'FREE_TRIAL':
-        return Icons.free_breakfast_rounded;
-      case 'STARTER':
-        return Icons.rocket_launch_rounded;
-      case 'GROWTH':
-        return Icons.trending_up_rounded;
-      case 'ENTERPRISE':
-        return Icons.diamond_rounded;
-      default:
-        return Icons.workspace_premium_rounded;
-    }
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Billing toggle tab (used inside _PlanBottomSheet)
-// ─────────────────────────────────────────────────────────────────────────────
-class _BillingTab extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  const _BillingTab({
-    required this.label,
-    required this.active,
-    required this.onTap,
+class _ModeInfo {
+  final int value;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  const _ModeInfo({
+    required this.value,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
   });
-  @override
-  Widget build(BuildContext context) => Expanded(
-    child: GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        decoration: BoxDecoration(
-          color: active ? _primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: active ? Colors.white : _textSecondary,
-          ),
-        ),
-      ),
-    ),
-  );
 }

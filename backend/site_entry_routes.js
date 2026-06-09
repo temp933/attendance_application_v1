@@ -1046,6 +1046,7 @@ async function findNearbySites(tenantId, lat, lng, radiusMetres = 50) {
 async function getPolicy(tenantId) {
   const [[policy]] = await db.query(
     `SELECT office_in_time,
+            office_out_time,
             late_after_minutes,
             multiple_in_out_allowed,
             auto_checkout_enabled
@@ -1054,7 +1055,7 @@ async function getPolicy(tenantId) {
      LIMIT 1`,
     [tenantId],
   );
-  return policy ?? {};
+  return policy ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1138,7 +1139,31 @@ router.get("/today", requireAuth, async (req, res) => {
       [tenantId, todayDate(), todayDate()],
     );
 
-    res.json({ success: true, records: records.map(normalizeRecord), sites });
+     const policy = await getPolicy(tenantId);
+
+    // Sum all completed sessions' work time for today
+    const [[totalRow]] = await db.query(
+      `SELECT SEC_TO_TIME(
+         SUM(TIMESTAMPDIFF(SECOND, checkin_time, checkout_time))
+       ) AS daily_total
+       FROM employee_attendance
+       WHERE tenant_id       = ?
+         AND employee_id     = ?
+         AND work_date       = ?
+         AND attendance_mode = 'site_entry'
+         AND status          = 'completed'
+         AND checkin_time IS NOT NULL
+         AND checkout_time IS NOT NULL`,
+      [tenantId, empId, todayDate()],
+    );
+
+    res.json({
+      success: true,
+      records: records.map(normalizeRecord),
+      sites,
+      policy: policy ?? null,
+      daily_total: totalRow?.daily_total ?? null,
+    });
   } catch (err) {
     console.error("[GET /site-entry/today]", err);
     res.status(500).json({ success: false, message: "Server error." });

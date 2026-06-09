@@ -116,7 +116,7 @@ class _FaceVerifyScreenState extends State<FaceVerifyScreen>
       final request =
           http.MultipartRequest(
               'POST',
-              Uri.parse(ApiConfig.face_url + '/compare'),
+              Uri.parse(ApiConfig.face_url + '/api/face-service/compare'),
             )
             ..fields['emp_id'] = widget.employeeId.toString()
             ..files.add(

@@ -126,7 +126,12 @@ class RoleModel {
   final String status;
   final String? createdAt;
   final String? updatedAt;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || (other is RoleModel && other.id == id);
 
+  @override
+  int get hashCode => id.hashCode;
   const RoleModel({
     required this.id,
     required this.roleCode,

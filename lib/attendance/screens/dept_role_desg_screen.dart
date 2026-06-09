@@ -92,7 +92,6 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
                 ),
                 // ── Refresh icon sits in the same row as tabs ──────────────
                 Container(width: 1, height: 24, color: _border),
-                 
               ],
             ),
           ),
@@ -1595,6 +1594,7 @@ class _PermissionsTabState extends State<_PermissionsTab>
   List<RoleModel> _roles = [];
   RoleModel? _selectedRole;
   List<RolePermissionModule> _modules = [];
+  Set<String> _tenantModuleKeys = {}; // keys the tenant has access to
 
   bool _rolesLoading = true;
   bool _modulesLoading = false;
@@ -1608,17 +1608,25 @@ class _PermissionsTabState extends State<_PermissionsTab>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadRoles();
+      if (mounted) _loadTenantModulesAndRoles();
     });
   }
 
-  Future<void> _loadRoles() async {
+  Future<void> _loadTenantModulesAndRoles() async {
     if (!mounted) return;
     setState(() => _rolesLoading = true);
     try {
+      // Fetch tenant's available module keys via my-permissions
+      final myPerms = await _svc.fetchMyPermissions();
+      final keys = myPerms.map((m) => m.moduleKey).toSet();
+
       final list = await _roleSvc.fetchAll();
+      debugPrint(
+        '[PermTab] roles loaded: ${list.length}, tenantKeys: ${keys.length}',
+      );
       if (!mounted) return;
       setState(() {
+        _tenantModuleKeys = keys;
         _roles = list;
         _rolesLoading = false;
       });
@@ -1640,8 +1648,12 @@ class _PermissionsTabState extends State<_PermissionsTab>
     });
     try {
       final list = await _svc.fetchPermissions(role.id);
+      // Filter to only modules the tenant has enabled
+      final filtered = _tenantModuleKeys.isEmpty
+          ? list
+          : list.where((m) => _tenantModuleKeys.contains(m.moduleKey)).toList();
       setState(() {
-        _modules = list;
+        _modules = filtered;
         _modulesLoading = false;
       });
     } catch (e) {
@@ -1704,6 +1716,27 @@ class _PermissionsTabState extends State<_PermissionsTab>
                     color: _primary,
                     strokeWidth: 2,
                   ),
+                )
+              : _error != null && _roles.isEmpty
+              ? Row(
+                  children: [
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: _warning,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(fontSize: 12, color: _textMid),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _loadTenantModulesAndRoles,
+                      child: const Text('Retry'),
+                    ),
+                  ],
                 )
               : DropdownButtonFormField<RoleModel>(
                   value: _selectedRole,

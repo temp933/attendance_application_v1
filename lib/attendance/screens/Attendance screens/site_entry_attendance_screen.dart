@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../providers/api_config.dart';
 import 'face_verify_screen.dart';
 import 'att_history.dart';
+import 'normal_in_out.dart' show AttendancePolicy;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -117,6 +118,8 @@ class _SiteEntryAttendanceScreenState extends State<SiteEntryAttendanceScreen>
   bool _actionLoading = false;
 
   List<_Session> _todaySessions = [];
+  AttendancePolicy? _policy;
+  String? _dailyTotal;
 
   // Live clock
   Timer? _clockTimer;
@@ -177,6 +180,13 @@ class _SiteEntryAttendanceScreenState extends State<SiteEntryAttendanceScreen>
           _todaySessions = (body['records'] as List)
               .map((e) => _Session.fromJson(e as Map<String, dynamic>))
               .toList();
+          final rawPolicy = body['policy'];
+          if (rawPolicy != null && rawPolicy is Map<String, dynamic>) {
+            _policy = AttendancePolicy.fromJson(rawPolicy);
+          } else {
+            _policy = null;
+          }
+          _dailyTotal = body['daily_total'] as String?;
         });
       }
     } catch (e) {
@@ -525,8 +535,11 @@ class _SiteEntryAttendanceScreenState extends State<SiteEntryAttendanceScreen>
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                       sliver: SliverList(
                         delegate: SliverChildListDelegate([
-                          _buildHeader(),
                           const SizedBox(height: 14),
+                          if (_policy != null) ...[
+                            _buildPolicyBanner(),
+                            const SizedBox(height: 14),
+                          ],
                           _buildStatusCard(),
                           const SizedBox(height: 14),
                           _buildTimingsRow(),
@@ -546,99 +559,67 @@ class _SiteEntryAttendanceScreenState extends State<SiteEntryAttendanceScreen>
     );
   }
 
-  // ── Header ─────────────────────────────────────────────────────────────────
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                DateFormat('EEE, d MMM yyyy').format(_now),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade500,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'Site Attendance',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1A1A2E),
-                  letterSpacing: -0.3,
-                ),
-              ),
-            ],
+  Widget _buildPolicyBanner() {
+    final p = _policy!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.indigo.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-        ),
-        // Clock
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 3),
-              ),
-            ],
+        ],
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 10),
+          Icon(Icons.login_rounded, size: 13, color: Colors.green.shade600),
+          const SizedBox(width: 4),
+          Text(
+            p.officeInDisplay ?? '--',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A2E),
+            ),
           ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.access_time_rounded,
-                size: 15,
-                color: Color(0xFF5C6BC0),
+          const SizedBox(width: 12),
+          Icon(Icons.logout_rounded, size: 13, color: Colors.red.shade400),
+          const SizedBox(width: 4),
+          Text(
+            p.officeOutDisplay ?? '--',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A2E),
+            ),
+          ),
+          if (p.lateAfterMinutes > 0) ...[
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.orange.shade200),
               ),
-              const SizedBox(width: 6),
-              Text(
-                DateFormat('hh:mm:ss a').format(_now),
-                style: const TextStyle(
-                  fontFeatures: [FontFeature.tabularFigures()],
-                  fontSize: 13,
+              child: Text(
+                'Grace ${p.lateAfterMinutes}m',
+                style: TextStyle(
+                  fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A2E),
+                  color: Colors.orange.shade700,
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 10),
-        // History button
-        GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const AttendanceHistoryScreen(mode: 'site_entry'),
             ),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.history_rounded,
-              size: 20,
-              color: Color(0xFF5C6BC0),
-            ),
-          ),
-        ),
-      ],
+          ],
+        ],
+      ),
     );
   }
 
@@ -738,7 +719,7 @@ class _SiteEntryAttendanceScreenState extends State<SiteEntryAttendanceScreen>
               if (active != null)
                 AnimatedBuilder(
                   animation: _pulseAnim,
-                  builder: (_, __) => Transform.scale(
+                  builder: (_, _) => Transform.scale(
                     scale: _pulseAnim.value,
                     child: Container(
                       width: 12,
@@ -869,23 +850,66 @@ class _SiteEntryAttendanceScreenState extends State<SiteEntryAttendanceScreen>
     );
   }
 
-  // ── Timings row ────────────────────────────────────────────────────────────
   Widget _buildTimingsRow() {
     final active = _activeSession;
+    final multiAllowed = _policy?.multipleInOutAllowed ?? true;
 
-    // For timings, show the LATEST session's checkin and the latest completed
-    // session's checkout (or active session's running time)
     final latestCheckin = _todaySessions.isNotEmpty
         ? _todaySessions.last.checkinTime
         : null;
     final latestCheckout = active == null && _todaySessions.isNotEmpty
         ? _todaySessions.last.checkoutTime
         : null;
-    final totalLabel = active != null
-        ? _elapsed(active.checkinTime!)
-        : _todaySessions.isNotEmpty
-        ? _parseTotalWork(_todaySessions.last.totalWorkTime)
-        : '--';
+
+    // Third block logic:
+    // multi=false → single session only → show checkout time
+    // multi=true  → show today's total worked hours across all sessions
+    final String thirdLabel;
+    final String thirdValue;
+    final Color? thirdValueColor;
+    final IconData thirdIcon;
+    final Color thirdIconBg;
+    final Color thirdIconColor;
+
+    if (!multiAllowed) {
+      // Single in/out: third block = Total Work
+      thirdLabel = 'Total Work';
+      thirdIcon = Icons.timelapse_rounded;
+      thirdIconBg = Colors.indigo.shade50;
+      thirdIconColor = Colors.indigo.shade500;
+      if (active != null) {
+        thirdValue = _elapsed(active.checkinTime!);
+        thirdValueColor = Colors.indigo.shade700;
+      } else if (_dailyTotal != null) {
+        thirdValue = _parseTotalWork(_dailyTotal);
+        thirdValueColor = null;
+      } else if (_todaySessions.isNotEmpty) {
+        thirdValue = _parseTotalWork(_todaySessions.last.totalWorkTime);
+        thirdValueColor = null;
+      } else {
+        thirdValue = '--';
+        thirdValueColor = null;
+      }
+    } else {
+      // Multi in/out: third block = Today's total
+      thirdLabel = 'Total Today';
+      thirdIcon = Icons.timelapse_rounded;
+      thirdIconBg = Colors.indigo.shade50;
+      thirdIconColor = Colors.indigo.shade500;
+      if (active != null) {
+        thirdValue = _elapsed(active.checkinTime!);
+        thirdValueColor = Colors.indigo.shade700;
+      } else if (_dailyTotal != null) {
+        thirdValue = _parseTotalWork(_dailyTotal);
+        thirdValueColor = null;
+      } else if (_todaySessions.isNotEmpty) {
+        thirdValue = _parseTotalWork(_todaySessions.last.totalWorkTime);
+        thirdValueColor = null;
+      } else {
+        thirdValue = '--';
+        thirdValueColor = null;
+      }
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -912,24 +936,28 @@ class _SiteEntryAttendanceScreenState extends State<SiteEntryAttendanceScreen>
             ),
           ),
           _vDivider(),
-          Expanded(
-            child: _timingBlock(
-              icon: Icons.logout_rounded,
-              iconBg: Colors.red.shade50,
-              iconColor: Colors.red.shade400,
-              label: 'Check Out',
-              value: _fmtTime(latestCheckout),
+          // multi=false: show Check Out | Total Today (3 blocks)
+          // multi=true:  show Total Today only (2 blocks — no Last Out)
+          if (!multiAllowed) ...[
+            Expanded(
+              child: _timingBlock(
+                icon: Icons.logout_rounded,
+                iconBg: Colors.red.shade50,
+                iconColor: Colors.red.shade400,
+                label: 'Check Out',
+                value: _fmtTime(latestCheckout),
+              ),
             ),
-          ),
-          _vDivider(),
+            _vDivider(),
+          ],
           Expanded(
             child: _timingBlock(
-              icon: Icons.timelapse_rounded,
-              iconBg: Colors.indigo.shade50,
-              iconColor: Colors.indigo.shade500,
-              label: 'Session',
-              value: totalLabel,
-              valueColor: active != null ? Colors.indigo.shade700 : null,
+              icon: thirdIcon,
+              iconBg: thirdIconBg,
+              iconColor: thirdIconColor,
+              label: thirdLabel,
+              value: thirdValue,
+              valueColor: thirdValueColor,
             ),
           ),
         ],
@@ -1129,7 +1157,11 @@ class _SiteEntryAttendanceScreenState extends State<SiteEntryAttendanceScreen>
   // ── Action buttons ─────────────────────────────────────────────────────────
   Widget _buildActionButtons() {
     final active = _activeSession;
-    final canCheckIn = active == null;
+    final multiAllowed = _policy?.multipleInOutAllowed ?? true;
+    final hasAnySession = _todaySessions.isNotEmpty;
+
+    // If multi=false and any session exists today (active or completed), block check-in
+    final canCheckIn = active == null && (multiAllowed || !hasAnySession);
     final canCheckOut = active != null;
 
     return Column(
@@ -1222,15 +1254,43 @@ class _SiteEntryAttendanceScreenState extends State<SiteEntryAttendanceScreen>
                 ),
               ],
             ),
-            InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: _fetchToday,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  Icons.refresh_rounded,
-                  size: 18,
-                  color: Colors.teal.shade300,
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const AttendanceHistoryScreen(mode: 'site_entry'),
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.teal.shade100),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.history_rounded,
+                      size: 13,
+                      color: Colors.teal.shade400,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'History',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.teal.shade400,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

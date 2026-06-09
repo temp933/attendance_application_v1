@@ -88,7 +88,8 @@ class MatrixEmp {
   final int compOffExpired;
   final int leaveApproved;
   final int leaveRejected;
-
+  final int lateDays;
+  final int lateMinutes;
   const MatrixEmp({
     required this.empId,
     required this.name,
@@ -105,6 +106,8 @@ class MatrixEmp {
     required this.compOffExpired,
     required this.leaveApproved,
     required this.leaveRejected,
+    this.lateDays = 0,
+    this.lateMinutes = 0,
   });
 
   factory MatrixEmp.fromJson(Map<String, dynamic> j) => MatrixEmp(
@@ -123,6 +126,8 @@ class MatrixEmp {
     compOffExpired: parseInt(j['comp_off_expired']),
     leaveApproved: parseInt(j['leave_approved']),
     leaveRejected: parseInt(j['leave_rejected']),
+    lateDays: parseInt(j['late_days']),
+    lateMinutes: parseInt(j['late_minutes']),
   );
 }
 
@@ -195,7 +200,7 @@ class EmpDaily {
         .toList(),
   );
 
- String get workedFormatted {
+  String get workedFormatted {
     if (workedMinutes <= 0) return '-';
     final h = workedMinutes ~/ 60;
     final m = workedMinutes % 60;

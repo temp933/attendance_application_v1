@@ -12,6 +12,7 @@ const authMiddleware = require("./middleware/auth");
 
 app.use(cors());
 app.use(express.json());
+app.set("trust proxy", 1);
 
 // ── DB ───────────────────────────────────────────────────────────────────────
 const db = require("./config/db");
@@ -103,7 +104,15 @@ const completeLimiter = rateLimit({
 // ─────────────────────────────────────────────────────────────────────────────
 app.post("/api/auth/send-otp", otpLimiter, async (req, res) => {
   try {
-    let { org_name, admin_email, hr_email } = req.body;
+    let { org_name, admin_email, hr_email, attendance_mode } = req.body;
+
+    // attendance_mode must be 1, 2, 3 or 4
+    const parsedMode = parseInt(attendance_mode, 10);
+    if (![1, 2, 3, 4].includes(parsedMode)) {
+      return res.status(400).json({
+        message: "attendance_mode is required and must be 1, 2, 3 or 4.",
+      });
+    }
 
     admin_email = admin_email?.toLowerCase().trim();
     hr_email = hr_email?.toLowerCase().trim();
@@ -144,11 +153,13 @@ app.post("/api/auth/send-otp", otpLimiter, async (req, res) => {
       otp: adminOtp,
       email: admin_email,
       expiresAt,
+      attendance_mode: parsedMode,
     });
     otpStore.set(`${sessionId}:hr`, {
       otp: hrOtp,
       email: hr_email,
       expiresAt,
+      attendance_mode: parsedMode,
     });
 
     await Promise.all([
@@ -156,7 +167,11 @@ app.post("/api/auth/send-otp", otpLimiter, async (req, res) => {
       sendOtpEmail(hr_email, hrOtp, org_name),
     ]);
 
-    res.json({ message: "OTP sent successfully.", session_id: sessionId });
+    res.json({
+      message: "OTP sent successfully.",
+      session_id: sessionId,
+      attendance_mode: parsedMode,
+    });
   } catch (err) {
     console.error("[send-otp] Error:", err);
     res.status(500).json({ message: "Server error." });
@@ -262,6 +277,12 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
     return res.status(400).json({ message: "HR email mismatch." });
   }
 
+  const attendanceMode = adminEntry.attendance_mode;
+  if (![1, 2, 3, 4].includes(attendanceMode)) {
+    return res
+      .status(400)
+      .json({ message: "Invalid attendance mode in session." });
+  }
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
@@ -300,35 +321,12 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
         .json({ message: "HR username already taken. Please choose another." });
     }
 
-    // ── 3. Plan validation ────────────────────────────────────────────────
-    const [[planRow]] = await conn.query(
-      `SELECT trial_days, billing_cycle, price_monthly, price_yearly
-       FROM plans WHERE plan_id = ? LIMIT 1`,
-      [plan_id || "plan-free-trial"],
-    );
-
-    if (!planRow) {
-      await conn.rollback();
-      return res.status(400).json({ message: "Invalid plan selected." });
-    }
-
-    const trialDays = planRow.trial_days ?? 30;
-    const billingCycle = planRow.billing_cycle ?? "monthly";
+     
 
     // ── 4. Date calculations ──────────────────────────────────────────────
     const today = new Date();
     const trialEndsAt = new Date(today);
-    trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
-
-    const planStartsAt = new Date(trialEndsAt);
-    planStartsAt.setDate(planStartsAt.getDate() + 1);
-
-    const planEndsAt = new Date(planStartsAt);
-    if (billingCycle === "yearly") {
-      planEndsAt.setFullYear(planEndsAt.getFullYear() + 1);
-    } else {
-      planEndsAt.setMonth(planEndsAt.getMonth() + 1);
-    }
+    trialEndsAt.setDate(trialEndsAt.getDate() + 30);
 
     const toMysqlDate = (d) => d.toISOString().split("T")[0];
 
@@ -380,9 +378,9 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
       `INSERT INTO tenants
         (tenant_id, company_name, contact_person, contact_number,
          admin_email, hr_email, max_users, company_address,
-         domain_name, gst_number, plan_id, status,
-         trial_ends_at, plan_starts_at, plan_ends_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'trial', ?, ?, ?, NOW())`,
+         domain_name, gst_number, status,
+         trial_ends_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'trial', ?, NOW())`,
       [
         tenantId,
         org_name,
@@ -394,10 +392,7 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
         company_address,
         domain_name,
         gst_number || null,
-        plan_id || "plan-free-trial",
         toMysqlDate(trialEndsAt),
-        toMysqlDate(planStartsAt),
-        toMysqlDate(planEndsAt),
       ],
     );
 
@@ -556,9 +551,80 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
       ],
     );
 
+    // ── 14. Save attendance mode ──────────────────────────────────────────
+    await conn.query(
+      `INSERT INTO tenant_attendance_mode (tenant_id, mode) VALUES (?, ?)`,
+      [tenantId, attendanceMode],
+    );
+
+    // ── 15. Seed role_permissions for Admin + HR ──────────────────────────
+    //   Define module sets per attendance mode
+    const DEFAULT_MODULES = [
+      "emp_dashboard",
+      "session_management",
+      "policy_management",
+      "emp_leave",
+      "leave_approval",
+      "leave_management",
+      "comp_off",
+      "emp_profile",
+      "manage_user",
+      "dept_management",
+    ];
+
+    const MODE_MODULES = {
+      1: ["emp_attendance_normal", "admin_attendance_normal", "approval"],
+      2: ["emp_attendance_gps", "admin_attendance_gps", "approval"],
+      3: ["emp_attendance_face", "admin_attendance_face", "face_approval"],
+      4: [
+        "emp_site_attendance_face",
+        "admin_attendance_site",
+        "face_approval",
+        "emp_site",
+        "site_management",
+      ],
+    };
+
+    const assignedModules = [
+      ...DEFAULT_MODULES,
+      ...MODE_MODULES[attendanceMode],
+    ];
+
+    if (assignedModules.length > 0) {
+      // Admin role → full can_view + can_edit on every module
+      const adminPermValues = assignedModules.map((key) => [
+        tenantId,
+        adminRoleId,
+        key,
+        1,
+        1,
+      ]);
+      await conn.query(
+        `INSERT INTO role_permissions (tenant_id, role_id, module_key, can_view, can_edit)
+         VALUES ?
+         ON DUPLICATE KEY UPDATE can_view = VALUES(can_view), can_edit = VALUES(can_edit)`,
+        [adminPermValues],
+      );
+
+      // HR role → full can_view + can_edit on every module
+      const hrPermValues = assignedModules.map((key) => [
+        tenantId,
+        hrRoleId,
+        key,
+        1,
+        1,
+      ]);
+      await conn.query(
+        `INSERT INTO role_permissions (tenant_id, role_id, module_key, can_view, can_edit)
+         VALUES ?
+         ON DUPLICATE KEY UPDATE can_view = VALUES(can_view), can_edit = VALUES(can_edit)`,
+        [hrPermValues],
+      );
+    }
+
     await conn.commit();
 
-    // ── 14. Cleanup OTP session ───────────────────────────────────────────
+    // ── 16. Cleanup OTP session ───────────────────────────────────────────
     otpStore.delete(`${session_id}:admin`);
     otpStore.delete(`${session_id}:hr`);
 
@@ -568,6 +634,8 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
       company_code: companyCode,
       admin_emp_id: adminEmpId,
       hr_emp_id: hrEmpId,
+      attendance_mode: attendanceMode,
+      trial_ends_at: toMysqlDate(trialEndsAt),
     });
   } catch (err) {
     await conn.rollback();
@@ -675,17 +743,21 @@ app.post("/api/auth/resend-otp", otpLimiter, async (req, res) => {
     const hrOtp = generateOtp();
     const expiresAt = Date.now() + 10 * 60 * 1000;
 
+    const savedMode = existingAdmin.attendance_mode ?? 1;
+
     otpStore.set(`${session_id}:admin`, {
       otp: adminOtp,
       email: admin_email.toLowerCase().trim(),
       expiresAt,
       verified: false,
+      attendance_mode: savedMode,
     });
     otpStore.set(`${session_id}:hr`, {
       otp: hrOtp,
       email: hr_email.toLowerCase().trim(),
       expiresAt,
       verified: false,
+      attendance_mode: savedMode,
     });
 
     await Promise.all([
@@ -734,6 +806,9 @@ app.use("/api/roles", authMiddleware, rolerouter);
 
 const rolePermissions = require("./role_permissions");
 app.use("/api/role-permissions", rolePermissions);
+
+const tenantModeRoutes = require("./tenant_attendance_mode");
+app.use("/api/tenant", authMiddleware, tenantModeRoutes);
 
 const designationrouter = require("./designation");
 app.use("/api/designations", authMiddleware, designationrouter);
@@ -794,6 +869,23 @@ app.use("/api/face", attendanceGpsFaceRoutes);
 const faceEmbRouter = require("./admin_face_approval");
 app.use("/api/admin", faceEmbRouter);
 
+// ── Proxy /api/face-service/* → Python FastAPI on :8000
+const { createProxyMiddleware } = require("http-proxy-middleware");
+app.use(
+  "/api/face-service",
+  createProxyMiddleware({
+    target: "http://127.0.0.1:8000",
+    changeOrigin: true,
+    pathRewrite: { "^/api/face-service": "" }, // strips the prefix
+    on: {
+      error: (err, req, res) => {
+        console.error("[face-proxy] Error:", err.message);
+        res.status(502).json({ message: "Face service unavailable." });
+      },
+    },
+  }),
+);
+
 // ── Leave
 const leaveRouter = require("./leave");
 app.use("/api/leave", authMiddleware, leaveRouter);
@@ -815,12 +907,12 @@ const attendanceSessionRouter = require("./Attendance/attendance_session_router"
 app.use("/api/attendance_sessions", authMiddleware, attendanceSessionRouter);
 
 // ── Sites
-const siteRoutes = require('./sites');
-app.use('/api/sites', siteRoutes);
+const siteRoutes = require("./sites");
+app.use("/api/sites", siteRoutes);
 
 // site entry routes
-const siteEntryRoutes = require('./site_entry_routes');
-app.use('/api/site-entry', siteEntryRoutes);
+const siteEntryRoutes = require("./site_entry_routes");
+app.use("/api/site-entry", siteEntryRoutes);
 
 // ── Sessions
 const sessionsRouter = require("./sessions");

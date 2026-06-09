@@ -27,11 +27,12 @@ const Color _divCol = Color(0xFF93C5FD);
 // Status colors for matrix cells: P A L H W C
 const Map<String, (Color, Color)> _statusColors = {
   'P': (Color(0xFFECFDF5), Color(0xFF16A34A)),
+  'PL': (Color(0xFFFEF3C7), Color(0xFFB45309)), // present but late — amber
   'A': (Color(0xFFFEF2F2), Color(0xFFDC2626)),
   'L': (Color(0xFFFFE4E6), Color(0xFFBE123C)),
   'H': (Color(0xFFE0F2FE), Color(0xFF0369A1)),
   'W': (Color(0xFFF5F3FF), _purple),
-  'C': (Color(0xFFFFFBEB), _orange), // ← NEW
+  'C': (Color(0xFFFFFBEB), _orange),
 };
 
 // Status colors for daily table rows: full labels
@@ -540,6 +541,7 @@ class _MatrixTabState extends State<_MatrixTab>
       const _LegendChip('L', 'Leave', Color(0xFFFFE4E6), Color(0xFFBE123C)),
       const _LegendChip('H', 'Holiday', Color(0xFFE0F2FE), Color(0xFF0369A1)),
       const _LegendChip('W', 'Week-off', Color(0xFFF5F3FF), _purple),
+      const _LegendChip('PL', 'Late', Color(0xFFFEF3C7), Color(0xFFB45309)),
       if (_compOffEnabled)
         const _LegendChip('C', 'Comp-Off', Color(0xFFFFFBEB), _orange),
     ],
@@ -558,7 +560,7 @@ class _MatrixTabState extends State<_MatrixTab>
     const hdrBotH = 22.0;
     const hdrTotalH = hdrTopH + 1 + hdrBotH; // 41px — includes inner divider
 
-    final int summaryCols = _compOffEnabled ? 10 : 7;
+    final int summaryCols = _compOffEnabled ? 12 : 9;
     final totalW =
         snoW +
         empIdW +
@@ -697,6 +699,10 @@ class _MatrixTabState extends State<_MatrixTab>
                               summaryHdr('C.Off\nExpired', bg: _red),
                             ],
                             div(),
+                            summaryHdr('Late\nDays', bg: _amber),
+                            div(),
+                            summaryHdr('Late\nHrs', bg: _amber),
+                            div(),
                             summaryHdr('Lv\nApp', bg: _accent),
                             div(),
                             summaryHdr('Lv\nRej', bg: _red),
@@ -767,7 +773,7 @@ class _MatrixTabState extends State<_MatrixTab>
         color: c.$1,
         alignment: Alignment.center,
         child: Text(
-          s,
+          s == 'PL' ? 'P' : s, // display "P" but in amber to signal late
           style: TextStyle(
             fontSize: 9,
             fontWeight: FontWeight.w700,
@@ -853,6 +859,28 @@ class _MatrixTabState extends State<_MatrixTab>
           ),
         ],
 
+        div(),
+        // Late Days
+        summaryCell(
+          '${emp.lateDays}',
+          emp.lateDays > 0 ? const Color(0xFFFEF3C7) : rowBg,
+          emp.lateDays > 0 ? _amber : _textMid,
+        ),
+        div(),
+        // Late Hrs
+        summaryCell(
+          emp.lateMinutes > 0
+              ? () {
+                  final h = emp.lateMinutes ~/ 60;
+                  final m = emp.lateMinutes % 60;
+                  if (h == 0) return '${m}m';
+                  if (m == 0) return '${h}h';
+                  return '${h}h${m}m';
+                }()
+              : '--',
+          emp.lateMinutes > 0 ? const Color(0xFFFEF3C7) : rowBg,
+          emp.lateMinutes > 0 ? _amber : _textMid,
+        ),
         div(),
         // Leave Approved
         summaryCell(
