@@ -39,32 +39,54 @@ class ApprovalRule {
 class LeavePolicy {
   final int leaveTypeId;
   final String leaveName;
+  final String? leaveCode;
   final int maxDays;
   final bool isPaid;
   final bool requiresApproval;
   final int totalApprovalLevels;
+  final bool isSystem;
+  final bool isActive;
+  final bool carryForwardEnabled;
+  final String? carryForwardType; // 'monthly' | 'yearly' | null
+  final double? maxCarryForwardDays;
 
   LeavePolicy({
     required this.leaveTypeId,
     required this.leaveName,
+    this.leaveCode,
     required this.maxDays,
     required this.isPaid,
     required this.requiresApproval,
     required this.totalApprovalLevels,
+    this.isSystem = false,
+    this.isActive = true,
+    this.carryForwardEnabled = false,
+    this.carryForwardType,
+    this.maxCarryForwardDays,
   });
+
+  bool get isCompOff => (leaveCode ?? '').toUpperCase() == 'COMP_OFF';
 
   factory LeavePolicy.fromJson(Map<String, dynamic> j) => LeavePolicy(
     leaveTypeId: j['leave_type_id'] ?? 0,
     leaveName: j['leave_name'] ?? '',
+    leaveCode: j['leave_code'] as String?,
     maxDays: j['max_days'] ?? 0,
     isPaid: (j['is_paid'] == 1 || j['is_paid'] == true),
     requiresApproval:
         (j['requires_approval'] == 1 || j['requires_approval'] == true),
     totalApprovalLevels:
         int.tryParse(j['total_approval_rules']?.toString() ?? '0') ?? 0,
+    isSystem: (j['is_system'] == 1 || j['is_system'] == true),
+    isActive: (j['is_active'] == 1 || j['is_active'] == true),
+    carryForwardEnabled:
+        (j['carry_forward_enabled'] == 1 || j['carry_forward_enabled'] == true),
+    carryForwardType: j['carry_forward_type'] as String?,
+    maxCarryForwardDays: j['max_carry_forward_days'] == null
+        ? null
+        : double.tryParse(j['max_carry_forward_days'].toString()),
   );
 }
-
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 class LeavePolicyManagementScreen extends StatefulWidget {
@@ -345,7 +367,7 @@ class _LeavePolicyManagementScreenState
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
                 child: Text(
-                  'All Policies (${_policies.length})',
+                  'All Policies (${_policies.where((p) => !p.isSystem).length})',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -427,9 +449,10 @@ class _LeavePolicyManagementScreenState
   }
 
   Widget _buildSummaryBar() {
-    final paid = _policies.where((p) => p.isPaid).length;
-    final unpaid = _policies.where((p) => !p.isPaid).length;
-    final withApproval = _policies.where((p) => p.requiresApproval).length;
+    final normal = _policies.where((p) => !p.isSystem).toList();
+    final paid = normal.where((p) => p.isPaid).length;
+    final unpaid = normal.where((p) => !p.isPaid).length;
+    final withApproval = normal.where((p) => p.requiresApproval).length;
 
     return Container(
       color: _primary,
@@ -443,7 +466,7 @@ class _LeavePolicyManagementScreenState
         ),
         child: Row(
           children: [
-            _statItem('${_policies.length}', 'Total', Colors.white),
+            _statItem('${normal.length}', 'Total', Colors.white),
             _vDiv(),
             _statItem('$paid', 'Paid', const Color(0xFF6EE7B7)),
             _vDiv(),
@@ -484,9 +507,10 @@ class _LeavePolicyManagementScreenState
       Container(width: 1, height: 28, color: const Color(0xFFE2E8F0));
 
   Widget _buildSummaryBarLight() {
-    final paid = _policies.where((p) => p.isPaid).length;
-    final unpaid = _policies.where((p) => !p.isPaid).length;
-    final withApproval = _policies.where((p) => p.requiresApproval).length;
+    final normal = _policies.where((p) => !p.isSystem).toList();
+    final paid = normal.where((p) => p.isPaid).length;
+    final unpaid = normal.where((p) => !p.isPaid).length;
+    final withApproval = normal.where((p) => p.requiresApproval).length;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -660,14 +684,42 @@ class _PolicyCardState extends State<_PolicyCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            p.leaveName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              color: _textDark,
-                              letterSpacing: 0.1,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                p.leaveName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                  color: _textDark,
+                                  letterSpacing: 0.1,
+                                ),
+                              ),
+                              if (p.isSystem) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFF0F766E,
+                                    ).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: const Text(
+                                    'SYSTEM',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF0F766E),
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 3),
                           Row(
@@ -753,6 +805,7 @@ class _PolicyCardState extends State<_PolicyCard> {
   }
 
   Widget _buildDetails(LeavePolicy p) {
+    if (p.isSystem) return _buildSystemDetails(p);
     return Column(
       children: [
         Divider(height: 1, thickness: 1, color: Colors.grey.shade100),
@@ -783,7 +836,7 @@ class _PolicyCardState extends State<_PolicyCard> {
                 ],
               ),
               const SizedBox(height: 8),
-              Row(
+             Row(
                 children: [
                   Expanded(
                     child: _infoTile(
@@ -804,6 +857,16 @@ class _PolicyCardState extends State<_PolicyCard> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              _infoTile(
+                icon: Icons.forward_rounded,
+                label: 'Carry Forward',
+                value: !p.carryForwardEnabled
+                    ? 'Disabled'
+                    : '${p.carryForwardType == 'monthly' ? 'Monthly' : 'Yearly'}'
+                      '${p.maxCarryForwardDays != null ? ' · max ${p.maxCarryForwardDays!.toStringAsFixed(0)} days' : ' · unlimited'}',
+                valueColor: p.carryForwardEnabled ? _primary : _textMid,
               ),
               const SizedBox(height: 12),
               Divider(height: 1, color: Colors.grey.shade100),
@@ -829,6 +892,111 @@ class _PolicyCardState extends State<_PolicyCard> {
                 ],
               ),
               const SizedBox(height: 6),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSystemDetails(LeavePolicy p) {
+    return Column(
+      children: [
+        Divider(height: 1, thickness: 1, color: Colors.grey.shade100),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Status banner
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: p.isActive
+                      ? const Color(0xFFECFDF5)
+                      : const Color(0xFFFFF1F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: p.isActive
+                        ? const Color(0xFF0E9F6E).withOpacity(0.3)
+                        : const Color(0xFFEF4444).withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      p.isActive
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.cancel_outlined,
+                      size: 16,
+                      color: p.isActive
+                          ? const Color(0xFF0E9F6E)
+                          : const Color(0xFFEF4444),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        p.isActive
+                            ? 'Comp-Off is enabled for this organisation'
+                            : 'Comp-Off is currently disabled',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: p.isActive
+                              ? const Color(0xFF0E9F6E)
+                              : const Color(0xFFEF4444),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Info note
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      size: 14,
+                      color: Color(0xFF1A56DB),
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'System-managed type. Enable or disable Comp-Off from Attendance Policy settings.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF64748B),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Divider(height: 1, color: Colors.grey.shade100),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _actionBtn(
+                    label: 'Edit',
+                    icon: Icons.edit_outlined,
+                    color: _primary,
+                    onTap: widget.onEdit,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
             ],
           ),
         ),
@@ -977,7 +1145,13 @@ class _PolicySheetState extends State<_PolicySheet> {
   ];
   bool _loading = false;
   bool _isEdit = false;
+  bool _isSystem = false;
 
+  // carry-forward
+  bool _carryForwardEnabled = false;
+  String _carryForwardType = 'yearly'; // 'yearly' | 'monthly'
+  bool _hasMaxCarryForward = false;
+  final _maxCfDaysCtrl = TextEditingController();
   @override
   void initState() {
     super.initState();
@@ -985,11 +1159,11 @@ class _PolicySheetState extends State<_PolicySheet> {
     if (_isEdit) _loadPolicy();
   }
 
-  @override
+ @override
   void dispose() {
     _leaveNameCtrl.dispose();
     _maxDaysCtrl.dispose();
-
+    _maxCfDaysCtrl.dispose();
     super.dispose();
   }
 
@@ -1005,19 +1179,25 @@ class _PolicySheetState extends State<_PolicySheet> {
         _leaveNameCtrl.text = data['leave_name'] ?? '';
         _maxDaysCtrl.text = (data['max_days'] ?? '').toString();
         final rules = (data['approval_rules'] as List?) ?? [];
-        setState(() {
-          _isPaid = (data['is_paid'] == 1 || data['is_paid'] == true);
+        final cfMaxRaw = data['max_carry_forward_days'];
+        if (cfMaxRaw != null) _maxCfDaysCtrl.text = cfMaxRaw.toString();
 
+        setState(() {
+          _isSystem = (data['is_system'] == 1 || data['is_system'] == true);
+          _isPaid = (data['is_paid'] == 1 || data['is_paid'] == true);
           _requiresApproval =
               (data['requires_approval'] == 1 ||
-              data['requires_approval'] == true);
-
+               data['requires_approval'] == true);
+          _carryForwardEnabled =
+              (data['carry_forward_enabled'] == 1 ||
+               data['carry_forward_enabled'] == true);
+          _carryForwardType =
+              (data['carry_forward_type'] as String?) ?? 'yearly';
+          _hasMaxCarryForward = cfMaxRaw != null;
           _approvalRules = rules.isEmpty
               ? [ApprovalRule(minDays: 0.5, maxDays: 2, approvalLevels: 1)]
               : rules
-                    .map(
-                      (e) => ApprovalRule.fromJson(e as Map<String, dynamic>),
-                    )
+                    .map((e) => ApprovalRule.fromJson(e as Map<String, dynamic>))
                     .toList();
         });
       }
@@ -1036,6 +1216,11 @@ class _PolicySheetState extends State<_PolicySheet> {
         'is_paid': _isPaid,
         'requires_approval': _requiresApproval,
         'approval_rules': _approvalRules.map((e) => e.toJson()).toList(),
+        'carry_forward_enabled': _carryForwardEnabled,
+        'carry_forward_type': _carryForwardEnabled ? _carryForwardType : null,
+        'max_carry_forward_days': (_carryForwardEnabled && _hasMaxCarryForward)
+            ? double.tryParse(_maxCfDaysCtrl.text.trim())
+            : null,
       };
       final resp = _isEdit
           ? await ApiClient.put(
@@ -1211,6 +1396,171 @@ class _PolicySheetState extends State<_PolicySheet> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+
+                // ── Carry Forward ──
+                _label('Carry Forward'),
+                const SizedBox(height: 8),
+                _toggleCard(
+                  label: 'Enable Carry Forward',
+                  icon: Icons.forward_rounded,
+                  value: _carryForwardEnabled,
+                  activeColor: _primary,
+                  onTap: () => setState(() {
+                    _carryForwardEnabled = !_carryForwardEnabled;
+                  }),
+                ),
+                if (_carryForwardEnabled) ...[
+                  const SizedBox(height: 10),
+                  // Type selector
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () =>
+                              setState(() => _carryForwardType = 'yearly'),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 130),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: _carryForwardType == 'yearly'
+                                  ? _primary.withOpacity(0.08)
+                                  : Colors.white,
+                              border: Border.all(
+                                color: _carryForwardType == 'yearly'
+                                    ? _primary
+                                    : _border,
+                                width: _carryForwardType == 'yearly' ? 1.8 : 1,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.calendar_month_rounded,
+                                    size: 14,
+                                    color: _carryForwardType == 'yearly'
+                                        ? _primary
+                                        : _textLight),
+                                const SizedBox(width: 6),
+                                Text('Yearly',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: _carryForwardType == 'yearly'
+                                          ? _primary
+                                          : _textMid,
+                                    )),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () =>
+                              setState(() => _carryForwardType = 'monthly'),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 130),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: _carryForwardType == 'monthly'
+                                  ? _primary.withOpacity(0.08)
+                                  : Colors.white,
+                              border: Border.all(
+                                color: _carryForwardType == 'monthly'
+                                    ? _primary
+                                    : _border,
+                                width:
+                                    _carryForwardType == 'monthly' ? 1.8 : 1,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.date_range_rounded,
+                                    size: 14,
+                                    color: _carryForwardType == 'monthly'
+                                        ? _primary
+                                        : _textLight),
+                                const SizedBox(width: 6),
+                                Text('Monthly',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: _carryForwardType == 'monthly'
+                                          ? _primary
+                                          : _textMid,
+                                    )),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  // Max cap toggle + field
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _hasMaxCarryForward = !_hasMaxCarryForward;
+                      if (!_hasMaxCarryForward) _maxCfDaysCtrl.clear();
+                    }),
+                    child: Row(
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 130),
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color:
+                                _hasMaxCarryForward ? _primary : Colors.white,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color:
+                                  _hasMaxCarryForward ? _primary : _border,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: _hasMaxCarryForward
+                              ? const Icon(Icons.check_rounded,
+                                  size: 12, color: Colors.white)
+                              : null,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('Set max carry-forward days',
+                            style:
+                                TextStyle(fontSize: 12, color: _textMid)),
+                      ],
+                    ),
+                  ),
+                  if (_hasMaxCarryForward) ...[
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _maxCfDaysCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      style:
+                          const TextStyle(fontSize: 13, color: _textDark),
+                      decoration: _inputDec(
+                        hint: 'e.g. 15',
+                        icon: Icons.north_east_rounded,
+                      ).copyWith(labelText: 'Max Carry-Forward Days'),
+                      validator: (v) {
+                        if (!_hasMaxCarryForward) return null;
+                        if (v == null || v.isEmpty) return 'Required';
+                        if ((double.tryParse(v) ?? 0) <= 0)
+                          return 'Must be > 0';
+                        return null;
+                      },
+                    ),
+                  ],
+                ],
+
                 const SizedBox(height: 20),
 
                 // ── Approval Flow ──

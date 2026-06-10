@@ -182,11 +182,11 @@ class RolePermissionModule {
     required this.canView,
     required this.canEdit,
   });
-
+  
   factory RolePermissionModule.fromJson(Map<String, dynamic> j) =>
       RolePermissionModule(
         moduleKey: j['module_key'] as String,
-        label: j['label'] as String,
+        label: j['label'] as String? ?? j['module_key'] as String,
         canView: j['can_view'] == 1 || j['can_view'] == true,
         canEdit: j['can_edit'] == 1 || j['can_edit'] == true,
       );

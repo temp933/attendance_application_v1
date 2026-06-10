@@ -1,311 +1,177 @@
-Refactor my HRMS department, role, and designation architecture.
+Here's the complete prompt:
 
-Current Problem:
-I incorrectly designed the system as:
+---
 
-Department -> Roles
+**CONTEXT:**
+I am working on a multi-tenant SaaS HR and attendance management platform called Global App. Stack: Flutter frontend, Node.js/Express backend, MySQL database (`global_app`).
 
-Example:
-Engineering -> Junior Developer
-Engineering -> Senior Developer
-HR -> HR Executive
+I need to add a complete **Leave Accrual System** to the existing leave policy setup. The backend route file is `leave.js` and the Flutter screen is `leave_policy_management_screen.dart`. Both files are already provided in context.
 
-This created problems in:
-- approval workflows
-- permissions
-- reporting hierarchy
-- dashboards
-- scalability
+---
 
-I want to redesign the architecture correctly using scalable multi-tenant HRMS best practices.
+**WHAT EXISTS ALREADY:**
 
---------------------------------------------------
-CORRECT ARCHITECTURE REQUIREMENTS
---------------------------------------------------
+`leave_type_master` table has:
+- `leave_type_id`, `tenant_id`, `leave_name`, `leave_code`, `max_days`
+- `is_paid`, `requires_approval`, `is_system`, `is_active`
+- `carry_forward_enabled`, `carry_forward_type` (yearly/monthly), `max_carry_forward_days`
+- `created_at`, `updated_at`
 
-1. Tenant-Based Architecture
+`leave_balance` table has:
+- `balance_id`, `emp_id`, `leave_type`, `year`
+- `allocated_days`, `used_days`, `pending_days`, `carry_forward`, `tenant_id`
 
-Everything must be isolated by tenant_id.
+Backend already handles: create/update/delete/list leave policies, apply/approve/reject/cancel leave, comp-off, leave balance updates on approve/reject/cancel.
 
-All business tables should contain:
-- tenant_id
+Flutter already has: `LeavePolicyManagementScreen`, `_PolicyCard`, `_PolicySheet` (create/edit form), `LeavePolicy` model.
 
-Examples:
-- departments
-- roles
-- designations
-- employees
-- workflows
-- approvals
+---
 
---------------------------------------------------
-2. Separate Concepts Properly
---------------------------------------------------
+**WHAT NEEDS TO BE ADDED:**
 
-A. Department
-Represents where the employee works.
+**Concept:** A leave policy can have two independent accrual engines running simultaneously, both feeding into the same employee leave balance.
 
-Examples:
-- Engineering
-- HR
-- Sales
+**Engine 1 — Time Based Accrual (toggleable)**
+- Admin enables/disables per policy
+- Type: `yearly` (credit all at once on Jan 1 or employee joining date) or `monthly` (credit every 1st of month)
+- Days: how many days to credit per period
+- Example: 2 days every month, or 12 days every January 1st
 
-B. Role
-Represents authority/permission/access level.
+**Engine 2 — Attendance Based Accrual (toggleable)**
+- Admin enables/disables per policy
+- Streak days: how many consecutive present days (excluding weekends and holidays per tenant's attendance policy) triggers a credit
+- Reward days: how many days to credit when streak is completed
+- Streak resets to 0 if employee is absent or takes leave on a working day
+- Example: every 20 consecutive present days → earn 1 day
 
-Examples:
-- employee
-- team_lead
-- manager
-- hr
-- admin
+**Both engines can be ON simultaneously for the same policy.**
+Example: Monthly 2 days + attendance bonus 1 day per 20 streak = same leave balance gets both credits.
 
-Roles must be GLOBAL within tenant.
-Roles should NOT belong to departments.
+**Carry Forward (already partially exists, keep and extend):**
+- enabled/disabled
+- reset type: yearly or monthly
+- max carry forward days (optional cap, null = unlimited)
 
-C. Designation
-Represents employee title/position.
+**Max Days:**
+- Represents the annual cap on total balance (allocated + carried forward combined)
+- Employee cannot exceed this cap regardless of accrual
 
-Examples:
-- Intern
-- Junior Developer
-- Senior Developer
-- HR Executive
+---
 
-Designations belong to departments.
+**DB CHANGES NEEDED:**
 
---------------------------------------------------
-3. Remove Wrong Architecture
---------------------------------------------------
+Add to `leave_type_master`:
+```sql
+-- Time based accrual
+time_accrual_enabled     TINYINT(1) NOT NULL DEFAULT 0
+time_accrual_type        ENUM('yearly','monthly') DEFAULT 'yearly'
+time_accrual_days        DECIMAL(5,2) DEFAULT 0
 
-REMOVE:
+-- Attendance based accrual
+attendance_accrual_enabled   TINYINT(1) NOT NULL DEFAULT 0
+attendance_accrual_streak    INT DEFAULT NULL  -- consecutive present days needed
+attendance_accrual_reward    DECIMAL(5,2) DEFAULT NULL  -- days credited per streak completion
+```
 
-department -> roles relationship
+---
 
-REMOVE:
-department_id from role_master
+**BACKEND CHANGES NEEDED (leave.js):**
 
-REMOVE old APIs:
-GET /api/departments/:id/roles
-POST /api/departments/:id/roles
-PUT /api/departments/:id/roles/:roleId/status
-DELETE /api/departments/:id/roles/:roleId
+1. **Update `POST /api/leave/policy/create`** — accept and save new accrual fields
 
---------------------------------------------------
-4. Correct Database Structure
---------------------------------------------------
+2. **Update `PUT /api/leave/policy/update/:id`** — accept and save new accrual fields
 
-A. role_master
+3. **Update `GET /api/leave/policy/list`** — return new accrual fields
 
-CREATE TABLE role_master (
-    role_id INT PRIMARY KEY AUTO_INCREMENT,
-    tenant_id INT NOT NULL,
-    role_name VARCHAR(100) NOT NULL,
-    status ENUM('Active','Inactive') DEFAULT 'Active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+4. **Update `GET /api/leave/policy/:id`** — return new accrual fields
+
+5. **New route `POST /api/leave/allocate`** — admin triggers this (or cron calls it):
+   - Accepts: `{ leave_type_id, year, month (optional) }`
+   - For `time_accrual_type = yearly`: credits `time_accrual_days` to all active employees once per year. Skip if already allocated this year.
+   - For `time_accrual_type = monthly`: credits `time_accrual_days` to all active employees once per month. Skip if already allocated this month+year.
+   - Respects `max_days` cap — do not exceed total balance cap
+   - Uses `leave_balance` table with upsert pattern (already exists in codebase)
+   - Tenant scoped
+
+6. **New route `POST /api/leave/attendance-accrual`** — called after marking attendance present:
+   - Accepts: `{ emp_id }` (tenant from JWT)
+   - Finds all policies with `attendance_accrual_enabled = 1` for this tenant
+   - For each policy: counts consecutive present days for this employee from `attendance_master` (status = 'present'), stopping count on first absent/leave day going backwards
+   - If streak >= `attendance_accrual_streak`: credit `attendance_accrual_reward` days to `leave_balance`, then reset tracking (add a `leave_accrual_log` table entry to prevent double credit)
+   - Respects `max_days` cap
+   - Tenant scoped
+
+7. **New route `POST /api/leave/carry-forward`** — year-end / month-end processing:
+   - Accepts: `{ leave_type_id, from_year, to_year }`
+   - For each active employee: take unused balance (`allocated_days - used_days - pending_days`), apply `max_carry_forward_days` cap, insert as `carry_forward` in new year's `leave_balance` row
+   - If `carry_forward_enabled = false`: set carry_forward = 0
+   - Tenant scoped
+
+8. **New table needed — `leave_accrual_log`:**
+```sql
+CREATE TABLE leave_accrual_log (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  tenant_id     VARCHAR(100) NOT NULL,
+  emp_id        INT NOT NULL,
+  leave_type_id INT NOT NULL,
+  accrual_type  ENUM('time_yearly','time_monthly','attendance') NOT NULL,
+  days_credited DECIMAL(5,2) NOT NULL,
+  accrual_date  DATE NOT NULL,
+  reference     VARCHAR(100),  -- e.g. '2024-03' for monthly, streak end date for attendance
+  created_at    DATETIME DEFAULT NOW(),
+  UNIQUE KEY uq_accrual (tenant_id, emp_id, leave_type_id, accrual_type, reference)
 );
+```
+The UNIQUE KEY on `reference` prevents double-crediting.
 
-Roles are tenant-level global roles.
+---
 
---------------------------------------------------
-B. department_master
+**FLUTTER CHANGES NEEDED (leave_policy_management_screen.dart):**
 
-CREATE TABLE department_master (
-    department_id INT PRIMARY KEY AUTO_INCREMENT,
-    tenant_id INT NOT NULL,
-    department_name VARCHAR(150) NOT NULL,
-    status ENUM('Active','Inactive') DEFAULT 'Active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+1. **Update `LeavePolicy` model** — add fields:
+   - `timeAccrualEnabled`, `timeAccrualType`, `timeAccrualDays`
+   - `attendanceAccrualEnabled`, `attendanceAccrualStreak`, `attendanceAccrualReward`
 
---------------------------------------------------
-C. designation_master
+2. **Update `_PolicySheet` (create/edit form)** — add UI sections:
 
-CREATE TABLE designation_master (
-    designation_id INT PRIMARY KEY AUTO_INCREMENT,
-    tenant_id INT NOT NULL,
-    department_id INT NOT NULL,
-    designation_name VARCHAR(150) NOT NULL,
-    status ENUM('Active','Inactive') DEFAULT 'Active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    FOREIGN KEY (department_id)
-    REFERENCES department_master(department_id)
-);
+   **Section: Time Based Accrual** (after existing Settings toggles)
+   - Toggle card to enable/disable
+   - If enabled: show type selector (Yearly / Monthly chips)
+   - If enabled: show days field ("Days per period")
 
---------------------------------------------------
-D. employee_master
+   **Section: Attendance Based Accrual** (after Time Based section)
+   - Toggle card to enable/disable
+   - If enabled: show streak field ("Consecutive present days")
+   - If enabled: show reward field ("Days to credit per streak")
 
-Employee table must contain:
+   Both sections should follow the exact same visual pattern as existing toggle cards and input fields in the file.
 
-- tenant_id
-- department_id
-- designation_id
-- role_id
-- reporting_to
+3. **Update `_PolicyCard` expanded details** — show accrual info in `_infoTile` widgets:
+   - Time accrual: "Monthly — 2 days" or "Yearly — 12 days" or "Disabled"
+   - Attendance accrual: "Every 20 present days → 1 day" or "Disabled"
 
-Example:
+4. **Update `_save()` payload** — include all new accrual fields
 
-CREATE TABLE employee_master (
-    emp_id INT PRIMARY KEY AUTO_INCREMENT,
-    tenant_id INT NOT NULL,
-    department_id INT,
-    designation_id INT,
-    role_id INT,
-    reporting_to INT NULL,
+5. **Update `_loadPolicy()`** — read and populate all new accrual fields
 
-    FOREIGN KEY (department_id)
-    REFERENCES department_master(department_id),
+---
 
-    FOREIGN KEY (designation_id)
-    REFERENCES designation_master(designation_id),
+**RULES TO FOLLOW:**
 
-    FOREIGN KEY (role_id)
-    REFERENCES role_master(role_id),
+- Strict find-and-replace delivery — no new files unless `leave_accrual_log` table creation SQL
+- All new backend fields must be nullable-safe (use `?? 0`, `?? null` defaults)
+- All DB queries must be tenant scoped
+- Flutter code must follow exact same color palette, widget patterns, and style already in the file
+- No new classes unless absolutely necessary
+- Backend validation: if `time_accrual_enabled = true`, then `time_accrual_days` must be > 0
+- Backend validation: if `attendance_accrual_enabled = true`, both `streak` and `reward` must be > 0
+- `max_days` acts as annual cap — no accrual should push balance above this
+- The `leave_accrual_log` UNIQUE KEY is the safeguard against double crediting — always INSERT IGNORE into it before crediting
 
-    FOREIGN KEY (reporting_to)
-    REFERENCES employee_master(emp_id)
-);
+---
 
---------------------------------------------------
-5. New API Structure
---------------------------------------------------
-
-A. Department APIs
-
-GET    /api/departments
-POST   /api/departments
-PUT    /api/departments/:id/status
-DELETE /api/departments/:id
-GET    /api/departments/:id/employees
-
---------------------------------------------------
-B. Global Role APIs
-
-GET    /api/roles
-POST   /api/roles
-PUT    /api/roles/:id/status
-DELETE /api/roles/:id
-
-Roles are NOT department-specific.
-
---------------------------------------------------
-C. Department Designation APIs
-
-GET    /api/departments/:id/designations
-POST   /api/departments/:id/designations
-PUT    /api/designations/:id/status
-DELETE /api/designations/:id
-
---------------------------------------------------
-6. Approval Workflow Goal
---------------------------------------------------
-
-This architecture must support:
-
-- dynamic approval flow
-- multi-level approvals
-- department-specific workflows
-- reporting hierarchy approvals
-- role-based approvals
-- tenant-specific workflows
-
-Examples:
-- Some organizations use TL -> Manager -> HR
-- Some use only Manager
-- Some use Supervisor -> Admin
-
-The system must support all dynamically.
-
---------------------------------------------------
-7. Reporting Hierarchy
---------------------------------------------------
-
-Employees should report only to their department hierarchy.
-
-Example:
-
-Engineering Intern
-   -> Engineering TL
-      -> Engineering Manager
-
-HR Executive
-   -> HR Manager
-
-Approvals should go only to relevant hierarchy,
-not all managers globally.
-
---------------------------------------------------
-8. Validation Requirements
---------------------------------------------------
-
-Add:
-- duplicate checks
-- tenant isolation
-- active/inactive validation
-- safe delete validation
-- employee dependency checks
-
---------------------------------------------------
-9. Migration Requirements
---------------------------------------------------
-
-Generate:
-- ALTER TABLE queries
-- migration scripts
-- data migration logic
-- backward compatibility handling
-
---------------------------------------------------
-10. Express.js Refactor
---------------------------------------------------
-
-Refactor existing routes safely.
-
-Generate:
-- updated routes
-- controllers
-- validations
-- service layer
-- reusable query helpers
-- scalable folder structure
-
---------------------------------------------------
-11. Frontend Compatibility
---------------------------------------------------
-
-Frontend should support:
-
-- separate department management
-- separate role management
-- designation management
-- employee hierarchy
-- dynamic approval configuration
-
---------------------------------------------------
-12. Tech Stack
---------------------------------------------------
-
-Backend:
-- Node.js
-- Express.js
-- MySQL
-
-Frontend:
-- Flutter
-
---------------------------------------------------
-13. Important Final Rule
---------------------------------------------------
-
-Department != Role != Designation
-
-Keep all three separate.
-
-Department = where employee works
-Role = authority/access
-Designation = employee title
-Workflow = approval process
-Hierarchy = reporting structure
-
-Follow enterprise-grade scalable HRMS architecture.
+**DELIVER IN THIS ORDER:**
+1. SQL — `ALTER TABLE leave_type_master` statements
+2. SQL — `CREATE TABLE leave_accrual_log`
+3. Backend — updated `leave.js` (full file or exact find-and-replace blocks)
+4. Flutter — updated `leave_policy_management_screen.dart` (exact find-and-replace blocks)

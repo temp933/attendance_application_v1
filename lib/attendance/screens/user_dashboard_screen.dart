@@ -21,15 +21,15 @@ import 'admin_approval.dart';
 import 'admin_face_approval.dart';
 import 'admin_session_management_screen.dart';
 import 'dept_role_desg_screen.dart';
+import 'admin_home_screen.dart';
 import './Attendance screens/normal_attendance_management_screen.dart';
 import './Attendance screens/gps_attendance_management_screen.dart';
 import './Attendance screens/face_gps_attendance_management_screen.dart';
 import './Attendance screens/attendance_site_management.dart';
 import './policy_management_screen.dart';
-import './report_management_screen.dart';
 import './manage_location.dart';
 // ── Employee screens ──────────────────────────────────────────────────────────
-import 'emp_home_screen.dart';
+// import 'emp_home_screen.dart';
 import 'emp_leave_screen.dart';
 import 'emp_work_location.dart';
 import 'comp_off_screen.dart';
@@ -84,10 +84,7 @@ final List<_ModuleDef> _allModules = [
           required tenantId,
           required authToken,
           required canEdit,
-        }) => EmployeeHomeScreen(
-          empId: int.tryParse(employeeId) ?? 0,
-          role: roleId,
-        ),
+        }) => AdminHomeScreen(employeeId: employeeId),
   ),
   _ModuleDef(
     key: 'emp_attendance_normal',
@@ -386,21 +383,6 @@ final List<_ModuleDef> _allModules = [
         }) => AdminSessionManagementScreen(),
   ),
   _ModuleDef(
-    key: 'report',
-    title: 'Reports',
-    icon: Icons.bar_chart_outlined,
-    selectedIcon: Icons.bar_chart,
-    navLabel: 'Reports',
-    builder:
-        ({
-          required employeeId,
-          required roleId,
-          required tenantId,
-          required authToken,
-          required canEdit,
-        }) => ReportManagementScreen(authToken: authToken, tenantId: tenantId),
-  ),
-  _ModuleDef(
     key: 'policy_management',
     title: 'Policy Management',
     icon: Icons.policy_outlined,
@@ -473,6 +455,7 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
 
   late int _selectedIndex;
   bool _isExpanded = false;
+  bool _isPinned = false;
   TrialStatus? _trialStatus;
   bool _trialBannerDismissed = false;
   late final List<_ModuleDef> _visibleModules;
@@ -577,7 +560,11 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
   // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final bool isDesktop = MediaQuery.of(context).size.width >= 900;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double screenHeight = MediaQuery.of(context).size.height;
+    // True tablet/desktop only — not phones in landscape
+    final bool isDesktop =
+        screenWidth >= 720 && screenWidth > screenHeight && screenWidth >= 900;
 
     return ChangeNotifierProvider(
       create: (_) => AttendanceProvider(empId: widget.employeeId),
@@ -705,13 +692,18 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
 
   // ── Desktop sidebar ───────────────────────────────────────────────────────
   Widget _desktopSidebar() {
+    final bool expanded = _isExpanded || _isPinned;
     return MouseRegion(
-      onEnter: (_) => setState(() => _isExpanded = true),
-      onExit: (_) => setState(() => _isExpanded = false),
+      onEnter: (_) {
+        if (!_isPinned) setState(() => _isExpanded = true);
+      },
+      onExit: (_) {
+        if (!_isPinned) setState(() => _isExpanded = false);
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeInOut,
-        width: _isExpanded ? 232 : 72,
+        width: expanded ? 232 : 72,
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border(right: BorderSide(color: _border, width: 1)),
@@ -726,12 +718,35 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                   SizedBox(
                     height: 56,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: Row(
                         children: [
-                          Icon(_panelIcon, size: 24),
+                          // Toggle pin button
+                          GestureDetector(
+                            onTap: () => setState(() {
+                              _isPinned = !_isPinned;
+                              if (!_isPinned) _isExpanded = false;
+                            }),
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: _isPinned
+                                    ? _selectedBg
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                _isPinned
+                                    ? Icons.chevron_left_rounded
+                                    : Icons.chevron_right_rounded,
+                                size: 20,
+                                color: _isPinned ? _primary : _textMid,
+                              ),
+                            ),
+                          ),
                           if (wide) ...[
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 _panelTitle,
@@ -748,7 +763,6 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                       ),
                     ),
                   ),
-
                   // Nav items
                   Expanded(
                     child: ListView.builder(
@@ -758,10 +772,15 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                         final m = _visibleModules[index];
                         final selected = _selectedIndex == index;
                         return Tooltip(
-                          message: wide ? '' : m.navLabel,
+                          message: expanded ? '' : m.navLabel,
                           preferBelow: false,
                           child: InkWell(
-                            onTap: () => setState(() => _selectedIndex = index),
+                            onTap: () => setState(() {
+                              _selectedIndex = index;
+                              // Auto-collapse after selection
+                              _isPinned = false;
+                              _isExpanded = false;
+                            }),
                             borderRadius: BorderRadius.circular(10),
                             child: Container(
                               margin: const EdgeInsets.symmetric(

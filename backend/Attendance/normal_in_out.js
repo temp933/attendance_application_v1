@@ -108,8 +108,46 @@ async function getPolicy(tenantId) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/attendance/today
+// Helper: sync COMP_OFF leave type when policy is saved
 // ─────────────────────────────────────────────────────────────────────────────
+async function syncCompOffLeaveType(tenantId, compOffEnabled) {
+  if (compOffEnabled) {
+    const [[existing]] = await db.query(
+      `SELECT leave_type_id, is_active FROM leave_type_master
+       WHERE tenant_id = ? AND leave_code = 'COMP_OFF' AND is_system = 1
+       LIMIT 1`,
+      [tenantId],
+    );
+    if (existing) {
+      if (existing.is_active !== 1) {
+        await db.query(
+          `UPDATE leave_type_master
+           SET is_active = 1, updated_at = NOW()
+           WHERE leave_type_id = ?`,
+          [existing.leave_type_id],
+        );
+      }
+    } else {
+      await db.query(
+        `INSERT INTO leave_type_master
+          (tenant_id, leave_name, leave_code, max_days, is_paid,
+           requires_approval, is_active, is_system, created_at, updated_at)
+         VALUES (?, 'Comp Off', 'COMP_OFF', 0, 0, 0, 1, 1, NOW(), NOW())`,
+        [tenantId],
+      );
+    }
+  } else {
+    await db.query(
+      `UPDATE leave_type_master
+       SET is_active = 0, updated_at = NOW()
+       WHERE tenant_id = ? AND leave_code = 'COMP_OFF' AND is_system = 1`,
+      [tenantId],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/attendance/today
 router.get("/today", requireAuth, async (req, res) => {
   const { tenantId, empId } = req.user;
   try {
@@ -680,6 +718,9 @@ router.post("/policy", requireAuth, async (req, res) => {
         ],
       );
     }
+
+    // ── Sync COMP_OFF leave type ──────────────────────────────────────────
+    await syncCompOffLeaveType(tenantId, params.comp_off_enabled === 1);
 
     const policy = await getPolicy(tenantId);
     res.json({ success: true, message: "Policy saved.", policy });

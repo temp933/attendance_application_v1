@@ -1,486 +1,479 @@
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../common/utils/greeting_util.dart';
 import '../services/employee_service.dart';
+import 'admin_manage_user.dart';
+import '../providers/api_config.dart';
 
+// ── Design tokens (matches your existing screens) ─────────────────────────────
+const _primary = Color(0xFF1A56DB);
+const _primaryLight = Color(0xFFEEF2FF);
+const _surface = Color(0xFFF8FAFF);
+const _card = Colors.white;
+const _textDark = Color(0xFF0F172A);
+const _textMid = Color(0xFF64748B);
+const _textLight = Color(0xFF94A3B8);
+const _border = Color(0xFFE2E8F0);
+const _success = Color(0xFF10B981);
+const _successLight = Color(0xFFD1FAE5);
+const _danger = Color(0xFFEF4444);
+const _dangerLight = Color(0xFFFFE4E6);
+const _warning = Color(0xFFF59E0B);
+const _warningLight = Color(0xFFFEF3C7);
+const _indigo = Color(0xFF4F46E5);
+const _indigoLight = Color(0xFFEEF2FF);
+const _purple = Color(0xFF9333EA);
+const _purpleLight = Color(0xFFF3E8FF);
+
+// ─────────────────────────────────────────────────────────────────────────────
 class AdminHomeScreen extends StatefulWidget {
   final String employeeId;
-  final void Function(int index)? onNavigate; // ✅ ADD THIS
+  final void Function(int index)? onNavigate;
 
-  const AdminHomeScreen({
-    super.key,
-    required this.employeeId,
-    this.onNavigate, // ✅ ADD THIS
-  });
+  const AdminHomeScreen({super.key, required this.employeeId, this.onNavigate});
 
   @override
   State<AdminHomeScreen> createState() => _AdminHomeScreenState();
 }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
-  String AdminName = ""; // admin's name to display
-  bool isLoading = true; // Loading state
+  // ── State ──────────────────────────────────────────────────────────────────
+  String _adminName = '';
+  bool _isLoading = true;
+  bool _isRefreshing = false;
+
   int totalEmployees = 0;
-  List<LeaveData> leaveChartData = [];
-  bool isLeaveLoading = true;
   int presentCount = 0;
   int absentCount = 0;
   int lateEntryCount = 0;
   int onSiteCount = 0;
   int pendingCount = 0;
 
+  DateTime? _lastFetched;
+
   @override
   void initState() {
     super.initState();
-    _fetchAdminData();
-    _fetchLeaveData();
+    _fetchAll();
   }
 
-  Future<void> _fetchAdminData() async {
+  // ── Data ───────────────────────────────────────────────────────────────────
+
+  Future<void> _fetchAll({bool isRefresh = false}) async {
+    if (isRefresh) setState(() => _isRefreshing = true);
+
     try {
-      final employee = await EmployeeService.fetchEmployee(
-        int.parse(widget.employeeId),
-      );
+      final results = await Future.wait([
+        EmployeeService.fetchEmployeeName(int.parse(widget.employeeId)),
+        EmployeeService.fetchDashboardData(),
+      ]);
 
-      final dashboard = await EmployeeService.fetchDashboardData();
-      final onSite = await EmployeeService.fetchOnSiteToday();
-      print("ON SITE VALUE FROM API: $onSite");
+      final name = results[0] as String;
+      final dashboard = results[1] as Map<String, dynamic>;
 
-      String fullName = employee.firstName ?? "";
-
-      if ((employee.midName ?? "").isNotEmpty) {
-        fullName += " ${employee.midName}";
-      }
-
-      if ((employee.lastName ?? "").isNotEmpty) {
-        fullName += " ${employee.lastName}";
-      }
-
+      if (!mounted) return;
       setState(() {
-        AdminName = fullName;
+        _adminName = name;
         totalEmployees = (dashboard['totalEmployees'] as num?)?.toInt() ?? 0;
         presentCount = (dashboard['present'] as num?)?.toInt() ?? 0;
         absentCount = (dashboard['absent'] as num?)?.toInt() ?? 0;
         lateEntryCount = (dashboard['lateEntry'] as num?)?.toInt() ?? 0;
-        onSiteCount =
-            (dashboard['activeSites'] as num?)?.toInt() ??
-            0; // ← was 'onSite', API sends 'activeSites'
+        onSiteCount = (dashboard['activeSites'] as num?)?.toInt() ?? 0;
         pendingCount = (dashboard['pendingRequests'] as num?)?.toInt() ?? 0;
-        isLoading = false;
+        _isLoading = false;
+        _isRefreshing = false;
+        _lastFetched = DateTime.now();
       });
     } catch (e) {
-      debugPrint("Error fetching Admin data: $e");
+      debugPrint('AdminHome _fetchAll error: $e');
+      if (!mounted) return;
       setState(() {
-        AdminName = "Admin";
-        isLoading = false;
+        _adminName = 'Admin';
+        _isLoading = false;
+        _isRefreshing = false;
       });
     }
   }
 
-  Future<void> _fetchLeaveData() async {
-    setState(() => isLeaveLoading = true);
-
-    try {
-      final dataFromService = await EmployeeService.fetchLeaveStatusSummary();
-
-      final filteredData = dataFromService
-          .where((e) => e.status.toLowerCase() != "cancelled")
-          .toList();
-
-      setState(() {
-        leaveChartData = filteredData;
-        isLeaveLoading = false;
-      });
-    } catch (e) {
-      debugPrint("Error fetching leave chart: $e");
-      setState(() {
-        leaveChartData = [];
-        isLeaveLoading = false;
-      });
-    }
+  String get _lastFetchedLabel {
+    if (_lastFetched == null) return '';
+    final diff = DateTime.now().difference(_lastFetched!);
+    if (diff.inSeconds < 60) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    return '${diff.inHours}h ago';
   }
 
+  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final bool isDesktop = size.width >= 900;
-    final double horizontalPadding = isDesktop ? size.width * 0.08 : 16;
-    final double spacing = isDesktop ? 24 : 16;
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: _surface,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(
-            horizontal: horizontalPadding,
-            vertical: spacing,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              /// GREETING
-              Text(
-                getGreeting(),
-                style: TextStyle(
-                  fontSize: isDesktop ? 28 : 22,
-                  fontWeight: FontWeight.bold,
+        child: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  color: _primary,
+                  strokeWidth: 2.5,
                 ),
-              ),
-              const SizedBox(height: 4),
+              )
+            : RefreshIndicator(
+                color: _primary,
+                onRefresh: () => _fetchAll(isRefresh: true),
+                child: CustomScrollView(
+                  slivers: [
+                    // ── Top bar ──────────────────────────────────────────────
+                    SliverToBoxAdapter(child: _buildTopBar()),
 
-              /// SHOW HR NAME OR LOADING
-              isLoading
-                  ? const CircularProgressIndicator()
-                  : Text(
-                      "Welcome back Admin, $AdminName",
-                      style: TextStyle(color: Colors.grey, fontSize: 16),
-                    ),
-
-              SizedBox(height: spacing),
-
-              /// DASHBOARD CARDS GRID
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  int crossAxisCount = 2; // Mobile default
-                  double childAspectRatio = 2.5; // Mobile default
-                  if (constraints.maxWidth >= 900) {
-                    crossAxisCount = 3;
-                    childAspectRatio = 2.2; // Desktop
-                  } else if (constraints.maxWidth >= 600) {
-                    // Tablet
-                    crossAxisCount = 2;
-                    childAspectRatio = 2.0; // Slightly taller
-                  } else {
-                    // Small mobile
-                    crossAxisCount = 2;
-                    childAspectRatio = 1.8; // Increase height
-                  }
-
-                  return GridView.count(
-                    crossAxisCount: crossAxisCount,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: spacing,
-                    crossAxisSpacing: spacing,
-                    childAspectRatio: childAspectRatio, // Adjusted height
-                    children: [
-                      _DashboardCard(
-                        title: "Total Employees",
-                        value: totalEmployees.toString(),
-                        icon: Icons.people_outline,
-                        gradient: const [Colors.blue, Colors.lightBlueAccent],
-                        onTap: () => widget.onNavigate?.call(
-                          5,
-                        ), // ✅ index 9 = Manage Users
-                      ),
-
-                      _DashboardCard(
-                        title: "Present",
-                        value: presentCount.toString(),
-                        icon: Icons.check_circle_outline,
-                        gradient: [Colors.green, Colors.lightGreenAccent],
-                        onTap: () => widget.onNavigate?.call(
-                          2,
-                        ), // ✅ index 2 = Manage Attendance
-                      ),
-
-                      _DashboardCard(
-                        title: "Absent",
-                        value: absentCount.toString(),
-                        icon: Icons.cancel_outlined,
-                        gradient: [Colors.red, Colors.redAccent],
-                        onTap: () => widget.onNavigate?.call(
-                          2,
-                        ), // ✅ index 2 = Manage Attendance
-                      ),
-
-                      _DashboardCard(
-                        title: "Late Entry",
-                        value: lateEntryCount.toString(),
-                        icon: Icons.watch_later_outlined,
-                        gradient: [Colors.orange, Colors.deepOrangeAccent],
-                        onTap: () => widget.onNavigate?.call(
-                          2,
-                        ), // ✅ index 2 = Manage Attendance
-                      ),
-
-                      _DashboardCard(
-                        title: "On-Site Today",
-                        value: onSiteCount.toString(),
-                        icon: Icons.work_outline,
-                        gradient: [Colors.indigo, Colors.indigoAccent],
-                        onTap: () => widget.onNavigate?.call(7),
-                      ),
-
-                      _DashboardCard(
-                        title: "Pending Requests",
-                        value: pendingCount.toString(),
-                        icon: Icons.beach_access_outlined,
-                        gradient: [Colors.purple, Colors.purpleAccent],
-                        // no onTap — keep as is
-                      ),
-                    ],
-                  );
-                },
-              ),
-              SizedBox(height: spacing),
-
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  bool isWide = constraints.maxWidth >= 700; // breakpoint
-
-                  Widget leaveChart = Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Leave Approval Status",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: spacing / 2),
-                      SizedBox(
-                        height: isDesktop ? 300 : 220,
-                        child: isLeaveLoading
-                            ? const Center(child: CircularProgressIndicator())
-                            : leaveChartData.isEmpty
-                            ? const Center(
-                                child: Text("No leave data available"),
-                              )
-                            : SfCircularChart(
-                                legend: const Legend(
-                                  isVisible: true,
-                                  position: LegendPosition.bottom,
-                                  overflowMode: LegendItemOverflowMode.wrap,
+                    // ── Stat cards ───────────────────────────────────────────
+                    SliverToBoxAdapter(
+                      child: _SectionHeader(
+                        label: "Today's overview",
+                        trailing: _isRefreshing
+                            ? const SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  color: _textLight,
                                 ),
-                                series: <CircularSeries<LeaveData, String>>[
-                                  PieSeries<LeaveData, String>(
-                                    dataSource: leaveChartData,
-                                    xValueMapper: (d, _) => d.status,
-                                    yValueMapper: (d, _) => d.count,
-                                    pointColorMapper: (d, _) => d.color,
-                                    dataLabelSettings: const DataLabelSettings(
-                                      isVisible: true,
+                              )
+                            : _lastFetched != null
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.circle,
+                                    size: 6,
+                                    color: _success,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Updated $_lastFetchedLabel',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: _textLight,
                                     ),
                                   ),
                                 ],
-                              ),
+                              )
+                            : null,
                       ),
-                    ],
-                  );
-
-                  Widget employeeChart = Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Employee Status",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                      sliver: SliverGrid(
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount:
+                              MediaQuery.of(context).size.width > 600 ? 3 : 2,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio:
+                              MediaQuery.of(context).orientation ==
+                                  Orientation.landscape
+                              ? 2.0
+                              : 1.45,
                         ),
-                      ),
-                      SizedBox(height: spacing / 2),
-                      SizedBox(
-                        height: isDesktop ? 300 : 220,
-                        child: SfCircularChart(
-                          legend: const Legend(
-                            isVisible: true,
-                            position: LegendPosition.bottom,
-                            overflowMode: LegendItemOverflowMode.wrap,
+                        delegate: SliverChildListDelegate([
+                          _StatCard(
+                            icon: Icons.people_outline_rounded,
+                            iconBg: _primaryLight,
+                            iconColor: _primary,
+                            value: totalEmployees.toString(),
+                            label: 'Total employees',
                           ),
-                          series: <CircularSeries<LeaveData, String>>[
-                            PieSeries<LeaveData, String>(
-                              dataSource: const [
-                                LeaveData("On-Site", 4, Colors.green),
-                                LeaveData(
-                                  "Office",
-                                  38,
-                                  Color.fromARGB(255, 7, 243, 172),
-                                ),
-                                LeaveData("Travel", 6, Colors.red),
-                              ],
-                              xValueMapper: (d, _) => d.status,
-                              yValueMapper: (d, _) => d.count,
-                              pointColorMapper: (d, _) => d.color,
-                              dataLabelMapper: (d, _) =>
-                                  "${d.status} (${d.count})",
-                              dataLabelSettings: const DataLabelSettings(
-                                isVisible: true,
-                                labelPosition: ChartDataLabelPosition.outside,
-                                connectorLineSettings: ConnectorLineSettings(
-                                  type: ConnectorType.curve,
-                                ),
-                                textStyle: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                          _StatCard(
+                            icon: Icons.check_circle_outline_rounded,
+                            iconBg: _successLight,
+                            iconColor: _success,
+                            value: presentCount.toString(),
+                            label: 'Present today',
+                            valueColor: _success,
+                          ),
+                          _StatCard(
+                            icon: Icons.cancel_outlined,
+                            iconBg: _dangerLight,
+                            iconColor: _danger,
+                            value: absentCount.toString(),
+                            label: 'Absent today',
+                            valueColor: _danger,
+                          ),
+                          _StatCard(
+                            icon: Icons.watch_later_outlined,
+                            iconBg: _warningLight,
+                            iconColor: _warning,
+                            value: lateEntryCount.toString(),
+                            label: 'Late entry',
+                            valueColor: _warning,
+                          ),
+                          _StatCard(
+                            icon: Icons.location_on_outlined,
+                            iconBg: _indigoLight,
+                            iconColor: _indigo,
+                            value: onSiteCount.toString(),
+                            label: 'On-site today',
+                            valueColor: _indigo,
+                          ),
+                          _StatCard(
+                            icon: Icons.beach_access_outlined,
+                            iconBg: _purpleLight,
+                            iconColor: _purple,
+                            value: pendingCount.toString(),
+                            label: 'Pending requests',
+                            valueColor: _purple,
+                          ),
+                        ]),
                       ),
-                    ],
-                  );
+                    ),
 
-                  if (isWide) {
-                    // ✅ Desktop / Tablet → side by side
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: leaveChart),
-                        SizedBox(width: spacing),
-                        Expanded(child: employeeChart),
-                      ],
-                    );
-                  } else {
-                    // ✅ Mobile → stacked
-                    return Column(
-                      children: [
-                        leaveChart,
-                        SizedBox(height: spacing),
-                        employeeChart,
-                      ],
-                    );
-                  }
-                },
+                     SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                    ),
+                  ],
+                ),
               ),
+      ),
+    );
+  }
 
-              /// RECENT ACTIVITIES
-              const Text(
-                "Recent Activities",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: spacing / 2),
-              const _ActivityCard(
-                employee: "John Doe",
-                action: "Applied for leave",
-                time: "Today, 9:30 AM",
-              ),
-              const _ActivityCard(
-                employee: "Sara Smith",
-                action: "Checked-in",
-                time: "Today, 9:00 AM",
-              ),
-              const _ActivityCard(
-                employee: "David Lee",
-                action: "Submitted expense report",
-                time: "Yesterday, 5:00 PM",
-              ),
-            ],
+  // ── Top bar widget ─────────────────────────────────────────────────────────
+  Widget _buildTopBar() {
+    // REPLACE WITH:
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: const BoxDecoration(
+        color: _card,
+        border: Border(bottom: BorderSide(color: _border, width: 1)),
+      ),
+      child: Row(
+        children: [
+          // Greeting
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  getGreeting(),
+                  style: const TextStyle(fontSize: 12, color: _textMid),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Welcome back, $_adminName',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _textDark,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
+          const SizedBox(width: 12),
+
+          const SizedBox(width: 8),
+
+          // Notification bell
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHARED WIDGETS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Section header ─────────────────────────────────────────────────────────────
+class _SectionHeader extends StatelessWidget {
+  final String label;
+  final Widget? trailing;
+  const _SectionHeader({required this.label, this.trailing});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
+      child: Row(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: _textLight,
+              letterSpacing: 0.8,
+            ),
+          ),
+          if (trailing != null) ...[const Spacer(), trailing!],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Stat card ──────────────────────────────────────────────────────────────────
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String value;
+  final String label;
+  final Color? valueColor;
+  final VoidCallback? onTap;
+
+  const _StatCard({
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.value,
+    required this.label,
+    this.valueColor,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Icon + arrow row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: iconBg,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(icon, size: 18, color: iconColor),
+                ),
+                if (onTap != null)
+                  Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 11,
+                    color: _textLight,
+                  ),
+              ],
+            ),
+            // Value + label
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: valueColor ?? _textDark,
+                    height: 1.0,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 10, color: _textMid),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _DashboardCard extends StatelessWidget {
-  final String title;
-  final String value;
+// ── Quick nav tile ─────────────────────────────────────────────────────────────
+class _NavTile extends StatelessWidget {
   final IconData icon;
-  final List<Color> gradient;
-  final VoidCallback? onTap; // ✅ ADD THIS
+  final Color iconBg;
+  final Color iconColor;
+  final String label;
+  final String sub;
+  final VoidCallback? onTap;
 
-  const _DashboardCard({
-    required this.title,
-    required this.value,
+  const _NavTile({
     required this.icon,
-    required this.gradient,
-    this.onTap, // ✅ ADD THIS
+    required this.iconBg,
+    required this.iconColor,
+    required this.label,
+    required this.sub,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bool isDesktop = MediaQuery.of(context).size.width >= 900;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return GestureDetector(
-          // ✅ WRAP WITH GestureDetector
-          onTap: onTap,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradient),
-              borderRadius: BorderRadius.circular(16),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
             ),
-            padding: EdgeInsets.all(isDesktop ? 16 : 12),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: Colors.white, size: isDesktop ? 32 : 26),
-                SizedBox(height: isDesktop ? 12 : 6),
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: isDesktop ? 22 : 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: isDesktop ? 16 : 14,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 18, color: iconColor),
             ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// RECENT ACTIVITY CARD
-class _ActivityCard extends StatelessWidget {
-  final String employee;
-  final String action;
-  final String time;
-
-  const _ActivityCard({
-    required this.employee,
-    required this.action,
-    required this.time,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isDesktop = MediaQuery.of(context).size.width >= 900;
-
-    return Card(
-      margin: EdgeInsets.only(bottom: isDesktop ? 16 : 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.indigo,
-          child: Icon(
-            Icons.person,
-            color: Colors.white,
-            size: isDesktop ? 28 : 24,
-          ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _textDark,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    sub,
+                    style: const TextStyle(fontSize: 10, color: _textLight),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        title: Text(
-          "$employee $action",
-          style: TextStyle(fontSize: isDesktop ? 16 : 14),
-        ),
-        subtitle: Text(time, style: TextStyle(fontSize: isDesktop ? 14 : 12)),
       ),
     );
   }

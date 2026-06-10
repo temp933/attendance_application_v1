@@ -48,22 +48,41 @@ class EmployeeService {
     }
   }
 
+  // ================= GET EMPLOYEE NAME BY ID =================
+  static Future<String> fetchEmployeeName(int empId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/employees/$empId'),
+      headers: ApiConfig.headers,
+    );
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = (body['data'] ?? body) as Map<String, dynamic>;
+      final first = data['first_name']?.toString().trim() ?? '';
+      final mid = data['mid_name']?.toString().trim() ?? '';
+      final last = data['last_name']?.toString().trim() ?? '';
+      final full = [
+        first,
+        if (mid.isNotEmpty) mid,
+        if (last.isNotEmpty) last,
+      ].join(' ').trim();
+      return full.isEmpty ? 'Admin' : full;
+    }
+    return 'Admin';
+  }
+
   // ================= DASHBOARD DATA =================
+  // REPLACE WITH:
   static Future<Map<String, dynamic>> fetchDashboardData() async {
     final response = await http.get(
       Uri.parse('$baseUrl/dashboard'),
-      headers: ApiConfig.headers, // ← ADDED
+      headers: ApiConfig.headers,
     );
-    // debugPrint('🌐 Fetching dashboard data...');
-    // debugPrint('   URL    : ${ApiConfig.baseUrl}/your-endpoint');
-    // debugPrint('   token  : ${ApiConfig.headers['Authorization']}');
-    // debugPrint('   tenant : ${ApiConfig.headers['x-tenant-id']}');
-    // debugPrint('   empId  : ${ApiConfig.headers['x-employee-id']}');
     if (response.statusCode == 200) {
-      return jsonDecode(response.body) as Map<String, dynamic>;
-    } else {
-      throw Exception('Failed to fetch dashboard data');
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (body['success'] == true) return body;
+      throw Exception(body['message'] ?? 'Failed to fetch dashboard data');
     }
+    throw Exception('Failed to fetch dashboard data');
   }
 
   // ================= GET ALL PENDING REQUESTS =================

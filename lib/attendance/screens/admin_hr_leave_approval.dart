@@ -266,75 +266,102 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen>
 
     final list = _filtered;
 
-    return Column(
-      children: [
-        // Search + status filter chips + department dropdown
-        _SearchFilter(
-          ctrl: _searchCtrl,
-          filter: _filter,
-          filters: _filters,
-          count: _count,
-          onFilter: (f) => setState(() => _filter = f),
-          onChanged: (v) => setState(() {
-            if (v.isEmpty) _searchCtrl.clear();
-          }),
-          // Department filter props ↓
-          deptFilter: _deptFilter,
-          departments: _departments,
-          onDeptFilter: (d) => setState(() => _deptFilter = d),
-        ),
-
-        // Sort bar
-        Container(
-          color: _white,
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-          child: Row(
-            children: [
-              Text(
-                '${list.length} of ${_history.length} records',
-                style: const TextStyle(fontSize: 11, color: _slate500),
-              ),
-              const Spacer(),
-              _SortChip(
-                asc: _sortAsc,
-                onTap: () => setState(() => _sortAsc = !_sortAsc),
-              ),
-            ],
+    if (list.isEmpty) {
+      return Column(
+        children: [
+          _SearchFilter(
+            ctrl: _searchCtrl,
+            filter: _filter,
+            filters: _filters,
+            count: _count,
+            onFilter: (f) => setState(() => _filter = f),
+            onChanged: (v) => setState(() {
+              if (v.isEmpty) _searchCtrl.clear();
+            }),
+            deptFilter: _deptFilter,
+            departments: _departments,
+            onDeptFilter: (d) => setState(() => _deptFilter = d),
           ),
-        ),
-        const Divider(height: 1, color: _slate100),
+          Expanded(
+            child: _EmptyHistory(
+              hasFilter:
+                  _searchCtrl.text.isNotEmpty ||
+                  _filter != 'All' ||
+                  _deptFilter != 'All',
+              onClear: () => setState(() {
+                _searchCtrl.clear();
+                _filter = 'All';
+                _deptFilter = 'All';
+              }),
+              onRefresh: _fetchHistory,
+            ),
+          ),
+        ],
+      );
+    }
 
-        // Card list
-        Expanded(
-          child: list.isEmpty
-              ? _EmptyHistory(
-                  hasFilter:
-                      _searchCtrl.text.isNotEmpty ||
-                      _filter != 'All' ||
-                      _deptFilter != 'All',
-                  onClear: () => setState(() {
-                    _searchCtrl.clear();
-                    _filter = 'All';
-                    _deptFilter = 'All';
-                  }),
-                  onRefresh: _fetchHistory,
-                )
-              : RefreshIndicator(
-                  onRefresh: _fetchHistory,
-                  color: _p700,
-                  child: ListView.builder(
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      14,
-                      16,
-                      16 + MediaQuery.of(context).padding.bottom,
-                    ),
-                    itemCount: list.length,
-                    itemBuilder: (_, i) => _LeaveCard(leave: list[i]),
+    return RefreshIndicator(
+      onRefresh: _fetchHistory,
+      color: _p700,
+      child: CustomScrollView(
+        slivers: [
+          // ── Search + filter ──────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: _SearchFilter(
+              ctrl: _searchCtrl,
+              filter: _filter,
+              filters: _filters,
+              count: _count,
+              onFilter: (f) => setState(() => _filter = f),
+              onChanged: (v) => setState(() {
+                if (v.isEmpty) _searchCtrl.clear();
+              }),
+              deptFilter: _deptFilter,
+              departments: _departments,
+              onDeptFilter: (d) => setState(() => _deptFilter = d),
+            ),
+          ),
+
+          // ── Sort bar ─────────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Container(
+              color: _white,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Row(
+                children: [
+                  Text(
+                    '${list.length} of ${_history.length} records',
+                    style: const TextStyle(fontSize: 11, color: _slate500),
                   ),
-                ),
-        ),
-      ],
+                  const Spacer(),
+                  _SortChip(
+                    asc: _sortAsc,
+                    onTap: () => setState(() => _sortAsc = !_sortAsc),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SliverToBoxAdapter(child: Divider(height: 1, color: _slate100)),
+
+          // ── Cards ────────────────────────────────────────────────────
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              14,
+              16,
+              16 + MediaQuery.of(context).padding.bottom,
+            ),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (_, i) => _LeaveCard(leave: list[i]),
+                childCount: list.length,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -385,7 +412,6 @@ class _Header extends StatelessWidget {
                   ],
                 ),
               ),
-              
             ],
           ),
           const Divider(height: 1, thickness: 1, color: _slate100),

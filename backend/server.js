@@ -321,8 +321,6 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
         .json({ message: "HR username already taken. Please choose another." });
     }
 
-     
-
     // ── 4. Date calculations ──────────────────────────────────────────────
     const today = new Date();
     const trialEndsAt = new Date(today);
@@ -957,7 +955,9 @@ app.post(
 app.get("/api/leave-status-summary", (req, res) =>
   res.json({ ok: true, data: [] }),
 );
-app.get("/api/dashboard", (req, res) => res.json({ ok: true, data: {} }));
+
+const dashboardRoutes = require("./dashboard");
+app.use("/api/dashboard", authMiddleware, dashboardRoutes);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // START SERVER

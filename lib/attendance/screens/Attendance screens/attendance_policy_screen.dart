@@ -558,6 +558,7 @@ class _AttendancePolicyScreenState extends State<AttendancePolicyScreen> {
           : FloatingActionButton.extended(
               onPressed: _saving ? null : _save,
               backgroundColor: _primary,
+               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
