@@ -7,7 +7,7 @@ const FormData = require("form-data");
 const fetch = require("node-fetch");
 
 const FACE_SERVICE_URL =
-  process.env.FACE_SERVICE_URL || "http://192.168.29.103:8000";
+  process.env.FACE_SERVICE_URL || "http://127.0.0.1:8000";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: call Python face service to get embedding from image bytes

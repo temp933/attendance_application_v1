@@ -1,4 +1,4 @@
-// report_screen.dart
+// attendance report_screen.dart
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -542,8 +542,11 @@ class _MatrixTabState extends State<_MatrixTab>
       const _LegendChip('H', 'Holiday', Color(0xFFE0F2FE), Color(0xFF0369A1)),
       const _LegendChip('W', 'Week-off', Color(0xFFF5F3FF), _purple),
       const _LegendChip('PL', 'Late', Color(0xFFFEF3C7), Color(0xFFB45309)),
-      if (_compOffEnabled)
+    if (_compOffEnabled)
         const _LegendChip('C', 'Comp-Off', Color(0xFFFFFBEB), _orange),
+      const _LegendChip('PL', 'Paid Lv', Color(0xFFE0F2FE), Color(0xFF0369A1)),
+      const _LegendChip('UL', 'Unpaid Lv', Color(0xFFF5F3FF), _purple),
+      const _LegendChip('½', 'Half Day', Color(0xFFFEF3C7), Color(0xFFB45309)),
     ],
   );
 
@@ -560,7 +563,7 @@ class _MatrixTabState extends State<_MatrixTab>
     const hdrBotH = 22.0;
     const hdrTotalH = hdrTopH + 1 + hdrBotH; // 41px — includes inner divider
 
-    final int summaryCols = _compOffEnabled ? 12 : 9;
+    final int summaryCols = _compOffEnabled ? 15 : 12;
     final totalW =
         snoW +
         empIdW +
@@ -698,6 +701,15 @@ class _MatrixTabState extends State<_MatrixTab>
                               div(),
                               summaryHdr('C.Off\nExpired', bg: _red),
                             ],
+                            div(),
+                            summaryHdr(
+                              'Paid\nLeave',
+                              bg: const Color(0xFF0369A1),
+                            ),
+                            div(),
+                            summaryHdr('Unpaid\nLeave', bg: _purple),
+                            div(),
+                            summaryHdr('Half\nDay', bg: _amber),
                             div(),
                             summaryHdr('Late\nDays', bg: _amber),
                             div(),
@@ -859,6 +871,27 @@ class _MatrixTabState extends State<_MatrixTab>
           ),
         ],
 
+       div(),
+        // Paid Leave
+        summaryCell(
+          '${emp.paidLeaveDays}',
+          emp.paidLeaveDays > 0 ? const Color(0xFFE0F2FE) : rowBg,
+          emp.paidLeaveDays > 0 ? const Color(0xFF0369A1) : _textMid,
+        ),
+        div(),
+        // Unpaid Leave
+        summaryCell(
+          '${emp.unpaidLeaveDays}',
+          emp.unpaidLeaveDays > 0 ? const Color(0xFFF5F3FF) : rowBg,
+          emp.unpaidLeaveDays > 0 ? _purple : _textMid,
+        ),
+        div(),
+        // Half Day
+        summaryCell(
+          '${emp.halfDayCount}',
+          emp.halfDayCount > 0 ? const Color(0xFFFEF3C7) : rowBg,
+          emp.halfDayCount > 0 ? _amber : _textMid,
+        ),
         div(),
         // Late Days
         summaryCell(

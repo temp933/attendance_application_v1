@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../providers/api_config.dart';
+import 'leave_report.dart';
 
 // ─── Design Tokens ───────────────────────────────────────────────────────────
 const _p900 = Color(0xFF1E3A8A);
@@ -410,6 +411,53 @@ class _Header extends StatelessWidget {
                     Tab(text: 'Pending'),
                     Tab(text: 'History'),
                   ],
+                ),
+              ),
+              Builder(
+                builder: (ctx) => Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Tooltip(
+                    message: 'Leave Report',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => Navigator.push(
+                        ctx,
+                        MaterialPageRoute(
+                          builder: (_) => const LeaveReportScreen(),
+                        ),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _p50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _p100),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(
+                              Icons.bar_chart_rounded,
+                              size: 16,
+                              color: _p700,
+                            ),
+                            SizedBox(width: 5),
+                            Text(
+                              'Report',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: _p700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],

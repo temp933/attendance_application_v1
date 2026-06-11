@@ -102,6 +102,54 @@ async function getPolicy(tenantId) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Helper — credit attendance-accrual leave balance on checkout
+// ─────────────────────────────────────────────────────────────────────────────
+async function runAttendanceAccrual(tenantId, empId, workDate) {
+  const year = new Date(workDate).getFullYear();
+
+  const [accrualTypes] = await db.query(
+    `SELECT leave_name, attendance_accrual_streak, attendance_accrual_reward
+     FROM leave_type_master
+     WHERE tenant_id = ? AND attendance_accrual_enabled = 1
+       AND is_active = 1
+       AND attendance_accrual_streak > 0
+       AND attendance_accrual_reward > 0`,
+    [tenantId],
+  );
+  if (!accrualTypes.length) return;
+
+  const [[countRow]] = await db.query(
+    `SELECT COUNT(DISTINCT work_date) AS present_count
+     FROM employee_attendance
+     WHERE tenant_id    = ?
+       AND employee_id  = ?
+       AND status       = 'completed'
+       AND checkin_time  IS NOT NULL
+       AND checkout_time IS NOT NULL
+       AND work_date BETWEEN ? AND ?`,
+    [tenantId, empId, `${year}-01-01`, workDate],
+  );
+  const presentCount = Number(countRow?.present_count ?? 0);
+  if (presentCount === 0) return;
+
+  for (const lt of accrualTypes) {
+    const streak = Number(lt.attendance_accrual_streak);
+    const reward = Number(lt.attendance_accrual_reward);
+    if (presentCount % streak !== 0) continue;
+
+    await db.query(
+      `INSERT INTO leave_balance
+         (emp_id, leave_type, year, allocated_days, used_days, pending_days, carry_forward, tenant_id)
+       VALUES (?, ?, ?, ?, 0, 0, 0, ?)
+       ON DUPLICATE KEY UPDATE
+         allocated_days = allocated_days + VALUES(allocated_days),
+         updated_at     = NOW()`,
+      [empId, lt.leave_name, year, reward, tenantId],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/today  — today's record + policy
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/today", requireAuth, async (req, res) => {
@@ -340,6 +388,16 @@ router.post("/checkout", requireAuth, async (req, res) => {
         err,
       ),
     );
+
+    // ── Attendance accrual ────────────────────────────────────────────────
+    try {
+      await runAttendanceAccrual(tenantId, empId, todayDate());
+    } catch (accrualErr) {
+      console.error(
+        "[GPS Face Checkout] Accrual error (non-fatal):",
+        accrualErr.message,
+      );
+    }
 
     res.json({
       success: true,

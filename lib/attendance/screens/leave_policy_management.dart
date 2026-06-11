@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'holiday_management_screen.dart';
+import 'leave_balance_management_screen.dart';
 import '../providers/api_client.dart';
 
 // ─── Models ───────────────────────────────────────────────────────────────────
@@ -47,8 +48,16 @@ class LeavePolicy {
   final bool isSystem;
   final bool isActive;
   final bool carryForwardEnabled;
-  final String? carryForwardType; // 'monthly' | 'yearly' | null
+  final String? carryForwardType;
   final double? maxCarryForwardDays;
+  // time accrual
+  final bool timeAccrualEnabled;
+  final String? timeAccrualType;
+  final double? timeAccrualDays;
+  // attendance accrual
+  final bool attendanceAccrualEnabled;
+  final int? attendanceAccrualStreak;
+  final double? attendanceAccrualReward;
 
   LeavePolicy({
     required this.leaveTypeId,
@@ -63,6 +72,12 @@ class LeavePolicy {
     this.carryForwardEnabled = false,
     this.carryForwardType,
     this.maxCarryForwardDays,
+    this.timeAccrualEnabled = false,
+    this.timeAccrualType,
+    this.timeAccrualDays,
+    this.attendanceAccrualEnabled = false,
+    this.attendanceAccrualStreak,
+    this.attendanceAccrualReward,
   });
 
   bool get isCompOff => (leaveCode ?? '').toUpperCase() == 'COMP_OFF';
@@ -85,6 +100,21 @@ class LeavePolicy {
     maxCarryForwardDays: j['max_carry_forward_days'] == null
         ? null
         : double.tryParse(j['max_carry_forward_days'].toString()),
+    timeAccrualEnabled:
+        (j['time_accrual_enabled'] == 1 || j['time_accrual_enabled'] == true),
+    timeAccrualType: j['time_accrual_type'] as String?,
+    timeAccrualDays: j['time_accrual_days'] == null
+        ? null
+        : double.tryParse(j['time_accrual_days'].toString()),
+    attendanceAccrualEnabled:
+        (j['attendance_accrual_enabled'] == 1 ||
+        j['attendance_accrual_enabled'] == true),
+    attendanceAccrualStreak: j['attendance_accrual_streak'] == null
+        ? null
+        : int.tryParse(j['attendance_accrual_streak'].toString()),
+    attendanceAccrualReward: j['attendance_accrual_reward'] == null
+        ? null
+        : double.tryParse(j['attendance_accrual_reward'].toString()),
   );
 }
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -271,6 +301,35 @@ class _LeavePolicyManagementScreenState
             ),
           ),
           const SizedBox(height: 10),
+
+          FloatingActionButton.extended(
+            heroTag: 'fab_leave_balance',
+            backgroundColor: Colors.white,
+            elevation: 4,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => LeaveBalanceManagementScreen()),
+            ),
+            icon: const Icon(
+              Icons.account_balance_wallet_outlined,
+              color: _primary,
+            ),
+            label: const Text(
+              'Leave Balance',
+              style: TextStyle(
+                color: _primary,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                letterSpacing: 0.3,
+              ),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: _primary.withOpacity(0.3)),
+            ),
+          ),
+          const SizedBox(height: 10),
+
           FloatingActionButton.extended(
             heroTag: 'fab_new_policy',
             backgroundColor: _primary,
@@ -389,7 +448,7 @@ class _LeavePolicyManagementScreenState
             else
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 220),
                   child: LayoutBuilder(
                     builder: (ctx, constraints) {
                       // 2 columns on wide screens (>= 600 px), 1 on mobile
@@ -541,39 +600,41 @@ class _LeavePolicyManagementScreenState
     );
   }
 
-  Widget _buildEmptyState() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(40),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: _primary.withOpacity(0.06),
-              shape: BoxShape.circle,
+  Widget _buildEmptyState() => SingleChildScrollView(
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: _primary.withOpacity(0.06),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.policy_outlined,
+                size: 44,
+                color: _textLight,
+              ),
             ),
-            child: const Icon(
-              Icons.policy_outlined,
-              size: 44,
-              color: _textLight,
+            const SizedBox(height: 16),
+            const Text(
+              'No leave policies yet',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: _textDark,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'No leave policies yet',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: _textDark,
+            const SizedBox(height: 6),
+            const Text(
+              'Tap New Policy to create one',
+              style: TextStyle(color: _textMid, fontSize: 13),
             ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Tap New Policy to create one',
-            style: TextStyle(color: _textMid, fontSize: 13),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -836,7 +897,7 @@ class _PolicyCardState extends State<_PolicyCard> {
                 ],
               ),
               const SizedBox(height: 8),
-             Row(
+              Row(
                 children: [
                   Expanded(
                     child: _infoTile(
@@ -865,8 +926,28 @@ class _PolicyCardState extends State<_PolicyCard> {
                 value: !p.carryForwardEnabled
                     ? 'Disabled'
                     : '${p.carryForwardType == 'monthly' ? 'Monthly' : 'Yearly'}'
-                      '${p.maxCarryForwardDays != null ? ' · max ${p.maxCarryForwardDays!.toStringAsFixed(0)} days' : ' · unlimited'}',
+                          '${p.maxCarryForwardDays != null ? ' · max ${p.maxCarryForwardDays!.toStringAsFixed(0)} days' : ' · unlimited'}',
                 valueColor: p.carryForwardEnabled ? _primary : _textMid,
+              ),
+              const SizedBox(height: 8),
+              _infoTile(
+                icon: Icons.access_time_rounded,
+                label: 'Time Accrual',
+                value: !p.timeAccrualEnabled
+                    ? 'Disabled'
+                    : '${p.timeAccrualDays?.toStringAsFixed(1) ?? '-'} days'
+                          ' · ${p.timeAccrualType == 'monthly' ? 'Every month' : 'Every year'}',
+                valueColor: p.timeAccrualEnabled ? _primary : _textMid,
+              ),
+              const SizedBox(height: 8),
+              _infoTile(
+                icon: Icons.how_to_reg_rounded,
+                label: 'Attendance Accrual',
+                value: !p.attendanceAccrualEnabled
+                    ? 'Disabled'
+                    : 'Every ${p.attendanceAccrualStreak ?? '-'} present days'
+                          ' → ${p.attendanceAccrualReward?.toStringAsFixed(1) ?? '-'} day(s)',
+                valueColor: p.attendanceAccrualEnabled ? _accent : _textMid,
               ),
               const SizedBox(height: 12),
               Divider(height: 1, color: Colors.grey.shade100),
@@ -1149,9 +1230,17 @@ class _PolicySheetState extends State<_PolicySheet> {
 
   // carry-forward
   bool _carryForwardEnabled = false;
-  String _carryForwardType = 'yearly'; // 'yearly' | 'monthly'
+  String _carryForwardType = 'yearly';
   bool _hasMaxCarryForward = false;
   final _maxCfDaysCtrl = TextEditingController();
+  // time accrual
+  bool _timeAccrualEnabled = false;
+  String _timeAccrualType = 'monthly';
+  final _timeAccrualDaysCtrl = TextEditingController();
+  // attendance accrual
+  bool _attendanceAccrualEnabled = false;
+  final _attendanceStreakCtrl = TextEditingController();
+  final _attendanceRewardCtrl = TextEditingController();
   @override
   void initState() {
     super.initState();
@@ -1159,11 +1248,14 @@ class _PolicySheetState extends State<_PolicySheet> {
     if (_isEdit) _loadPolicy();
   }
 
- @override
+  @override
   void dispose() {
     _leaveNameCtrl.dispose();
     _maxDaysCtrl.dispose();
     _maxCfDaysCtrl.dispose();
+    _timeAccrualDaysCtrl.dispose();
+    _attendanceStreakCtrl.dispose();
+    _attendanceRewardCtrl.dispose();
     super.dispose();
   }
 
@@ -1182,22 +1274,42 @@ class _PolicySheetState extends State<_PolicySheet> {
         final cfMaxRaw = data['max_carry_forward_days'];
         if (cfMaxRaw != null) _maxCfDaysCtrl.text = cfMaxRaw.toString();
 
+        // populate new accrual controllers
+        final taRaw = data['time_accrual_days'];
+        if (taRaw != null) _timeAccrualDaysCtrl.text = taRaw.toString();
+        final aaStreakRaw = data['attendance_accrual_streak'];
+        if (aaStreakRaw != null)
+          _attendanceStreakCtrl.text = aaStreakRaw.toString();
+        final aaRewardRaw = data['attendance_accrual_reward'];
+        if (aaRewardRaw != null)
+          _attendanceRewardCtrl.text = aaRewardRaw.toString();
+
         setState(() {
           _isSystem = (data['is_system'] == 1 || data['is_system'] == true);
           _isPaid = (data['is_paid'] == 1 || data['is_paid'] == true);
           _requiresApproval =
               (data['requires_approval'] == 1 ||
-               data['requires_approval'] == true);
+              data['requires_approval'] == true);
           _carryForwardEnabled =
               (data['carry_forward_enabled'] == 1 ||
-               data['carry_forward_enabled'] == true);
+              data['carry_forward_enabled'] == true);
           _carryForwardType =
               (data['carry_forward_type'] as String?) ?? 'yearly';
           _hasMaxCarryForward = cfMaxRaw != null;
+          _timeAccrualEnabled =
+              (data['time_accrual_enabled'] == 1 ||
+              data['time_accrual_enabled'] == true);
+          _timeAccrualType =
+              (data['time_accrual_type'] as String?) ?? 'monthly';
+          _attendanceAccrualEnabled =
+              (data['attendance_accrual_enabled'] == 1 ||
+              data['attendance_accrual_enabled'] == true);
           _approvalRules = rules.isEmpty
               ? [ApprovalRule(minDays: 0.5, maxDays: 2, approvalLevels: 1)]
               : rules
-                    .map((e) => ApprovalRule.fromJson(e as Map<String, dynamic>))
+                    .map(
+                      (e) => ApprovalRule.fromJson(e as Map<String, dynamic>),
+                    )
                     .toList();
         });
       }
@@ -1220,6 +1332,18 @@ class _PolicySheetState extends State<_PolicySheet> {
         'carry_forward_type': _carryForwardEnabled ? _carryForwardType : null,
         'max_carry_forward_days': (_carryForwardEnabled && _hasMaxCarryForward)
             ? double.tryParse(_maxCfDaysCtrl.text.trim())
+            : null,
+        'time_accrual_enabled': _timeAccrualEnabled,
+        'time_accrual_type': _timeAccrualEnabled ? _timeAccrualType : null,
+        'time_accrual_days': _timeAccrualEnabled
+            ? double.tryParse(_timeAccrualDaysCtrl.text.trim())
+            : null,
+        'attendance_accrual_enabled': _attendanceAccrualEnabled,
+        'attendance_accrual_streak': _attendanceAccrualEnabled
+            ? int.tryParse(_attendanceStreakCtrl.text.trim())
+            : null,
+        'attendance_accrual_reward': _attendanceAccrualEnabled
+            ? double.tryParse(_attendanceRewardCtrl.text.trim())
             : null,
       };
       final resp = _isEdit
@@ -1422,7 +1546,9 @@ class _PolicySheetState extends State<_PolicySheet> {
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 130),
                             padding: const EdgeInsets.symmetric(
-                                vertical: 10, horizontal: 12),
+                              vertical: 10,
+                              horizontal: 12,
+                            ),
                             decoration: BoxDecoration(
                               color: _carryForwardType == 'yearly'
                                   ? _primary.withOpacity(0.08)
@@ -1438,20 +1564,24 @@ class _PolicySheetState extends State<_PolicySheet> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.calendar_month_rounded,
-                                    size: 14,
+                                Icon(
+                                  Icons.calendar_month_rounded,
+                                  size: 14,
+                                  color: _carryForwardType == 'yearly'
+                                      ? _primary
+                                      : _textLight,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Yearly',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
                                     color: _carryForwardType == 'yearly'
                                         ? _primary
-                                        : _textLight),
-                                const SizedBox(width: 6),
-                                Text('Yearly',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: _carryForwardType == 'yearly'
-                                          ? _primary
-                                          : _textMid,
-                                    )),
+                                        : _textMid,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -1465,7 +1595,9 @@ class _PolicySheetState extends State<_PolicySheet> {
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 130),
                             padding: const EdgeInsets.symmetric(
-                                vertical: 10, horizontal: 12),
+                              vertical: 10,
+                              horizontal: 12,
+                            ),
                             decoration: BoxDecoration(
                               color: _carryForwardType == 'monthly'
                                   ? _primary.withOpacity(0.08)
@@ -1474,28 +1606,31 @@ class _PolicySheetState extends State<_PolicySheet> {
                                 color: _carryForwardType == 'monthly'
                                     ? _primary
                                     : _border,
-                                width:
-                                    _carryForwardType == 'monthly' ? 1.8 : 1,
+                                width: _carryForwardType == 'monthly' ? 1.8 : 1,
                               ),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.date_range_rounded,
-                                    size: 14,
+                                Icon(
+                                  Icons.date_range_rounded,
+                                  size: 14,
+                                  color: _carryForwardType == 'monthly'
+                                      ? _primary
+                                      : _textLight,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Monthly',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
                                     color: _carryForwardType == 'monthly'
                                         ? _primary
-                                        : _textLight),
-                                const SizedBox(width: 6),
-                                Text('Monthly',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: _carryForwardType == 'monthly'
-                                          ? _primary
-                                          : _textMid,
-                                    )),
+                                        : _textMid,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -1517,24 +1652,28 @@ class _PolicySheetState extends State<_PolicySheet> {
                           width: 18,
                           height: 18,
                           decoration: BoxDecoration(
-                            color:
-                                _hasMaxCarryForward ? _primary : Colors.white,
+                            color: _hasMaxCarryForward
+                                ? _primary
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(5),
                             border: Border.all(
-                              color:
-                                  _hasMaxCarryForward ? _primary : _border,
+                              color: _hasMaxCarryForward ? _primary : _border,
                               width: 1.5,
                             ),
                           ),
                           child: _hasMaxCarryForward
-                              ? const Icon(Icons.check_rounded,
-                                  size: 12, color: Colors.white)
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  size: 12,
+                                  color: Colors.white,
+                                )
                               : null,
                         ),
                         const SizedBox(width: 8),
-                        const Text('Set max carry-forward days',
-                            style:
-                                TextStyle(fontSize: 12, color: _textMid)),
+                        const Text(
+                          'Set max carry-forward days',
+                          style: TextStyle(fontSize: 12, color: _textMid),
+                        ),
                       ],
                     ),
                   ),
@@ -1542,10 +1681,10 @@ class _PolicySheetState extends State<_PolicySheet> {
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _maxCfDaysCtrl,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      style:
-                          const TextStyle(fontSize: 13, color: _textDark),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: const TextStyle(fontSize: 13, color: _textDark),
                       decoration: _inputDec(
                         hint: 'e.g. 15',
                         icon: Icons.north_east_rounded,
@@ -1559,6 +1698,248 @@ class _PolicySheetState extends State<_PolicySheet> {
                       },
                     ),
                   ],
+                ],
+
+                const SizedBox(height: 20),
+
+                // ── Time Based Accrual ──
+                _label('Time Based Accrual'),
+                const SizedBox(height: 8),
+                _toggleCard(
+                  label: 'Enable Time Accrual',
+                  icon: Icons.access_time_rounded,
+                  value: _timeAccrualEnabled,
+                  activeColor: _primary,
+                  onTap: () => setState(
+                    () => _timeAccrualEnabled = !_timeAccrualEnabled,
+                  ),
+                ),
+                if (_timeAccrualEnabled) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () =>
+                              setState(() => _timeAccrualType = 'monthly'),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 130),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _timeAccrualType == 'monthly'
+                                  ? _primary.withOpacity(0.08)
+                                  : Colors.white,
+                              border: Border.all(
+                                color: _timeAccrualType == 'monthly'
+                                    ? _primary
+                                    : _border,
+                                width: _timeAccrualType == 'monthly' ? 1.8 : 1,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.date_range_rounded,
+                                  size: 14,
+                                  color: _timeAccrualType == 'monthly'
+                                      ? _primary
+                                      : _textLight,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Monthly',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _timeAccrualType == 'monthly'
+                                        ? _primary
+                                        : _textMid,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () =>
+                              setState(() => _timeAccrualType = 'yearly'),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 130),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _timeAccrualType == 'yearly'
+                                  ? _primary.withOpacity(0.08)
+                                  : Colors.white,
+                              border: Border.all(
+                                color: _timeAccrualType == 'yearly'
+                                    ? _primary
+                                    : _border,
+                                width: _timeAccrualType == 'yearly' ? 1.8 : 1,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.calendar_month_rounded,
+                                  size: 14,
+                                  color: _timeAccrualType == 'yearly'
+                                      ? _primary
+                                      : _textLight,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Yearly',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _timeAccrualType == 'yearly'
+                                        ? _primary
+                                        : _textMid,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _timeAccrualDaysCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    style: const TextStyle(fontSize: 13, color: _textDark),
+                    decoration:
+                        _inputDec(
+                          hint: _timeAccrualType == 'monthly'
+                              ? 'e.g. 1.5'
+                              : 'e.g. 12',
+                          icon: Icons.add_circle_outline_rounded,
+                        ).copyWith(
+                          labelText: _timeAccrualType == 'monthly'
+                              ? 'Days credited per month'
+                              : 'Days credited per year',
+                        ),
+                    validator: (v) {
+                      if (!_timeAccrualEnabled) return null;
+                      if (v == null || v.isEmpty) return 'Required';
+                      if ((double.tryParse(v) ?? 0) <= 0) return 'Must be > 0';
+                      return null;
+                    },
+                  ),
+                ],
+                const SizedBox(height: 16),
+
+                // ── Attendance Based Accrual ──
+                _label('Attendance Based Accrual'),
+                const SizedBox(height: 8),
+                _toggleCard(
+                  label: 'Enable Attendance Accrual',
+                  icon: Icons.how_to_reg_rounded,
+                  value: _attendanceAccrualEnabled,
+                  activeColor: _accent,
+                  onTap: () => setState(
+                    () =>
+                        _attendanceAccrualEnabled = !_attendanceAccrualEnabled,
+                  ),
+                ),
+                if (_attendanceAccrualEnabled) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _attendanceStreakCtrl,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: _textDark,
+                          ),
+                          decoration: _inputDec(
+                            hint: 'e.g. 20',
+                            icon: Icons.trending_up_rounded,
+                          ).copyWith(labelText: 'Consecutive present days'),
+                          validator: (v) {
+                            if (!_attendanceAccrualEnabled) return null;
+                            if (v == null || v.isEmpty) return 'Required';
+                            if ((int.tryParse(v) ?? 0) < 1)
+                              return 'Must be >= 1';
+                            return null;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _attendanceRewardCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: _textDark,
+                          ),
+                          decoration: _inputDec(
+                            hint: 'e.g. 1',
+                            icon: Icons.card_giftcard_rounded,
+                          ).copyWith(labelText: 'Days rewarded'),
+                          validator: (v) {
+                            if (!_attendanceAccrualEnabled) return null;
+                            if (v == null || v.isEmpty) return 'Required';
+                            if ((double.tryParse(v) ?? 0) <= 0)
+                              return 'Must be > 0';
+                            return null;
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _accent.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _accent.withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      children: const [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          size: 13,
+                          color: Color(0xFF0E9F6E),
+                        ),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Streak resets on any absence or leave day',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF0E9F6E),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
 
                 const SizedBox(height: 20),

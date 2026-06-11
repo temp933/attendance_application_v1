@@ -219,11 +219,49 @@ router.post("/policy/create", async (req, res) => {
     carry_forward_enabled = false,
     carry_forward_type = null,
     max_carry_forward_days = null,
+    time_accrual_enabled = false,
+    time_accrual_type = null,
+    time_accrual_days = null,
+    attendance_accrual_enabled = false,
+    attendance_accrual_streak = null,
+    attendance_accrual_reward = null,
   } = req.body;
   if (!leave_name || typeof leave_name !== "string" || !leave_name.trim())
     return send(res, 400, false, "leave_name is required");
   if (!max_days || isNaN(Number(max_days)) || Number(max_days) <= 0)
     return send(res, 400, false, "max_days must be a positive number");
+  if (time_accrual_enabled) {
+    if (
+      !time_accrual_type ||
+      !["yearly", "monthly"].includes(time_accrual_type)
+    )
+      return send(
+        res,
+        400,
+        false,
+        "time_accrual_type must be yearly or monthly",
+      );
+    if (
+      !time_accrual_days ||
+      isNaN(Number(time_accrual_days)) ||
+      Number(time_accrual_days) <= 0
+    )
+      return send(res, 400, false, "time_accrual_days must be > 0");
+  }
+  if (attendance_accrual_enabled) {
+    if (
+      !attendance_accrual_streak ||
+      isNaN(Number(attendance_accrual_streak)) ||
+      Number(attendance_accrual_streak) < 1
+    )
+      return send(res, 400, false, "attendance_accrual_streak must be >= 1");
+    if (
+      !attendance_accrual_reward ||
+      isNaN(Number(attendance_accrual_reward)) ||
+      Number(attendance_accrual_reward) <= 0
+    )
+      return send(res, 400, false, "attendance_accrual_reward must be > 0");
+  }
 
   // Only validate rules when approval is required
   if (requires_approval) {
@@ -242,13 +280,30 @@ router.post("/policy/create", async (req, res) => {
       carry_forward_enabled && max_carry_forward_days != null
         ? Number(max_carry_forward_days)
         : null;
+    const taType = time_accrual_enabled
+      ? (time_accrual_type ?? "yearly")
+      : null;
+    const taDays =
+      time_accrual_enabled && time_accrual_days != null
+        ? Number(time_accrual_days)
+        : null;
+    const aaStreak =
+      attendance_accrual_enabled && attendance_accrual_streak != null
+        ? Number(attendance_accrual_streak)
+        : null;
+    const aaReward =
+      attendance_accrual_enabled && attendance_accrual_reward != null
+        ? Number(attendance_accrual_reward)
+        : null;
 
     const [ltResult] = await conn.execute(
       `INSERT INTO leave_type_master
             (tenant_id, leave_name, max_days, is_paid, requires_approval,
              carry_forward_enabled, carry_forward_type, max_carry_forward_days,
+             time_accrual_enabled, time_accrual_type, time_accrual_days,
+             attendance_accrual_enabled, attendance_accrual_streak, attendance_accrual_reward,
              created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
       [
         tenant_id,
         leave_name.trim(),
@@ -258,6 +313,12 @@ router.post("/policy/create", async (req, res) => {
         carry_forward_enabled ? 1 : 0,
         cfType,
         cfMax,
+        time_accrual_enabled ? 1 : 0,
+        taType,
+        taDays,
+        attendance_accrual_enabled ? 1 : 0,
+        aaStreak,
+        aaReward,
       ],
     );
     const leave_type_id = ltResult.insertId;
@@ -306,6 +367,9 @@ router.get("/policy/list", async (req, res) => {
       `SELECT
             lt.leave_type_id, lt.leave_code, lt.leave_name, lt.max_days, lt.is_paid,
             lt.requires_approval, lt.is_system, lt.is_active, lt.created_at, lt.updated_at,
+            lt.carry_forward_enabled, lt.carry_forward_type, lt.max_carry_forward_days,
+            lt.time_accrual_enabled, lt.time_accrual_type, lt.time_accrual_days,
+            lt.attendance_accrual_enabled, lt.attendance_accrual_streak, lt.attendance_accrual_reward,
             COUNT(lar.id) AS total_approval_rules
           FROM leave_type_master lt
           LEFT JOIN leave_approval_rules lar
@@ -313,7 +377,10 @@ router.get("/policy/list", async (req, res) => {
           WHERE lt.tenant_id = ?
           GROUP BY lt.leave_type_id, lt.leave_code, lt.leave_name, lt.max_days,
                     lt.is_paid, lt.requires_approval, lt.is_system, lt.is_active,
-                    lt.created_at, lt.updated_at
+                    lt.created_at, lt.updated_at,
+                    lt.carry_forward_enabled, lt.carry_forward_type, lt.max_carry_forward_days,
+                    lt.time_accrual_enabled, lt.time_accrual_type, lt.time_accrual_days,
+                    lt.attendance_accrual_enabled, lt.attendance_accrual_streak, lt.attendance_accrual_reward
           ORDER BY lt.is_system ASC, lt.created_at DESC`,
       [tenant_id],
     );
@@ -373,6 +440,12 @@ router.put("/policy/update/:leave_type_id", async (req, res) => {
     carry_forward_enabled = false,
     carry_forward_type = null,
     max_carry_forward_days = null,
+    time_accrual_enabled = false,
+    time_accrual_type = null,
+    time_accrual_days = null,
+    attendance_accrual_enabled = false,
+    attendance_accrual_streak = null,
+    attendance_accrual_reward = null,
   } = req.body;
 
   if (!tenant_id)
@@ -383,6 +456,38 @@ router.put("/policy/update/:leave_type_id", async (req, res) => {
     return send(res, 400, false, "leave_name is required");
   if (!max_days || isNaN(Number(max_days)) || Number(max_days) <= 0)
     return send(res, 400, false, "max_days must be a positive number");
+  if (time_accrual_enabled) {
+    if (
+      !time_accrual_type ||
+      !["yearly", "monthly"].includes(time_accrual_type)
+    )
+      return send(
+        res,
+        400,
+        false,
+        "time_accrual_type must be yearly or monthly",
+      );
+    if (
+      !time_accrual_days ||
+      isNaN(Number(time_accrual_days)) ||
+      Number(time_accrual_days) <= 0
+    )
+      return send(res, 400, false, "time_accrual_days must be > 0");
+  }
+  if (attendance_accrual_enabled) {
+    if (
+      !attendance_accrual_streak ||
+      isNaN(Number(attendance_accrual_streak)) ||
+      Number(attendance_accrual_streak) < 1
+    )
+      return send(res, 400, false, "attendance_accrual_streak must be >= 1");
+    if (
+      !attendance_accrual_reward ||
+      isNaN(Number(attendance_accrual_reward)) ||
+      Number(attendance_accrual_reward) <= 0
+    )
+      return send(res, 400, false, "attendance_accrual_reward must be > 0");
+  }
 
   if (requires_approval) {
     const rulesError = validateApprovalRules(approval_rules);
@@ -403,14 +508,35 @@ router.put("/policy/update/:leave_type_id", async (req, res) => {
       return send(res, 404, false, "Leave policy not found");
     }
 
-    const cfType = carry_forward_enabled ? (carry_forward_type ?? "yearly") : null;
-    const cfMax  = carry_forward_enabled && max_carry_forward_days != null
-      ? Number(max_carry_forward_days) : null;
+    const cfType = carry_forward_enabled
+      ? (carry_forward_type ?? "yearly")
+      : null;
+    const cfMax =
+      carry_forward_enabled && max_carry_forward_days != null
+        ? Number(max_carry_forward_days)
+        : null;
+    const taType = time_accrual_enabled
+      ? (time_accrual_type ?? "yearly")
+      : null;
+    const taDays =
+      time_accrual_enabled && time_accrual_days != null
+        ? Number(time_accrual_days)
+        : null;
+    const aaStreak =
+      attendance_accrual_enabled && attendance_accrual_streak != null
+        ? Number(attendance_accrual_streak)
+        : null;
+    const aaReward =
+      attendance_accrual_enabled && attendance_accrual_reward != null
+        ? Number(attendance_accrual_reward)
+        : null;
 
     await conn.execute(
       `UPDATE leave_type_master
           SET leave_name = ?, max_days = ?, is_paid = ?, requires_approval = ?,
               carry_forward_enabled = ?, carry_forward_type = ?, max_carry_forward_days = ?,
+              time_accrual_enabled = ?, time_accrual_type = ?, time_accrual_days = ?,
+              attendance_accrual_enabled = ?, attendance_accrual_streak = ?, attendance_accrual_reward = ?,
               updated_at = NOW()
           WHERE leave_type_id = ? AND tenant_id = ?`,
       [
@@ -421,6 +547,12 @@ router.put("/policy/update/:leave_type_id", async (req, res) => {
         carry_forward_enabled ? 1 : 0,
         cfType,
         cfMax,
+        time_accrual_enabled ? 1 : 0,
+        taType,
+        taDays,
+        attendance_accrual_enabled ? 1 : 0,
+        aaStreak,
+        aaReward,
         leave_type_id,
         tenant_id,
       ],
@@ -680,6 +812,38 @@ router.post("/apply", async (req, res) => {
       ? 0
       : matchedRule.approval_levels;
 
+    // ── Leave balance check (paid leaves only) ──
+    if (!isCompOff) {
+      const [[ltCheck]] = await conn.execute(
+        `SELECT leave_name, is_paid FROM leave_type_master
+         WHERE leave_type_id = ? AND tenant_id = ? LIMIT 1`,
+        [leave_type_id, tenant_id],
+      );
+      if (ltCheck?.is_paid) {
+        const year = new Date().getFullYear();
+        const [[bal]] = await conn.execute(
+          `SELECT
+             COALESCE(allocated_days, 0) AS allocated,
+             COALESCE(used_days, 0) AS used,
+             COALESCE(pending_days, 0) AS pending
+           FROM leave_balance
+           WHERE emp_id = ? AND leave_type = ? AND year = ? AND tenant_id = ?`,
+          [emp_id, ltCheck.leave_name, year, tenant_id],
+        );
+        const available =
+          (bal?.allocated ?? 0) - (bal?.used ?? 0) - (bal?.pending ?? 0);
+        if (number_of_days > available) {
+          await conn.rollback();
+          return send(
+            res,
+            422,
+            false,
+            `Insufficient leave balance. Available: ${available} day(s), Requested: ${number_of_days} day(s)`,
+          );
+        }
+      }
+    }
+
     // ── Insert leave_master record ──
     const [insertResult] = await conn.execute(
       `INSERT INTO leave_master
@@ -763,6 +927,14 @@ router.post("/apply", async (req, res) => {
             current_approver_employee_id = NULL, updated_at = NOW()
         WHERE leave_id = ? AND tenant_id = ?`,
         [leave_id, tenant_id],
+      );
+      await updateLeaveBalance(
+        conn,
+        tenant_id,
+        emp_id,
+        leave_type_id,
+        number_of_days,
+        "approve",
       );
       await conn.commit();
       return send(
@@ -1418,4 +1590,855 @@ router.get("/all-history", async (req, res) => {
   }
 });
 
+// ─── 15. Download Balance Template   GET /api/leave/balance/template ──────────
+
+router.get("/balance/template", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  try {
+    const XLSX = require("xlsx");
+
+    const [leaveTypes] = await db.execute(
+      `SELECT leave_type_id, leave_name FROM leave_type_master
+       WHERE tenant_id = ? AND is_active = 1 AND is_system = 0
+       ORDER BY leave_type_id ASC`,
+      [tenant_id],
+    );
+
+    const [employees] = await db.execute(
+      `SELECT em.emp_id, em.employee_code,
+              CONCAT(em.first_name, ' ', em.last_name) AS emp_name,
+              COALESCE(dept.department_name, '') AS department_name,
+              COALESCE(dg.designation_name, '') AS designation_name
+       FROM employee_master em
+       LEFT JOIN designation_master dg
+         ON em.designation_id = dg.designation_id AND dg.tenant_id = em.tenant_id
+       LEFT JOIN department_master dept
+         ON dg.department_id = dept.department_id AND dept.tenant_id = em.tenant_id
+       WHERE em.tenant_id = ? AND em.status = 'Active'
+       ORDER BY em.emp_id ASC`,
+      [tenant_id],
+    );
+
+    // Fetch existing balances for current year (so template pre-fills current values)
+    const year = new Date().getFullYear();
+    const [existingBalances] = await db.execute(
+      `SELECT emp_id, leave_type, allocated_days
+       FROM leave_balance
+       WHERE tenant_id = ? AND year = ?`,
+      [tenant_id, year],
+    );
+
+    // Map: empId → leaveType → allocated_days
+    const balMap = {};
+    for (const b of existingBalances) {
+      if (!balMap[b.emp_id]) balMap[b.emp_id] = {};
+      balMap[b.emp_id][b.leave_type] = b.allocated_days;
+    }
+
+    const leaveNames = leaveTypes.map((lt) => lt.leave_name);
+
+    // Build rows
+    const headerRow = [
+      "emp_id",
+      "employee_code",
+      "emp_name",
+      "department",
+      "designation",
+      ...leaveNames,
+    ];
+
+    const dataRows = employees.map((emp) => {
+      const leaveCols = leaveNames.map(
+        (name) => balMap[emp.emp_id]?.[name] ?? "",
+      );
+      return [
+        emp.emp_id,
+        emp.employee_code ?? "",
+        emp.emp_name,
+        emp.department_name ?? "",
+        emp.designation_name ?? "",
+        ...leaveCols,
+      ];
+    });
+
+    const wsData = [headerRow, ...dataRows];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // ── Column widths ──
+    ws["!cols"] = [
+      { wch: 10 }, // emp_id
+      { wch: 14 }, // employee_code
+      { wch: 24 }, // emp_name
+      { wch: 20 }, // department
+      { wch: 20 }, // designation
+      ...leaveNames.map(() => ({ wch: 16 })),
+    ];
+
+    // ── Freeze header row ──
+    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+
+    // ── Lock emp_id, employee_code, emp_name, department, designation columns (cols A-E) ──
+    // Mark leave columns as editable by adding a note to header cells
+    leaveNames.forEach((name, i) => {
+      const col = XLSX.utils.encode_col(5 + i); // F onwards
+      const cellAddr = `${col}1`;
+      if (ws[cellAddr]) {
+        ws[cellAddr].s = {
+          font: { bold: true, color: { rgb: "1A56DB" } },
+          fill: { fgColor: { rgb: "EEF2FF" } },
+          alignment: { horizontal: "center" },
+        };
+      }
+    });
+
+    // Style header row (A1:E1 — read-only info cols)
+    ["A1", "B1", "C1", "D1", "E1"].forEach((addr) => {
+      if (ws[addr]) {
+        ws[addr].s = {
+          font: { bold: true, color: { rgb: "FFFFFF" } },
+          fill: { fgColor: { rgb: "1A56DB" } },
+          alignment: { horizontal: "center" },
+        };
+      }
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Leave Balances");
+
+    // Add instructions sheet
+    const instructionData = [
+      ["Leave Balance Upload Template — Instructions"],
+      [""],
+      [
+        "1. Do NOT modify columns A to E (emp_id, employee_code, emp_name, department, designation)",
+      ],
+      ["2. Fill in the leave balance days in the blue columns (F onwards)"],
+      ["3. Leave a cell empty to skip updating that employee's balance"],
+      ["4. Use numbers only (e.g. 12 or 7.5). Decimals allowed."],
+      ["5. Save as .xlsx and upload using the Upload button in the app"],
+      [""],
+      [`Generated for year: ${year}`],
+    ];
+    const wsInstructions = XLSX.utils.aoa_to_sheet(instructionData);
+    wsInstructions["!cols"] = [{ wch: 70 }];
+    XLSX.utils.book_append_sheet(wb, wsInstructions, "Instructions");
+
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="leave_balance_template_${year}.xlsx"`,
+    );
+    return res.send(buffer);
+  } catch (err) {
+    console.error("[leave/balance/template]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
+// ─── 16. Bulk Upload Balance   POST /api/leave/balance/bulk-upload ────────────
+
+router.post("/balance/bulk-upload", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const { rows } = req.body;
+  // rows: [{ emp_id, balances: { "Casual Leave": 7, "Earned Leave": 3 } }]
+  if (!Array.isArray(rows) || rows.length === 0)
+    return send(res, 400, false, "rows array is required");
+
+  const year = new Date().getFullYear();
+
+  // Fetch all leave types for this tenant
+  const [leaveTypes] = await db.execute(
+    `SELECT leave_type_id, leave_name FROM leave_type_master
+     WHERE tenant_id = ? AND is_active = 1 AND is_system = 0`,
+    [tenant_id],
+  );
+
+  // Build case-insensitive map: lowercase name → leave_name
+  const leaveTypeMap = {};
+  for (const lt of leaveTypes) {
+    leaveTypeMap[lt.leave_name.toLowerCase()] = lt.leave_name;
+  }
+
+  // Fetch valid emp_ids for this tenant
+  const [empRows] = await db.execute(
+    `SELECT emp_id FROM employee_master
+     WHERE tenant_id = ? AND status = 'Active'`,
+    [tenant_id],
+  );
+  const validEmpIds = new Set(empRows.map((e) => String(e.emp_id)));
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    let updated = 0;
+    let skippedEmp = 0;
+    let skippedLeave = 0;
+    let errors = 0;
+    const errorDetails = [];
+
+    for (const row of rows) {
+      const empId = String(row.emp_id);
+
+      if (!validEmpIds.has(empId)) {
+        skippedEmp++;
+        continue;
+      }
+
+      const balances = row.balances ?? {};
+      for (const [colName, val] of Object.entries(balances)) {
+        const matchedName = leaveTypeMap[colName.toLowerCase().trim()];
+        if (!matchedName) {
+          skippedLeave++;
+          continue;
+        }
+
+        const days = parseFloat(val);
+        if (isNaN(days) || days < 0) {
+          errors++;
+          errorDetails.push(
+            `emp_id ${empId}: invalid value "${val}" for "${colName}"`,
+          );
+          continue;
+        }
+
+        try {
+          await conn.execute(
+            `INSERT INTO leave_balance
+               (emp_id, leave_type, year, allocated_days, used_days, pending_days, carry_forward, tenant_id)
+             VALUES (?, ?, ?, ?, 0, 0, 0, ?)
+             ON DUPLICATE KEY UPDATE
+               allocated_days = VALUES(allocated_days),
+               updated_at = NOW()`,
+            [empId, matchedName, year, days, tenant_id],
+          );
+          updated++;
+        } catch (e) {
+          errors++;
+          errorDetails.push(`emp_id ${empId}: DB error for "${colName}"`);
+        }
+      }
+    }
+
+    await conn.commit();
+    return send(res, 200, true, "Bulk upload complete", {
+      updated,
+      skipped_employees: skippedEmp,
+      skipped_leave_types: skippedLeave,
+      errors,
+      error_details: errorDetails,
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("[leave/balance/bulk-upload]", err);
+    return send(res, 500, false, "Internal server error");
+  } finally {
+    conn.release();
+  }
+});
+
+// ─── 17. List Employee Balances   GET /api/leave/balance/list ─────────────────
+
+router.get("/balance/list", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const year = req.query.year ?? new Date().getFullYear();
+  const search = req.query.search ?? "";
+
+  try {
+    // All active employees
+    let empQuery = `
+      SELECT emp_id, employee_code,
+             CONCAT(first_name, ' ', last_name) AS emp_name
+      FROM employee_master
+      WHERE tenant_id = ? AND status = 'Active'`;
+    const empParams = [tenant_id];
+
+    if (search.trim()) {
+      empQuery += ` AND (CONCAT(first_name,' ',last_name) LIKE ?
+                      OR employee_code LIKE ?)`;
+      empParams.push(`%${search}%`, `%${search}%`);
+    }
+    empQuery += " ORDER BY first_name ASC";
+
+    const [employees] = await db.execute(empQuery, empParams);
+
+    // All leave types for tenant
+    const [leaveTypes] = await db.execute(
+      `SELECT leave_type_id, leave_name FROM leave_type_master
+       WHERE tenant_id = ? AND is_active = 1 AND is_system = 0
+       ORDER BY leave_type_id ASC`,
+      [tenant_id],
+    );
+
+    // All balances for this tenant + year
+    const [balances] = await db.execute(
+      `SELECT emp_id, leave_type, allocated_days, used_days, pending_days, carry_forward
+       FROM leave_balance
+       WHERE tenant_id = ? AND year = ?`,
+      [tenant_id, year],
+    );
+
+    // Map balances: empId → leaveType → balance row
+    const balanceMap = {};
+    for (const b of balances) {
+      if (!balanceMap[b.emp_id]) balanceMap[b.emp_id] = {};
+      balanceMap[b.emp_id][b.leave_type] = b;
+    }
+
+    // Combine
+    const data = employees.map((emp) => ({
+      emp_id: emp.emp_id,
+      employee_code: emp.employee_code,
+      emp_name: emp.emp_name,
+      balances: leaveTypes.map((lt) => ({
+        leave_type: lt.leave_name,
+        leave_type_id: lt.leave_type_id,
+        allocated_days:
+          balanceMap[emp.emp_id]?.[lt.leave_name]?.allocated_days ?? null,
+        used_days: balanceMap[emp.emp_id]?.[lt.leave_name]?.used_days ?? 0,
+        pending_days:
+          balanceMap[emp.emp_id]?.[lt.leave_name]?.pending_days ?? 0,
+        carry_forward:
+          balanceMap[emp.emp_id]?.[lt.leave_name]?.carry_forward ?? 0,
+      })),
+    }));
+
+    return send(res, 200, true, "Balance list fetched", {
+      year,
+      leave_types: leaveTypes,
+      data,
+    });
+  } catch (err) {
+    console.error("[leave/balance/list]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
+
+// ─── 18. Set Balance (manual add/edit)   POST /api/leave/balance/set ──────────
+
+router.post("/balance/set", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const { emp_id, year, balances } = req.body;
+  // balances: [{ leave_type, allocated_days }]
+  if (!emp_id) return send(res, 400, false, "emp_id is required");
+  if (!Array.isArray(balances) || balances.length === 0)
+    return send(res, 400, false, "balances array is required");
+
+  const targetYear = year ?? new Date().getFullYear();
+
+  // Verify employee belongs to tenant
+  const [[emp]] = await db.execute(
+    `SELECT emp_id FROM employee_master
+     WHERE emp_id = ? AND tenant_id = ? LIMIT 1`,
+    [emp_id, tenant_id],
+  );
+  if (!emp) return send(res, 404, false, "Employee not found");
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    for (const b of balances) {
+      const days = parseFloat(b.allocated_days);
+      if (isNaN(days) || days < 0) continue;
+
+      await conn.execute(
+        `INSERT INTO leave_balance
+           (emp_id, leave_type, year, allocated_days, used_days, pending_days, carry_forward, tenant_id)
+         VALUES (?, ?, ?, ?, 0, 0, 0, ?)
+         ON DUPLICATE KEY UPDATE
+           allocated_days = VALUES(allocated_days),
+           updated_at = NOW()`,
+        [emp_id, b.leave_type, targetYear, days, tenant_id],
+      );
+    }
+
+    await conn.commit();
+    return send(res, 200, true, "Balance updated successfully");
+  } catch (err) {
+    await conn.rollback();
+    console.error("[leave/balance/set]", err);
+    return send(res, 500, false, "Internal server error");
+  } finally {
+    conn.release();
+  }
+});
+
+// ─── 19. My Leave Balance   GET /api/leave/balance/my ────────────────────────
+
+router.get("/balance/my", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id)
+    return send(res, 401, false, "Unauthorized: tenant not identified");
+
+  const emp_id = req.user?.employee_id || req.user?.emp_id;
+  if (!emp_id)
+    return send(res, 401, false, "Unauthorized: employee not identified");
+
+  const year = req.query.year ?? new Date().getFullYear();
+
+  try {
+    const [leaveTypes] = await db.execute(
+      `SELECT leave_type_id, leave_name FROM leave_type_master
+       WHERE tenant_id = ? AND is_active = 1 AND is_system = 0
+       ORDER BY leave_type_id ASC`,
+      [tenant_id],
+    );
+
+    const [balances] = await db.execute(
+      `SELECT leave_type, allocated_days, used_days, pending_days, carry_forward
+       FROM leave_balance
+       WHERE tenant_id = ? AND emp_id = ? AND year = ?`,
+      [tenant_id, emp_id, year],
+    );
+
+    const balMap = {};
+    for (const b of balances) {
+      balMap[b.leave_type] = b;
+    }
+
+    const data = leaveTypes.map((lt) => {
+      const b = balMap[lt.leave_name] ?? {};
+      const allocated = parseFloat(b.allocated_days ?? 0);
+      const used = parseFloat(b.used_days ?? 0);
+      const pending = parseFloat(b.pending_days ?? 0);
+      return {
+        leave_type_id: lt.leave_type_id,
+        leave_name: lt.leave_name,
+        allocated_days: allocated,
+        used_days: used,
+        pending_days: pending,
+        available_days: Math.max(0, allocated - used - pending),
+        carry_forward: parseFloat(b.carry_forward ?? 0),
+      };
+    });
+
+    return send(res, 200, true, "My leave balance fetched", { data, year });
+  } catch (err) {
+    console.error("[leave/balance/my]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
+
+// ─── 20. Attendance Accrual   POST /api/leave/balance/attendance-accrual ──────
+// Called by cron daily (after auto-checkout) to credit leave balance
+// based on attendance_accrual_streak / attendance_accrual_reward.
+// Body (optional): { date: "YYYY-MM-DD" }  ← defaults to yesterday
+// Header: x-cron-secret
+
+router.post("/balance/attendance-accrual", async (req, res) => {
+  const secret = req.headers["x-cron-secret"];
+  if (secret !== process.env.AUTO_CHECKOUT_SECRET) {
+    return send(res, 401, false, "Unauthorized");
+  }
+
+  const targetDate =
+    req.body?.date ??
+    (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return d.toISOString().slice(0, 10);
+    })();
+
+  const year = new Date(targetDate).getFullYear();
+
+  try {
+    // 1. All accrual-enabled leave types across all tenants
+    const [accrualTypes] = await db.execute(
+      `SELECT tenant_id, leave_type_id, leave_name,
+              attendance_accrual_streak, attendance_accrual_reward
+       FROM leave_type_master
+       WHERE attendance_accrual_enabled = 1
+         AND is_active = 1
+         AND attendance_accrual_streak > 0
+         AND attendance_accrual_reward > 0`,
+    );
+
+    if (accrualTypes.length === 0) {
+      return send(res, 200, true, "No accrual-enabled leave types found", {
+        credited: 0,
+      });
+    }
+
+    // Group by tenant
+    const byTenant = {};
+    for (const lt of accrualTypes) {
+      if (!byTenant[lt.tenant_id]) byTenant[lt.tenant_id] = [];
+      byTenant[lt.tenant_id].push(lt);
+    }
+
+    let totalCredited = 0;
+    const errorDetails = [];
+
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      for (const [tenantId, leaveTypes] of Object.entries(byTenant)) {
+        // 2. Employees present on targetDate (any attendance mode, completed)
+        const [presentRows] = await conn.execute(
+          `SELECT DISTINCT employee_id AS emp_id
+           FROM employee_attendance
+           WHERE tenant_id    = ?
+             AND work_date    = ?
+             AND status       = 'completed'
+             AND checkin_time  IS NOT NULL
+             AND checkout_time IS NOT NULL`,
+          [tenantId, targetDate],
+        );
+
+        if (presentRows.length === 0) continue;
+
+        for (const { emp_id } of presentRows) {
+          for (const lt of leaveTypes) {
+            const streak = Number(lt.attendance_accrual_streak); // e.g. 1
+            const reward = Number(lt.attendance_accrual_reward); // e.g. 1.0
+
+            // 3. Count YTD present days up to and including targetDate
+            const [[countRow]] = await conn.execute(
+              `SELECT COUNT(DISTINCT work_date) AS present_count
+               FROM employee_attendance
+               WHERE tenant_id    = ?
+                 AND employee_id  = ?
+                 AND status       = 'completed'
+                 AND checkin_time  IS NOT NULL
+                 AND checkout_time IS NOT NULL
+                 AND work_date BETWEEN ? AND ?`,
+              [tenantId, emp_id, `${year}-01-01`, targetDate],
+            );
+
+            const presentCount = Number(countRow?.present_count ?? 0);
+
+            // Credit only on exact streak boundary (day 1,2,3... if streak=1; day 3,6,9... if streak=3)
+            if (presentCount === 0 || presentCount % streak !== 0) continue;
+
+            // 4. Add reward to allocated_days
+            try {
+              await conn.execute(
+                `INSERT INTO leave_balance
+                   (emp_id, leave_type, year, allocated_days, used_days, pending_days, carry_forward, tenant_id)
+                 VALUES (?, ?, ?, ?, 0, 0, 0, ?)
+                 ON DUPLICATE KEY UPDATE
+                   allocated_days = allocated_days + VALUES(allocated_days),
+                   updated_at     = NOW()`,
+                [emp_id, lt.leave_name, year, reward, tenantId],
+              );
+              totalCredited++;
+            } catch (e) {
+              errorDetails.push(
+                `tenant ${tenantId} emp ${emp_id} leave "${lt.leave_name}": ${e.message}`,
+              );
+            }
+          }
+        }
+      }
+
+      await conn.commit();
+    } catch (innerErr) {
+      await conn.rollback();
+      throw innerErr;
+    } finally {
+      conn.release();
+    }
+
+    return send(
+      res,
+      200,
+      true,
+      `Attendance accrual complete for ${targetDate}`,
+      {
+        date: targetDate,
+        credited: totalCredited,
+        errors: errorDetails.length,
+        error_details: errorDetails,
+      },
+    );
+  } catch (err) {
+    console.error("[leave/balance/attendance-accrual]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
+
+// ─── Matrix Leave Report   GET /api/leave/report/matrix ──────────────────────
+
+router.get("/report/matrix", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id) return send(res, 401, false, "Unauthorized");
+
+  const { from, to, department_id } = req.query;
+  if (!from || !to) return send(res, 400, false, "from and to are required");
+
+  const fromDt = new Date(from);
+  const toDt = new Date(to);
+  if (isNaN(fromDt) || isNaN(toDt) || fromDt > toDt)
+    return send(res, 400, false, "Invalid date range");
+
+  try {
+    // ── 1. Attendance policy (weekoffs) ──
+    const [[policy]] = await db.execute(
+      `SELECT is_saturday_weekoff, is_sunday_weekoff
+       FROM attendance_policy WHERE tenant_id = ? LIMIT 1`,
+      [tenant_id],
+    );
+    const skipSat = policy?.is_saturday_weekoff === 1;
+    const skipSun = policy?.is_sunday_weekoff === 1;
+
+    // ── 2. Holidays in range ──
+    const [holidays] = await db.execute(
+      `SELECT DATE_FORMAT(holiday_date,'%Y-%m-%d') AS hdate, holiday_name
+       FROM holiday_master
+       WHERE tenant_id = ? AND holiday_date BETWEEN ? AND ?`,
+      [tenant_id, from, to],
+    );
+    const holidayMap = {};
+    for (const h of holidays) holidayMap[h.hdate] = h.holiday_name;
+
+    // ── 3. Build date list ──
+    const dates = [];
+    const cur = new Date(fromDt);
+    while (cur <= toDt) {
+      const ds = cur.toISOString().slice(0, 10);
+      const dow = cur.getDay();
+      dates.push({
+        date: ds,
+        day: cur.getDate(),
+        dayLabel: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][dow],
+        isWeekend: (skipSun && dow === 0) || (skipSat && dow === 6),
+        isHoliday: !!holidayMap[ds],
+        holidayName: holidayMap[ds] ?? null,
+      });
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    // ── 4. Employees (with dept filter) ──
+    const empParams = [tenant_id];
+    let deptWhere = "";
+    if (department_id) {
+      deptWhere = "AND dg.department_id = ?";
+      empParams.push(department_id);
+    }
+    const [employees] = await db.execute(
+      `SELECT e.emp_id,
+              CONCAT(e.first_name,' ',e.last_name) AS emp_name,
+              e.employee_code,
+              dept.department_name,
+              dg.designation_name
+       FROM employee_master e
+       JOIN designation_master dg
+         ON e.designation_id = dg.designation_id AND dg.tenant_id = e.tenant_id
+       JOIN department_master dept
+         ON dg.department_id = dept.department_id AND dept.tenant_id = e.tenant_id
+       WHERE e.tenant_id = ? AND e.status = 'Active'
+       ${deptWhere}
+       ORDER BY dept.department_name, e.first_name`,
+      empParams,
+    );
+
+    // ── 5. Leave records in range ──
+    const leaveParams = [tenant_id, to, from];
+    if (department_id) leaveParams.push(department_id);
+
+    const [leaveRows] = await db.execute(
+      `SELECT lm.emp_id,
+              lm.leave_start_date,
+              lm.leave_end_date,
+              lm.final_status,
+              lm.number_of_days,
+              lt.leave_name,
+              lt.leave_code,
+              lt.is_paid
+       FROM leave_master lm
+       JOIN leave_type_master lt
+         ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
+       JOIN employee_master e
+         ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
+       JOIN designation_master dg
+         ON e.designation_id = dg.designation_id AND dg.tenant_id = e.tenant_id
+       ${department_id ? "JOIN department_master dept ON dg.department_id = dept.department_id AND dept.tenant_id = e.tenant_id" : ""}
+       WHERE lm.tenant_id = ?
+         AND lm.leave_start_date <= ?
+         AND lm.leave_end_date   >= ?
+         AND lm.final_status IN ('Approved','Pending')
+         ${department_id ? "AND dg.department_id = ?" : ""}`,
+      leaveParams,
+    );
+
+    // ── 6. Build per-employee summary from leaveRows in the date range ──
+    // sumMap: empId → { paidTaken, unpaidTaken, pendingDays }
+    const sumMap = {};
+    for (const lv of leaveRows) {
+      if (!sumMap[lv.emp_id]) {
+        sumMap[lv.emp_id] = { paidTaken: 0, unpaidTaken: 0, pendingDays: 0 };
+      }
+      const days = Number(lv.number_of_days ?? 0);
+      if (lv.final_status === "Pending") {
+        sumMap[lv.emp_id].pendingDays += days;
+      } else if (lv.final_status === "Approved") {
+        if (lv.is_paid === 1 || lv.is_paid === true) {
+          sumMap[lv.emp_id].paidTaken += days;
+        } else {
+          sumMap[lv.emp_id].unpaidTaken += days;
+        }
+      }
+    }
+
+    // ── 7. Build per-employee day map ──
+    // leaveMap: empId → dateStr → { status: 'Approved'|'Pending', is_paid, leave_code }
+    const leaveMap = {};
+    for (const lv of leaveRows) {
+      if (!leaveMap[lv.emp_id]) leaveMap[lv.emp_id] = {};
+      const s = new Date(lv.leave_start_date);
+      const e = new Date(lv.leave_end_date);
+      const c = new Date(s);
+      while (c <= e) {
+        const ds = c.toISOString().slice(0, 10);
+        leaveMap[lv.emp_id][ds] = {
+          status: lv.final_status,
+          is_paid: lv.is_paid === 1 || lv.is_paid === true,
+          leave_code: lv.leave_code ?? lv.leave_name?.slice(0, 2).toUpperCase(),
+          leave_name: lv.leave_name,
+        };
+        c.setDate(c.getDate() + 1);
+      }
+    }
+
+    // ── 8. Assemble response ──
+    const data = employees.map((emp) => {
+      const empLeave = leaveMap[emp.emp_id] ?? {};
+
+      const days = dates.map((d) => {
+        if (d.isHoliday) return { date: d.date, type: "H", label: "H" };
+        if (d.isWeekend) return { date: d.date, type: "W", label: "W" };
+        const lv = empLeave[d.date];
+        if (!lv) return { date: d.date, type: null, label: "" };
+        if (lv.status === "Pending")
+          return { date: d.date, type: "LP", label: lv.leave_code ?? "L" };
+        return {
+          date: d.date,
+          type: lv.is_paid ? "PL" : "UL",
+          label: lv.leave_code ?? "L",
+        };
+      });
+
+      const empSum = sumMap[emp.emp_id] ?? {
+        paidTaken: 0,
+        unpaidTaken: 0,
+        pendingDays: 0,
+      };
+
+      return {
+        emp_id: emp.emp_id,
+        emp_name: emp.emp_name,
+        employee_code: emp.employee_code,
+        department_name: emp.department_name,
+        designation_name: emp.designation_name,
+        days,
+        summary: {
+          paid_taken: empSum.paidTaken,
+          unpaid_taken: empSum.unpaidTaken,
+          pending_days: empSum.pendingDays,
+          closing_balance:
+            empSum.paidTaken + empSum.unpaidTaken + empSum.pendingDays,
+        },
+      };
+    });
+
+    return send(res, 200, true, "Matrix fetched", {
+      dates,
+      data,
+      total_employees: data.length,
+    });
+  } catch (err) {
+    console.error("[leave/report/matrix]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
+
+// ─── Day-Wise Leave Report   GET /api/leave/report/day-wise ──────────────────
+
+router.get("/report/day-wise", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  if (!tenant_id) return send(res, 401, false, "Unauthorized");
+
+  const { date, department_id } = req.query;
+  if (!date) return send(res, 400, false, "date is required");
+
+  const dt = new Date(date);
+  if (isNaN(dt))
+    return send(res, 400, false, "Invalid date format. Use YYYY-MM-DD");
+
+  try {
+    const deptJoin = department_id
+      ? `JOIN designation_master dg2 ON e.designation_id = dg2.designation_id AND dg2.tenant_id = e.tenant_id
+         JOIN department_master dept2 ON dg2.department_id = dept2.department_id AND dept2.tenant_id = e.tenant_id`
+      : `LEFT JOIN designation_master dg2 ON e.designation_id = dg2.designation_id AND dg2.tenant_id = e.tenant_id
+         LEFT JOIN department_master dept2 ON dg2.department_id = dept2.department_id AND dept2.tenant_id = e.tenant_id`;
+
+    const params = [tenant_id, date, date];
+    if (department_id) params.push(department_id);
+
+    const [rows] = await db.execute(
+      `SELECT
+          lm.leave_id,
+          lm.emp_id,
+          CONCAT(e.first_name, ' ', e.last_name)   AS employee_name,
+          e.employee_code,
+          COALESCE(dept2.department_name, '')        AS department_name,
+          COALESCE(dg2.designation_name, '')         AS designation_name,
+          lm.leave_type_id,
+          lt.leave_name,
+          lt.leave_code,
+          lt.is_paid,
+          DATE_FORMAT(lm.leave_start_date, '%Y-%m-%d') AS leave_start_date,
+          DATE_FORMAT(lm.leave_end_date,   '%Y-%m-%d') AS leave_end_date,
+          lm.is_half_day,
+          lm.half_day_period,
+          lm.number_of_days,
+          lm.reason,
+          lm.final_status,
+          DATE_FORMAT(lm.created_at, '%Y-%m-%d')    AS applied_on,
+          CONCAT(ca.first_name, ' ', ca.last_name)  AS approver_name,
+          lm.last_action_remarks                     AS remarks,
+          lm.cancel_reason
+       FROM leave_master lm
+       JOIN employee_master e
+         ON lm.emp_id = e.emp_id AND e.tenant_id = lm.tenant_id
+       ${deptJoin}
+       LEFT JOIN leave_type_master lt
+         ON lm.leave_type_id = lt.leave_type_id AND lt.tenant_id = lm.tenant_id
+       LEFT JOIN employee_master ca
+         ON lm.last_action_by = ca.emp_id AND ca.tenant_id = lm.tenant_id
+       WHERE lm.tenant_id = ?
+         AND lm.leave_start_date <= ?
+         AND lm.leave_end_date   >= ?
+         AND lm.final_status IN ('Approved', 'Pending')
+         ${department_id ? "AND dept2.department_id = ?" : ""}
+       ORDER BY dept2.department_name ASC, e.first_name ASC`,
+      params,
+    );
+
+    return send(res, 200, true, "Day-wise leave report fetched", {
+      data: rows,
+    });
+  } catch (err) {
+    console.error("[leave/report/day-wise]", err);
+    return send(res, 500, false, "Internal server error");
+  }
+});
 module.exports = router;
