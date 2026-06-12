@@ -749,120 +749,166 @@ class ManageUserScreenState extends State<ManageUserScreen>
       backgroundColor: _surface,
       body: Column(
         children: [
-          // ── Tab bar ──────────────────────────────────────────────────────
-          // ── Tab bar ──────────────────────────────────────────────
-          Container(
-            color: _card,
-            child: Row(
-              children: [
-                Expanded(
-                  child: TabBar(
-                    controller: _tabController,
-                    labelColor: _primary,
-                    unselectedLabelColor: _textMid,
-                    indicatorColor: _primary,
-                    indicatorWeight: 3,
-                    labelStyle: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                    unselectedLabelStyle: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 13,
-                    ),
-                    tabs: [
-                      Tab(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.people_rounded, size: 16),
-                            const SizedBox(width: 5),
-                            const Flexible(
-                              child: Text(
-                                'Employees',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (_masterEmployees.isNotEmpty) ...[
-                              const SizedBox(width: 5),
-                              _tabCount(_masterEmployees.length, _primary),
-                            ],
-                          ],
-                        ),
+          if (widget.canEdit) ...[
+            // ── Tab bar ──────────────────────────────────────────────
+            Container(
+              color: _card,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TabBar(
+                      controller: _tabController,
+                      labelColor: _primary,
+                      unselectedLabelColor: _textMid,
+                      indicatorColor: _primary,
+                      indicatorWeight: 3,
+                      labelStyle: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
                       ),
-                      Tab(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.pending_actions_rounded, size: 16),
-                            const SizedBox(width: 5),
-                            const Flexible(
-                              child: Text(
-                                'Requests',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (_requestEmployees.isNotEmpty) ...[
-                              const SizedBox(width: 5),
-                              _tabCount(_requestEmployees.length, _amber),
-                            ],
-                          ],
-                        ),
+                      unselectedLabelStyle: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
                       ),
-                    ],
+                      tabs: [
+                        Tab(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.people_rounded, size: 16),
+                              const SizedBox(width: 5),
+                              const Flexible(
+                                child: Text(
+                                  'Employees',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (_masterEmployees.isNotEmpty) ...[
+                                const SizedBox(width: 5),
+                                _tabCount(_masterEmployees.length, _primary),
+                              ],
+                            ],
+                          ),
+                        ),
+                        Tab(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.pending_actions_rounded,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 5),
+                              const Flexible(
+                                child: Text(
+                                  'Requests',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (_requestEmployees.isNotEmpty) ...[
+                                const SizedBox(width: 5),
+                                _tabCount(_requestEmployees.length, _amber),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
 
-                // ── Refresh button ────────────────────────────────
-              ],
+                  // ── Refresh button ────────────────────────────────
+                ],
+              ),
             ),
-          ),
-          // ── Filter bar (shared) ──────────────────────────────────────────
-          Container(
-            color: _card,
-            padding: EdgeInsets.fromLTRB(s.pagePadding, 10, s.pagePadding, 10),
-            child: s.isMobile
-                ? Column(
-                    children: [
-                      _searchField(),
-                      const SizedBox(height: 8),
-                      _deptFilter(),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Expanded(flex: 3, child: _searchField()),
-                      const SizedBox(width: 10),
-                      Expanded(flex: 2, child: _deptFilter()),
-                    ],
+            // ── Filter bar (shared) ──────────────────────────────────────────
+            Container(
+              color: _card,
+              padding: EdgeInsets.fromLTRB(
+                s.pagePadding,
+                10,
+                s.pagePadding,
+                10,
+              ),
+              child: s.isMobile
+                  ? Column(
+                      children: [
+                        _searchField(),
+                        const SizedBox(height: 8),
+                        _deptFilter(),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(flex: 3, child: _searchField()),
+                        const SizedBox(width: 10),
+                        Expanded(flex: 2, child: _deptFilter()),
+                      ],
+                    ),
+            ),
+            const Divider(height: 1, thickness: 1, color: _border),
+
+            // ── Tab views ────────────────────────────────────────────────────
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _MasterTab(
+                    loading: _masterLoading,
+                    error: _masterError,
+                    employees: _filterList(_masterEmployees),
+                    screen: s,
+                    onRefresh: _fetchMaster,
+                    onTap: _onMasterTap,
                   ),
-          ),
-          const Divider(height: 1, thickness: 1, color: _border),
-
-          // ── Tab views ────────────────────────────────────────────────────
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _MasterTab(
-                  loading: _masterLoading,
-                  error: _masterError,
-                  employees: _filterList(_masterEmployees),
-                  screen: s,
-                  onRefresh: _fetchMaster,
-                  onTap: _onMasterTap,
-                ),
-                _RequestsTab(
-                  loading: _reqLoading,
-                  error: _reqError,
-                  employees: _filterList(_requestEmployees),
-                  screen: s,
-                  onRefresh: _fetchRequests,
-                  onTap: _onRequestTap,
-                ),
-              ],
+                  _RequestsTab(
+                    loading: _reqLoading,
+                    error: _reqError,
+                    employees: _filterList(_requestEmployees),
+                    screen: s,
+                    onRefresh: _fetchRequests,
+                    onTap: _onRequestTap,
+                  ),
+                ],
+              ),
             ),
-          ),
+          ] else ...[
+            // ── Read-only: filter bar + employees only ─────────────────────
+            Container(
+              color: _card,
+              padding: EdgeInsets.fromLTRB(
+                s.pagePadding,
+                10,
+                s.pagePadding,
+                10,
+              ),
+              child: s.isMobile
+                  ? Column(
+                      children: [
+                        _searchField(),
+                        const SizedBox(height: 8),
+                        _deptFilter(),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(flex: 3, child: _searchField()),
+                        const SizedBox(width: 10),
+                        Expanded(flex: 2, child: _deptFilter()),
+                      ],
+                    ),
+            ),
+            const Divider(height: 1, thickness: 1, color: _border),
+            Expanded(
+              child: _MasterTab(
+                loading: _masterLoading,
+                error: _masterError,
+                employees: _filterList(_masterEmployees),
+                screen: s,
+                onRefresh: _fetchMaster,
+                onTap: _onMasterTap,
+              ),
+            ),
+          ],
         ],
       ),
       floatingActionButton: (_showFab && widget.canEdit)
@@ -4019,10 +4065,7 @@ class _EduDetailCard extends StatelessWidget {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// EMPLOYEE RESUBMIT PAGE
-// ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
+//  ─────────────────────────────────────────────────────────────────────────────
 // EMPLOYEE RESUBMIT PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 class EmployeeResubmitPage extends StatefulWidget {
@@ -4066,6 +4109,9 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
   int? selectedDeptId, selectedDesignationId, selectedRoleId;
   List<Map<String, dynamic>> departments = [], designations = [], roles = [];
   int? selectedTlId;
+  List<Map<String, dynamic>> _deptEmployees = [];
+  List<String> _approverRoles = [];
+  String? _selectedReportingRole;
   bool _submitting = false;
   Uint8List? _selectedPhotoBytes;
   late Future<http.Response> _existingPhotoFuture; // ← show existing photo
@@ -4120,6 +4166,12 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
         ? int.tryParse(d['role_id'].toString())
         : null;
 
+    selectedTlId = d['reporting_to_employee_id'] != null
+        ? int.tryParse(d['reporting_to_employee_id'].toString())
+        : (d['tl_id'] != null ? int.tryParse(d['tl_id'].toString()) : null);
+
+    _loadReportingManagers();
+
     if (d['education'] is List) {
       _initialEdu = (d['education'] as List)
           .map((e) => Map<String, dynamic>.from(e))
@@ -4170,11 +4222,154 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
       selectedDeptId = deptId;
       selectedDesignationId = null;
       designations = [];
+      selectedTlId = null;
+      _selectedReportingRole = null;
     });
     if (deptId != null) {
       final list = await EmployeeService.fetchDesignations(deptId: deptId);
       if (mounted) setState(() => designations = list);
     }
+  }
+
+  Future<void> _loadReportingManagers() async {
+    final results = await Future.wait([
+      EmployeeService.fetchLeaveApprovers(),
+      EmployeeService.fetchLeaveApproverRoles(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _deptEmployees = results[0] as List<Map<String, dynamic>>;
+      _approverRoles = results[1] as List<String>;
+    });
+  }
+
+  List<String> get _reportingRoles => _approverRoles;
+
+  List<Map<String, dynamic>> get _filteredApprovers {
+    if (_selectedReportingRole == null) return _deptEmployees;
+    return _deptEmployees
+        .where((e) => e['role_name']?.toString() == _selectedReportingRole)
+        .toList();
+  }
+
+  Widget _buildReportingToDropdowns(double sp) {
+    if (_approverRoles.isEmpty) return const SizedBox.shrink();
+
+    final filtered = _filteredApprovers;
+    List<Map<String, dynamic>> sameDept = [];
+    List<Map<String, dynamic>> otherDept = [];
+    final seenIds = <int>{};
+
+    for (final emp in filtered) {
+      final empId = emp['emp_id'] is int
+          ? emp['emp_id'] as int
+          : int.tryParse(emp['emp_id'].toString());
+      if (empId == null || !seenIds.add(empId)) continue;
+
+      final empDeptId = emp['department_id'] != null
+          ? int.tryParse(emp['department_id'].toString())
+          : null;
+      if (selectedDeptId != null && empDeptId == selectedDeptId) {
+        sameDept.add(emp);
+      } else {
+        otherDept.add(emp);
+      }
+    }
+
+    if (selectedTlId != null && !seenIds.contains(selectedTlId)) {
+      otherDept.insert(0, {
+        'emp_id': selectedTlId,
+        'first_name': 'Current Manager',
+        'last_name': '(ID: $selectedTlId)',
+        'department_name': null,
+      });
+    }
+
+    List<DropdownMenuItem<int>> items = [];
+    if (sameDept.isNotEmpty) {
+      items.add(_groupHeader('── Same Department ──'));
+      items.addAll(sameDept.map((emp) => _approverItem(emp)));
+    }
+    if (otherDept.isNotEmpty) {
+      items.add(_groupHeader('── Others ──'));
+      items.addAll(otherDept.map((emp) => _approverItem(emp)));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          value: _selectedReportingRole,
+          isExpanded: true,
+          decoration: _inputDec('Reporting To — Filter by Role'),
+          hint: const Text(
+            'All roles',
+            style: TextStyle(color: _textLight, fontSize: 13),
+          ),
+          items: [
+            const DropdownMenuItem<String>(
+              value: null,
+              child: Text('All roles', overflow: TextOverflow.ellipsis),
+            ),
+            ..._reportingRoles.map(
+              (r) => DropdownMenuItem<String>(
+                value: r,
+                child: Text(r, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ],
+          onChanged: (v) => setState(() {
+            _selectedReportingRole = v;
+            selectedTlId = null;
+          }),
+        ),
+        SizedBox(height: sp),
+        DropdownButtonFormField<int>(
+          value: selectedTlId,
+          isExpanded: true,
+          decoration: _inputDec('Reporting To — Select Employee'),
+          hint: const Text(
+            'Select reporting manager',
+            style: TextStyle(color: _textLight, fontSize: 13),
+          ),
+          items: items,
+          onChanged: (v) {
+            if (v != null) setState(() => selectedTlId = v);
+          },
+        ),
+      ],
+    );
+  }
+
+  DropdownMenuItem<int> _groupHeader(String label) {
+    return DropdownMenuItem<int>(
+      value: null,
+      enabled: false,
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: _textMid,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  DropdownMenuItem<int> _approverItem(Map<String, dynamic> emp) {
+    final name = '${emp['first_name'] ?? ''} ${emp['last_name'] ?? ''}'.trim();
+    final dept = emp['department_name']?.toString() ?? '';
+    final id = emp['emp_id'] is int
+        ? emp['emp_id'] as int
+        : int.tryParse(emp['emp_id'].toString());
+    return DropdownMenuItem<int>(
+      value: id,
+      child: Text(
+        dept.isNotEmpty ? '$name ($dept)' : name,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
   }
 
   @override
@@ -4501,6 +4696,8 @@ class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
                         (v) => setState(() => selectedRoleId = v),
                         padding: EdgeInsets.zero,
                       ),
+                      SizedBox(height: sp),
+                      _buildReportingToDropdowns(sp),
 
                       SizedBox(height: sp),
                       FormDateField(
@@ -5041,8 +5238,14 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
     // _deptEmployees has department_id; look it up per emp
     List<Map<String, dynamic>> sameDept = [];
     List<Map<String, dynamic>> otherDept = [];
+    final seenIds = <int>{};
 
     for (final emp in filtered) {
+      final empId = emp['emp_id'] is int
+          ? emp['emp_id'] as int
+          : int.tryParse(emp['emp_id'].toString());
+      if (empId == null || !seenIds.add(empId)) continue; // dedupe
+
       // department_id may be on emp directly or via dept lookup
       final empDeptId = emp['department_id'] != null
           ? int.tryParse(emp['department_id'].toString())
@@ -5052,6 +5255,16 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
       } else {
         otherDept.add(emp);
       }
+    }
+
+    // ── Ensure the currently-assigned manager has exactly one matching item ──
+    if (selectedTlId != null && !seenIds.contains(selectedTlId)) {
+      otherDept.insert(0, {
+        'emp_id': selectedTlId,
+        'first_name': 'Current Manager',
+        'last_name': '(ID: $selectedTlId)',
+        'department_name': null,
+      });
     }
 
     // Build dropdown items with group headers

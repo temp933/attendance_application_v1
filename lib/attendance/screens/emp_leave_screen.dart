@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../providers/api_client.dart';
 import 'holiday_management_screen.dart';
+import 'comp_off_screen.dart';
 
 // ─── Color palette ─────────────────────────────────────────────────────────
 const _primary = Color(0xFF1A56DB);
@@ -50,6 +51,7 @@ class _LeaveScreenState extends State<LeaveScreen>
   List<Map<String, dynamic>> _leaves = [];
   List<Map<String, dynamic>> _leaveTypes = [];
   List<Map<String, dynamic>> _myBalances = [];
+  bool _compOffEnabled = false;
   bool _loading = true;
   String? _error;
 
@@ -83,10 +85,12 @@ class _LeaveScreenState extends State<LeaveScreen>
         ApiClient.get('/leave/my-leaves'),
         ApiClient.get('/leave/policy/list'),
         ApiClient.get('/leave/balance/my'),
+        ApiClient.get('/attendance/policy'),
       ]);
       final leavesRes = results[0];
       final typesRes = results[1];
       final balRes = results[2];
+      final attPolicyRes = results[3];
 
       if (leavesRes.statusCode == 200) {
         final body = jsonDecode(leavesRes.body) as Map<String, dynamic>;
@@ -107,13 +111,22 @@ class _LeaveScreenState extends State<LeaveScreen>
           );
         }
       }
-      if (balRes.statusCode == 200) {
+     if (balRes.statusCode == 200) {
         final body = jsonDecode(balRes.body) as Map<String, dynamic>;
         if (body['ok'] == true) {
           setState(
             () => _myBalances = List<Map<String, dynamic>>.from(
               body['data'] ?? [],
             ),
+          );
+        }
+      }
+      if (attPolicyRes.statusCode == 200) {
+        final body = jsonDecode(attPolicyRes.body) as Map<String, dynamic>;
+        if (body['success'] == true) {
+          final policy = body['policy'] as Map<String, dynamic>?;
+          setState(
+            () => _compOffEnabled = policy?['comp_off_enabled'] == 1,
           );
         }
       }
@@ -156,26 +169,34 @@ class _LeaveScreenState extends State<LeaveScreen>
 
     return Scaffold(
       backgroundColor: _surface,
-      floatingActionButton: _loading ? null : _buildFAB(),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _primary))
           : _error != null
           ? _ErrorView(message: _error!, onRetry: _load)
-          : RefreshIndicator(
-              color: _primary,
-              onRefresh: _load,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  _buildAppBar(),
-                  SliverToBoxAdapter(child: _buildStatsBar()),
-                  if (_myBalances.isNotEmpty)
-                    SliverToBoxAdapter(child: _buildBalanceBar()),
-                  _leaves.isEmpty
-                      ? SliverToBoxAdapter(child: const _EmptyState())
-                      : _buildLeaveList(isDesktop),
-                ],
-              ),
+          : Stack(
+              children: [
+                RefreshIndicator(
+                  color: _primary,
+                  onRefresh: _load,
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      _buildAppBar(),
+                      SliverToBoxAdapter(child: _buildStatsBar()),
+                      if (_myBalances.isNotEmpty)
+                        SliverToBoxAdapter(child: _buildBalanceBar()),
+                      _leaves.isEmpty
+                          ? SliverToBoxAdapter(child: const _EmptyState())
+                          : _buildLeaveList(isDesktop),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  right: 16,
+                  bottom: MediaQuery.of(context).padding.bottom + 16,
+                  child: _buildFAB(),
+                ),
+              ],
             ),
     );
   }
@@ -455,36 +476,118 @@ class _LeaveScreenState extends State<LeaveScreen>
 
   // ── FAB ───────────────────────────────────────────────────────────────────
   // ── FAB ───────────────────────────────────────────────────────────────────
-  Widget _buildFAB() {
+  // Widget _buildFAB() {
+  //   return Column(
+  //     mainAxisSize: MainAxisSize.min,
+  //     crossAxisAlignment: CrossAxisAlignment.end,
+  //     children: [
+  //       FloatingActionButton.extended(
+  //         heroTag: 'fab_holidays',
+  //         backgroundColor: Colors.white,
+  //         elevation: 4,
+  //         onPressed: () => Navigator.push(
+  //           context,
+  //           MaterialPageRoute(
+  //             builder: (_) => HolidayManagementScreen(canEdit: false),
+  //           ),
+  //         ),
+  //         icon: const Icon(Icons.celebration_rounded, color: _primary),
+  //         label: const Text(
+  //           'Holidays',
+  //           style: TextStyle(
+  //             color: _primary,
+  //             fontWeight: FontWeight.w700,
+  //             letterSpacing: 0.3,
+  //           ),
+  //         ),
+  //         shape: RoundedRectangleBorder(
+  //           borderRadius: BorderRadius.circular(16),
+  //           side: BorderSide(color: _primary.withOpacity(0.3)),
+  //         ),
+  //       ),
+  //      if (_compOffEnabled) ...[
+  //         const SizedBox(height: 10),
+  //         FloatingActionButton.extended(
+  //           heroTag: 'fab_compoff',
+  //           backgroundColor: Colors.white,
+  //           elevation: 4,
+  //           onPressed: () => Navigator.push(
+  //             context,
+  //             MaterialPageRoute(builder: (_) => CompOffScreen()),
+  //           ),
+  //           icon: const Icon(Icons.calendar_today_outlined, color: _primary),
+  //           label: const Text(
+  //             'Comp-Off',
+  //             style: TextStyle(
+  //               color: _primary,
+  //               fontWeight: FontWeight.w700,
+  //               letterSpacing: 0.3,
+  //             ),
+  //           ),
+  //           shape: RoundedRectangleBorder(
+  //             borderRadius: BorderRadius.circular(16),
+  //             side: BorderSide(color: _primary.withOpacity(0.3)),
+  //           ),
+  //         ),
+  //       ],
+  //       const SizedBox(height: 10),
+  //       FloatingActionButton.extended(
+  //         heroTag: 'fab_apply',
+  //         backgroundColor: _primary,
+  //         elevation: 4,
+  //         onPressed: _openApplySheet,
+  //         icon: const Icon(Icons.add_rounded, color: Colors.white),
+  //         label: const Text(
+  //           'Apply Leave',
+  //           style: TextStyle(
+  //             color: Colors.white,
+  //             fontWeight: FontWeight.w700,
+  //             letterSpacing: 0.3,
+  //           ),
+  //         ),
+  //         shape: RoundedRectangleBorder(
+  //           borderRadius: BorderRadius.circular(16),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
+Widget _buildFAB() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        FloatingActionButton.extended(
-          heroTag: 'fab_holidays',
-          backgroundColor: Colors.white,
-          elevation: 4,
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => HolidayManagementScreen(canEdit: false),
+        // ── Small round shortcut buttons (Holidays / Comp-Off) ──────────
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _MiniFabButton(
+              heroTag: 'fab_holidays',
+              icon: Icons.celebration_rounded,
+              tooltip: 'Holidays',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => HolidayManagementScreen(canEdit: false),
+                ),
+              ),
             ),
-          ),
-          icon: const Icon(Icons.celebration_rounded, color: _primary),
-          label: const Text(
-            'Holidays',
-            style: TextStyle(
-              color: _primary,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.3,
-            ),
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: _primary.withOpacity(0.3)),
-          ),
+            if (_compOffEnabled) ...[
+              const SizedBox(width: 10),
+              _MiniFabButton(
+                heroTag: 'fab_compoff',
+                icon: Icons.calendar_today_outlined,
+                tooltip: 'Comp-Off',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => CompOffScreen()),
+                ),
+              ),
+            ],
+          ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
+        // ── Primary action ───────────────────────────────────────────────
         FloatingActionButton.extended(
           heroTag: 'fab_apply',
           backgroundColor: _primary,
@@ -506,13 +609,13 @@ class _LeaveScreenState extends State<LeaveScreen>
       ],
     );
   }
-
   // ── Dialogs / Sheets ──────────────────────────────────────────────────────
   void _confirmCancel(Map<String, dynamic> leave) {
     final ctrl = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'Cancel Leave',
@@ -582,9 +685,11 @@ class _LeaveScreenState extends State<LeaveScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _ApplyLeaveSheet(
         leaveTypes: _leaveTypes,
+        compOffEnabled: _compOffEnabled,
         onSuccess: (msg) {
           _load();
           _snack(msg, success: true);
@@ -975,8 +1080,13 @@ class _LeaveCardState extends State<_LeaveCard> {
 // ══════════════════════════════════════════════════════════════════════════════
 class _ApplyLeaveSheet extends StatefulWidget {
   final List<Map<String, dynamic>> leaveTypes;
+  final bool compOffEnabled;
   final void Function(String message) onSuccess;
-  const _ApplyLeaveSheet({required this.leaveTypes, required this.onSuccess});
+  const _ApplyLeaveSheet({
+    required this.leaveTypes,
+    required this.compOffEnabled,
+    required this.onSuccess,
+  });
 
   @override
   State<_ApplyLeaveSheet> createState() => _ApplyLeaveSheetState();
@@ -1089,6 +1199,10 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
   }
 
   Future<void> _fetchCompOffs() async {
+    if (!widget.compOffEnabled) {
+      if (mounted) setState(() => _loadingCompOffs = false);
+      return;
+    }
     try {
       final res = await ApiClient.get('/leave/available-compoffs');
       if (!mounted) return;
@@ -2488,6 +2602,37 @@ class _StatDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Container(width: 1, height: 36, color: _border);
+}
+
+// ── Small circular shortcut button used in the leave screen FAB stack ──────
+class _MiniFabButton extends StatelessWidget {
+  final String heroTag;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  const _MiniFabButton({
+    required this.heroTag,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: FloatingActionButton(
+      heroTag: heroTag,
+      mini: true,
+      elevation: 3,
+      backgroundColor: Colors.white,
+      onPressed: onTap,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: _primary.withOpacity(0.25)),
+      ),
+      child: Icon(icon, color: _primary, size: 20),
+    ),
+  );
 }
 
 class _FieldLabel extends StatelessWidget {

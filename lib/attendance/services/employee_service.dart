@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/employee.dart';
 import 'package:flutter/material.dart';
-import '../models/employee_work_status.dart';
 import '../providers/api_config.dart';
 import '../providers/api_client.dart';
 
@@ -181,20 +180,6 @@ class EmployeeService {
       return list.map((e) => Employee.fromJson(e)).toList();
     } else {
       throw Exception('Failed to fetch employees');
-    }
-  }
-
-  // ================= EMPLOYEES WITH WORK =================
-  static Future<List<EmployeeWorkStatus>> fetchEmployeesWithWork() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/employees-with-work'),
-      headers: ApiConfig.headers, // ← ADDED
-    );
-    if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map((e) => EmployeeWorkStatus.fromJson(e)).toList();
-    } else {
-      throw Exception("Failed to load employees with work");
     }
   }
 

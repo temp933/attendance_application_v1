@@ -7,6 +7,7 @@ const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const rateLimit = require("express-rate-limit"); // FIX #12
 const db = require("./config/db");
+const { getDuplicateFieldLabel } = require("./utils/db_errors");
 
 const APP_ADMIN_USERNAME = process.env.APP_ADMIN_USERNAME;
 // FIX #2: Use hashed password from env instead of plaintext
@@ -1086,11 +1087,11 @@ router.post("/complete", async (req, res) => {
     await conn.rollback();
     console.error("[POST /auth/complete]", err);
 
-    if (err.code === "ER_DUP_ENTRY") {
+    const dupField = getDuplicateFieldLabel(err);
+    if (dupField) {
       return res.status(409).json({
         success: false,
-        message:
-          "Duplicate entry detected (email, phone, Aadhar or PAN already exists).",
+        message: `${dupField} is already registered with another organisation. Please use a different ${dupField.toLowerCase()}.`,
       });
     }
 

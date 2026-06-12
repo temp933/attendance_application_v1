@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'login_screen.dart';
-import '../services/biometric_service.dart';
+import 'login_screen.dart'; 
 
 class ChangePasswordScreen extends StatefulWidget {
   final int loginId;
@@ -118,12 +117,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
-  Future<void> _submit() async {
+Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
     try {
-      // 1. Change password + clears local session internally
       await AuthService.changePassword(
         loginId: widget.loginId,
         newPassword: _newPwCtrl.text,
@@ -131,119 +129,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       );
 
       if (!mounted) return;
-
-      // 2. Offer biometric setup
-      final bioAvailable = await BiometricService.isAvailable();
-      if (bioAvailable && mounted) {
-        await _showBioSetupDialog();
-      } else {
-        await _goToLogin(message: 'Password set. Please login again.');
-      }
+      await _goToLogin(message: 'Password updated successfully. Please log in.');
     } catch (e) {
       if (mounted) _snack(e.toString(), _red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-
-  Future<void> _showBioSetupDialog() async {
-    final agreed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black45,
-      builder: (_) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                color: Color(0xFFEEF2FF),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.fingerprint_rounded,
-                size: 40,
-                color: Color(0xFF1A56DB),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Enable Biometric Login?',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Log in faster next time using your fingerprint or face ID.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: Color(0xFF64748B),
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.pop(context, false),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF64748B),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
-            ),
-            child: const Text(
-              'Skip',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF1A56DB),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
-            ),
-            child: const Text(
-              'Enable',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted) return;
-
-    String toastMsg = 'Password set. Please login again.';
-
-    if (agreed == true) {
-      final verified = await BiometricService.authenticate();
-      if (!mounted) return;
-      if (verified) {
-        await BiometricService.enableBio(widget.loginId);
-        toastMsg = 'Biometric enabled. Please login again.';
-      }
-      // If not verified, silently skip — no confusing extra snack
-    }
-
-    await _goToLogin(message: toastMsg);
-  }
-
+  
   /// Explicit server logout → clear local session → navigate to LoginScreen.
   Future<void> _goToLogin({required String message}) async {
     // Use loginId from widget since first-login users have no saved session

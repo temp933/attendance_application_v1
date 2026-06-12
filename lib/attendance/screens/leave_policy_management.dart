@@ -165,7 +165,10 @@ class _LeavePolicyManagementScreenState
         final list = (body['data'] as List)
             .map((j) => LeavePolicy.fromJson(j as Map<String, dynamic>))
             .toList();
-        setState(() => _policies = list);
+        // Hide system policies (e.g. COMP_OFF) when they are inactive —
+        // comp_off_enabled=false in attendance policy sets is_active=0 on the DB row.
+        final visible = list.where((p) => !p.isSystem || p.isActive).toList();
+        setState(() => _policies = visible);
       } else {
         _showSnack(body['message'] ?? 'Failed to fetch policies');
       }

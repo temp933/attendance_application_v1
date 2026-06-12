@@ -30,9 +30,7 @@ import './policy_management_screen.dart';
 import './manage_location.dart';
 // ── Employee screens ──────────────────────────────────────────────────────────
 // import 'emp_home_screen.dart';
-import 'emp_leave_screen.dart';
-import 'emp_work_location.dart';
-import 'comp_off_screen.dart';
+import 'emp_leave_screen.dart'; 
 import './Attendance screens/normal_in_out.dart';
 import './Attendance screens/attendance_gps.dart';
 import './Attendance screens/face_gps_attendance.dart';
@@ -179,36 +177,6 @@ final List<_ModuleDef> _allModules = [
           required authToken,
           required canEdit,
         }) => EmployeeProfileScreen(employeeId: employeeId),
-  ),
-  _ModuleDef(
-    key: 'emp_site',
-    title: 'Site',
-    icon: Icons.place_outlined,
-    selectedIcon: Icons.place,
-    navLabel: 'Site',
-    builder:
-        ({
-          required employeeId,
-          required roleId,
-          required tenantId,
-          required authToken,
-          required canEdit,
-        }) => EmployeeAssignmentsScreen(),
-  ),
-  _ModuleDef(
-    key: 'comp_off',
-    title: 'Comp-Off',
-    icon: Icons.calendar_today_outlined,
-    selectedIcon: Icons.calendar_today,
-    navLabel: 'Comp-Off',
-    builder:
-        ({
-          required employeeId,
-          required roleId,
-          required tenantId,
-          required authToken,
-          required canEdit,
-        }) => CompOffScreen(),
   ),
 
   // ── Admin/HR-facing ────────────────────────────────────────────────────────
@@ -411,7 +379,7 @@ final List<_ModuleDef> _allModules = [
           required tenantId,
           required authToken,
           required canEdit,
-        }) => ManageLocationPage(),
+        }) => ManageLocationPage(canEdit: canEdit),
   ),
 ];
 

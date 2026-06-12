@@ -58,15 +58,6 @@ class HolidayModel {
       isRecurring: (j['is_recurring'] == 1 || j['is_recurring'] == true),
     );
   }
-  static DateTime _parseDate(String s) {
-    // Parse as local date, not UTC — avoids timezone shift
-    final parts = s.split('T')[0].split('-');
-    return DateTime(
-      int.parse(parts[0]),
-      int.parse(parts[1]),
-      int.parse(parts[2]),
-    );
-  }
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
@@ -349,124 +340,157 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
   );
 
   PreferredSizeWidget _buildAppBar() => PreferredSize(
-    preferredSize: const Size.fromHeight(56),
+    preferredSize: const Size.fromHeight(108),
     child: Container(
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color: _primary,
         boxShadow: [
           BoxShadow(
-            color: Color(0x401A56DB),
+            color: Color(0x331A56DB),
             blurRadius: 14,
             offset: Offset(0, 4),
           ),
         ],
       ),
       child: SafeArea(
+        bottom: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    size: 18,
-                    color: _textDark,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    onPressed: () => Navigator.pop(context),
                   ),
-                  onPressed: () => Navigator.pop(context),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  constraints: const BoxConstraints(),
-                ),
-                Expanded(child: SizedBox(height: 38, child: _buildYearBar())),
-              ],
+                  const Text(
+                    'Holidays',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
             ),
+
+            const SizedBox(height: 4),
           ],
         ),
       ),
     ),
   );
-  Widget _buildYearBar() {
-    final years = List.generate(5, (i) => DateTime.now().year - 1 + i);
-    return ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: years.length,
-      separatorBuilder: (_, __) => const SizedBox(width: 8),
-      itemBuilder: (_, i) {
-        final y = years[i];
-        final sel = y == _selectedYear;
-        return GestureDetector(
-          onTap: () {
-            setState(() => _selectedYear = y);
-            _loadHolidays();
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-            decoration: BoxDecoration(
-              color: sel ? _primary : _surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: sel ? _primary : _border),
-            ),
-            child: Text(
-              '$y',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: sel ? Colors.white : _textMid,
+
+  Widget _buildBody() => RefreshIndicator(
+    onRefresh: _loadHolidays,
+    color: const Color.fromARGB(255, 255, 255, 255),
+    child: CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverToBoxAdapter(
+          child: Container(
+            color: _card,
+            padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
+            child: SizedBox(
+              height: 38,
+              child: Builder(
+                builder: (_) {
+                  final years = List.generate(
+                    5,
+                    (i) => DateTime.now().year - 1 + i,
+                  );
+                  return ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: years.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) {
+                      final y = years[i];
+                      final sel = y == _selectedYear;
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() => _selectedYear = y);
+                          _loadHolidays();
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: sel ? _primary : Colors.transparent,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: sel ? _primary : _border),
+                          ),
+                          child: Text(
+                            '$y',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: sel ? Colors.white : _textMid,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildBody() => Column(
-    children: [
-      _buildSummaryRow(),
-      _buildSearchBar(),
-      Expanded(
-        child: _filtered.isEmpty
-            ? _buildEmpty()
-            : RefreshIndicator(
-                onRefresh: _loadHolidays,
-                color: _primary,
-                child: ListView.builder(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                  itemCount: _filtered.length,
-                  itemBuilder: (_, i) => _HolidayCard(
-                    holiday: _filtered[i],
-                    fmt: _fmt,
-                    mon: _mon,
-                    dayName: _dayName,
-                    isPast: _isPast,
-                    isToday: _isToday,
-                    isSoon: _isSoon,
-                    typeColors: _typeColors,
-                    typeIcons: _typeIcons,
-                    canEdit: _canEdit,
-                    onEdit: () => _showAddEditDialog(holiday: _filtered[i]),
-                    onDelete: () => _confirmDelete(_filtered[i]),
+        ),
+        SliverToBoxAdapter(child: _buildSummaryRow()),
+        SliverToBoxAdapter(child: _buildSearchBar()),
+        _filtered.isEmpty
+            ? SliverFillRemaining(hasScrollBody: false, child: _buildEmpty())
+            : SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, i) => _HolidayCard(
+                      holiday: _filtered[i],
+                      fmt: _fmt,
+                      mon: _mon,
+                      dayName: _dayName,
+                      isPast: _isPast,
+                      isToday: _isToday,
+                      isSoon: _isSoon,
+                      typeColors: _typeColors,
+                      typeIcons: _typeIcons,
+                      canEdit: _canEdit,
+                      onEdit: () => _showAddEditDialog(holiday: _filtered[i]),
+                      onDelete: () => _confirmDelete(_filtered[i]),
+                    ),
+                    childCount: _filtered.length,
                   ),
                 ),
               ),
-      ),
-    ],
+      ],
+    ),
   );
-
   Widget _buildSummaryRow() {
     final byType = <String, int>{};
     for (final h in _holidays) {
       byType[h.holidayType] = (byType[h.holidayType] ?? 0) + 1;
     }
     return Container(
+      width: double.infinity,
       color: _card,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             _SummaryChip(
               '${_holidays.length} Total',
@@ -479,16 +503,16 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
               Icons.upcoming_rounded,
               _accent,
             ),
-            ..._types.map(
-              (t) => Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: _SummaryChip(
-                  '${byType[t] ?? 0} $t',
-                  _typeIcons[t]!,
-                  _typeColors[t]!,
+            for (final t in _types)
+              if ((byType[t] ?? 0) > 0)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: _SummaryChip(
+                    '${byType[t]} $t',
+                    _typeIcons[t]!,
+                    _typeColors[t]!,
+                  ),
                 ),
-              ),
-            ),
           ],
         ),
       ),
@@ -615,36 +639,84 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
+            width: 88,
+            height: 88,
             decoration: BoxDecoration(
               color: _primary.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.event_busy_rounded,
-              size: 36,
+              size: 40,
               color: _primary,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Text(
             _filterType == 'All' && _searchCtrl.text.isEmpty
                 ? 'No holidays for $_selectedYear'
                 : 'No results found',
             style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
               color: _textDark,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             _filterType == 'All' && _searchCtrl.text.isEmpty
-                ? 'Tap + to add holidays or use Bulk Import.'
+                ? 'Add holidays manually or import a full year at once.'
                 : 'Try a different search or filter.',
-            style: const TextStyle(fontSize: 13, color: _textMid),
+            style: const TextStyle(fontSize: 13, color: _textMid, height: 1.4),
             textAlign: TextAlign.center,
           ),
+          if (_canEdit && _filterType == 'All' && _searchCtrl.text.isEmpty) ...[
+            const SizedBox(height: 24),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _showExcelImportDialog,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _accent,
+                    side: BorderSide(color: _accent.withValues(alpha: 0.4)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  icon: const Icon(Icons.upload_file_rounded, size: 16),
+                  label: const Text(
+                    'Import Excel',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: () => _showAddEditDialog(),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text(
+                    'Add Holiday',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     ),
@@ -1205,25 +1277,6 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
     );
   }
 
-  Widget _tableHeader(String t) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-    child: Text(
-      t,
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-      style: const TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-        color: _textDark,
-      ),
-    ),
-  );
-
-  Widget _tableCell(String t) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-    child: Text(t, style: const TextStyle(fontSize: 10, color: _textMid)),
-  );
-
   void _downloadTemplate() async {
     try {
       const csv =
@@ -1242,24 +1295,6 @@ class _HolidayManagementScreenState extends State<HolidayManagementScreen> {
       ], subject: 'holiday_import_template.csv');
     } catch (e) {
       _snack('Could not download template: $e', isError: true);
-    }
-  }
-
-  Future<void> _saveAndShareFile(
-    List<int> bytes,
-    String name,
-    String mime,
-  ) async {
-    try {
-      // Share via share_plus or save to downloads
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/$name');
-      await file.writeAsBytes(bytes);
-      await Share.shareXFiles([
-        XFile(file.path, mimeType: mime),
-      ], subject: name);
-    } catch (e) {
-      _snack('Could not export template: $e', isError: true);
     }
   }
 

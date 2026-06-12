@@ -1012,6 +1012,7 @@ class _SignUpTabState extends State<_SignUpTab> {
   final _hrEsicCtrl = TextEditingController();
   final _hrYearsExpCtrl = TextEditingController();
   int? _selectedMode; // 1=Normal 2=GPS 3=GPS+Face 4=GPS+Face+Site
+  bool _enableSiteModule = false;
   int _profileSection = 0;
   bool _loading = false;
   String? _error;
@@ -1194,7 +1195,9 @@ class _SignUpTabState extends State<_SignUpTab> {
           'org_name': _orgNameCtrl.text.trim(),
           'admin_email': _adminEmailCtrl.text.trim(),
           'hr_email': _hrEmailCtrl.text.trim(),
+          'contact_number': _contactNumCtrl.text.trim(),
           'attendance_mode': _selectedMode,
+          'enable_site_module': _enableSiteModule,
         }),
       );
       final body = jsonDecode(res.body);
@@ -1315,6 +1318,7 @@ class _SignUpTabState extends State<_SignUpTab> {
           'company_address': _addressCtrl.text.trim(),
           'domain_name': _domainCtrl.text.trim(),
           'gst_number': _gstCtrl.text.trim(),
+          'enable_site_module': _enableSiteModule,
           'admin_login': {
             'username': _adminUsernameCtrl.text.trim(),
             'password': _adminPassCtrl.text,
@@ -1571,10 +1575,12 @@ class _SignUpTabState extends State<_SignUpTab> {
           _AttendanceModeSelector(
             selected: _selectedMode,
             hasError: _selectedMode == null && _error != null,
+            enableSite: _enableSiteModule,
             onChanged: (v) => setState(() {
               _selectedMode = v;
               _error = null;
             }),
+            onSiteChanged: (v) => setState(() => _enableSiteModule = v),
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -2720,12 +2726,16 @@ class _UpperCase extends TextInputFormatter {
 class _AttendanceModeSelector extends StatelessWidget {
   final int? selected;
   final bool hasError;
+  final bool enableSite;
   final ValueChanged<int> onChanged;
+  final ValueChanged<bool> onSiteChanged;
 
   const _AttendanceModeSelector({
     required this.selected,
     required this.hasError,
+    required this.enableSite,
     required this.onChanged,
+    required this.onSiteChanged,
   });
 
   static const _modes = [
@@ -2898,6 +2908,92 @@ class _AttendanceModeSelector extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+        // ── Site module toggle (hidden for mode 4 — already included) ──
+        if (selected != null && selected != 4) ...[
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () => onSiteChanged(!enableSite),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: enableSite
+                    ? const Color(0xFF0EA5E9).withOpacity(0.07)
+                    : const Color(0xFFF5F5FF),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: enableSite
+                      ? const Color(0xFF0EA5E9)
+                      : Colors.grey.shade200,
+                  width: enableSite ? 2 : 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0EA5E9).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.location_city_rounded,
+                      color: Color(0xFF0EA5E9),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Enable Site Management',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _textPrimary,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Add site/location management module for field teams.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: _textSecondary,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: enableSite
+                          ? const Color(0xFF0EA5E9)
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: enableSite
+                            ? const Color(0xFF0EA5E9)
+                            : Colors.grey.shade300,
+                        width: 2,
+                      ),
+                    ),
+                    child: enableSite
+                        ? const Icon(Icons.check, color: Colors.white, size: 12)
+                        : null,
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ],

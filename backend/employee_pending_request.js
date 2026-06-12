@@ -1,3 +1,4 @@
+// pending.js
 require("dotenv").config();
 
 const express = require("express");
@@ -126,13 +127,13 @@ router.post("/", requireAuth, async (req, res) => {
     );
     const [[designation]] = await conn.query(
       `SELECT dm.designation_id, dm.department_id, dm.designation_name,
-              dep.department_name
-         FROM designation_master dm
-         INNER JOIN department_master dep ON dep.department_id = dm.department_id
-           AND dep.tenant_id = dm.tenant_id
-        WHERE dm.designation_id = ? AND dm.tenant_id = ?
-          AND dm.status = 'Active' AND dm.is_deleted = 0
-        LIMIT 1`,
+                dep.department_name
+          FROM designation_master dm
+          INNER JOIN department_master dep ON dep.department_id = dm.department_id
+            AND dep.tenant_id = dm.tenant_id
+          WHERE dm.designation_id = ? AND dm.tenant_id = ?
+            AND dm.status = 'Active' AND dm.is_deleted = 0
+          LIMIT 1`,
       [designation_id, tenantId],
     );
     if (!designation) {
@@ -145,9 +146,9 @@ router.post("/", requireAuth, async (req, res) => {
     // ── Validate role ────────────────────────────────────────────────────────
     const [[role]] = await conn.query(
       `SELECT role_id FROM role_master
-        WHERE role_id = ? AND tenant_id = ?
-          AND status = 'Active' AND is_deleted = 0
-        LIMIT 1`,
+          WHERE role_id = ? AND tenant_id = ?
+            AND status = 'Active' AND is_deleted = 0
+          LIMIT 1`,
       [role_id, tenantId],
     );
     if (!role) {
@@ -166,40 +167,40 @@ router.post("/", requireAuth, async (req, res) => {
 
     const [result] = await conn.query(
       `INSERT INTO employee_pending_request (
-         tenant_id, emp_id,
-         request_type, admin_approve,
-         first_name, mid_name, last_name,
-         email_id, phone_number, date_of_birth, gender,
-         designation_id, role_id,
-         date_of_joining, date_of_relieving,
-         employment_type, work_type,
-         permanent_address, communication_address,
-         aadhar_number, pan_number, passport_number,
-         father_name,
-         emergency_contact_relation, emergency_contact,
-         pf_number, esic_number,
-         years_experience,
-         username, password,
-         edit_reason, reporting_to_employee_id,
-         status, created_at
-       ) VALUES (
-         ?, ?,
-         ?, 'PENDING',
-         ?, ?, ?,
-         ?, ?, ?, ?,
-         ?, ?,
-         ?, ?,
-         ?, ?,
-         ?, ?,
-         ?, ?, ?,
-         ?,
-         ?, ?,
-         ?, ?,
-         ?,
-         ?, ?,
-         ?, ?,
-         'Active', NOW()
-       )`,
+          tenant_id, emp_id,
+          request_type, admin_approve,
+          first_name, mid_name, last_name,
+          email_id, phone_number, date_of_birth, gender,
+          designation_id, role_id,
+          date_of_joining, date_of_relieving,
+          employment_type, work_type,
+          permanent_address, communication_address,
+          aadhar_number, pan_number, passport_number,
+          father_name,
+          emergency_contact_relation, emergency_contact,
+          pf_number, esic_number,
+          years_experience,
+          username, password,
+          edit_reason, reporting_to_employee_id,
+          status, created_at
+        ) VALUES (
+          ?, ?,
+          ?, 'PENDING',
+          ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?,
+          ?, ?,
+          ?, ?,
+          ?, ?,
+          ?, ?, ?,
+          ?,
+          ?, ?,
+          ?, ?,
+          ?,
+          ?, ?,
+          ?, ?,
+          'Active', NOW()
+        )`,
       [
         // 1-2
         tenantId,
@@ -267,12 +268,12 @@ router.post("/", requireAuth, async (req, res) => {
 
         await conn.query(
           `INSERT INTO education_pending_request (
-             request_id, tenant_id, emp_id,
-             education_level, stream, score,
-             year_of_passout,
-             university, college_name,
-             action_type, original_edu_id, is_changed
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              request_id, tenant_id, emp_id,
+              education_level, stream, score,
+              year_of_passout,
+              university, college_name,
+              action_type, original_edu_id, is_changed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             requestId,
             tenantId,
@@ -335,8 +336,8 @@ router.post(
     try {
       const [result] = await db.query(
         `UPDATE employee_pending_request
-          SET profile_photo = ?, profile_photo_mime = ?
-        WHERE request_id = ? AND tenant_id = ?`,
+            SET profile_photo = ?, profile_photo_mime = ?
+          WHERE request_id = ? AND tenant_id = ?`,
         [req.file.buffer, req.file.mimetype, id, tenantId],
       );
 
@@ -364,9 +365,9 @@ router.get("/:id/photo", requireAuth, async (req, res) => {
   try {
     const [[row]] = await db.query(
       `SELECT profile_photo, profile_photo_mime
-         FROM employee_pending_request
-        WHERE request_id = ? AND tenant_id = ?
-        LIMIT 1`,
+          FROM employee_pending_request
+          WHERE request_id = ? AND tenant_id = ?
+          LIMIT 1`,
       [id, tenantId],
     );
 
@@ -414,17 +415,17 @@ router.get("/", requireAuth, async (req, res) => {
 
     const [rows] = await db.query(
       `SELECT epr.*,
-          dm.designation_name,
-          dep.department_name,
-          r.role_name,
-          CONCAT(t.first_name, ' ', COALESCE(t.last_name, '')) AS reporting_to_name
-     FROM employee_pending_request epr
-     LEFT JOIN designation_master dm  ON dm.designation_id = epr.designation_id
-     LEFT JOIN department_master  dep ON dep.department_id = dm.department_id
-     LEFT JOIN role_master        r   ON r.role_id         = epr.role_id
-     LEFT JOIN employee_master    t   ON t.emp_id          = epr.reporting_to_employee_id
-    WHERE ${where}
-    ORDER BY epr.created_at DESC`,
+            dm.designation_name,
+            dep.department_name,
+            r.role_name,
+            CONCAT(t.first_name, ' ', COALESCE(t.last_name, '')) AS reporting_to_name
+      FROM employee_pending_request epr
+      LEFT JOIN designation_master dm  ON dm.designation_id = epr.designation_id
+      LEFT JOIN department_master  dep ON dep.department_id = dm.department_id
+      LEFT JOIN role_master        r   ON r.role_id         = epr.role_id
+      LEFT JOIN employee_master    t   ON t.emp_id          = epr.reporting_to_employee_id
+      WHERE ${where}
+      ORDER BY epr.created_at DESC`,
       params,
     );
     return res.json({ success: true, count: rows.length, data: rows });
@@ -445,6 +446,7 @@ router.get("/:id", requireAuth, async (req, res) => {
     const [[row]] = await db.query(
       `SELECT epr.*,
               dm.designation_name,
+              dep.department_id,
               dep.department_name,
               r.role_name,
               CONCAT(t.first_name, ' ', COALESCE(t.last_name, '')) AS reporting_to_name
@@ -475,6 +477,197 @@ router.get("/:id", requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, message: "Server error." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUT /api/pending-request/:id/resubmit
+// ─────────────────────────────────────────────────────────────────────────────
+router.put("/:id/resubmit", requireAuth, async (req, res) => {
+  const { tenantId } = req.user;
+  const { id } = req.params;
+
+  const {
+    first_name,
+    mid_name,
+    last_name,
+    email_id,
+    phone_number,
+    date_of_birth,
+    gender,
+    designation_id,
+    role_id,
+    date_of_joining,
+    date_of_relieving,
+    employment_type,
+    work_type,
+    permanent_address,
+    communication_address,
+    aadhar_number,
+    pan_number,
+    passport_number,
+    father_name,
+    emergency_contact_relation,
+    emergency_contact,
+    pf_number,
+    esic_number,
+    years_experience,
+    username,
+    status,
+    resubmit_reason,
+    education,
+    tl_id,
+  } = req.body;
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Verify the request belongs to this tenant and is REJECTED
+    const [[existing]] = await conn.query(
+      `SELECT request_id, request_type FROM employee_pending_request
+       WHERE request_id = ? AND tenant_id = ? AND admin_approve = 'REJECTED'
+       LIMIT 1`,
+      [id, tenantId],
+    );
+    if (!existing) {
+      await conn.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Request not found or not in REJECTED state.",
+      });
+    }
+
+    // Validate designation
+    const [[designation]] = await conn.query(
+      `SELECT designation_id FROM designation_master
+       WHERE designation_id = ? AND tenant_id = ? AND status = 'Active' AND is_deleted = 0
+       LIMIT 1`,
+      [designation_id, tenantId],
+    );
+    if (!designation) {
+      await conn.rollback();
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid designation." });
+    }
+
+    // Validate role
+    const [[role]] = await conn.query(
+      `SELECT role_id FROM role_master
+       WHERE role_id = ? AND tenant_id = ? AND status = 'Active' AND is_deleted = 0
+       LIMIT 1`,
+      [role_id, tenantId],
+    );
+    if (!role) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, message: "Invalid role." });
+    }
+
+    await conn.query(
+      `UPDATE employee_pending_request SET
+        admin_approve = 'PENDING',
+        first_name = ?, mid_name = ?, last_name = ?,
+        email_id = ?, phone_number = ?, date_of_birth = ?, gender = ?,
+        designation_id = ?, role_id = ?,
+        date_of_joining = ?, date_of_relieving = ?,
+        employment_type = ?, work_type = ?,
+        permanent_address = ?, communication_address = ?,
+        aadhar_number = ?, pan_number = ?, passport_number = ?,
+        father_name = ?,
+        emergency_contact_relation = ?, emergency_contact = ?,
+        pf_number = ?, esic_number = ?,
+        years_experience = ?,
+        username = COALESCE(?, username),
+        status = COALESCE(?, status),
+        edit_reason = ?,
+        reporting_to_employee_id = ?,
+        reject_reason = NULL,
+        updated_at = NOW()
+      WHERE request_id = ? AND tenant_id = ?`,
+      [
+        nullIfEmpty(first_name),
+        nullIfEmpty(mid_name),
+        nullIfEmpty(last_name),
+        nullIfEmpty(email_id),
+        nullIfEmpty(phone_number),
+        nullIfEmpty(date_of_birth),
+        nullIfEmpty(gender),
+        nullIfEmpty(designation_id),
+        nullIfEmpty(role_id),
+        nullIfEmpty(date_of_joining),
+        nullIfEmpty(date_of_relieving),
+        nullIfEmpty(employment_type),
+        nullIfEmpty(work_type),
+        nullIfEmpty(permanent_address),
+        nullIfEmpty(communication_address),
+        nullIfEmpty(aadhar_number),
+        nullIfEmpty(pan_number),
+        nullIfEmpty(passport_number),
+        nullIfEmpty(father_name),
+        nullIfEmpty(emergency_contact_relation),
+        nullIfEmpty(emergency_contact),
+        nullIfEmpty(pf_number),
+        nullIfEmpty(esic_number),
+        years_experience !== undefined ? parseInt(years_experience, 10) : null,
+        nullIfEmpty(username),
+        nullIfEmpty(status),
+        nullIfEmpty(resubmit_reason),
+        nullIfEmpty(tl_id),
+        id,
+        tenantId,
+      ],
+    );
+
+    // Replace education rows
+    if (Array.isArray(education) && education.length > 0) {
+      await conn.query(
+        `DELETE FROM education_pending_request WHERE request_id = ?`,
+        [id],
+      );
+      for (const edu of education) {
+        const isChanged =
+          edu.is_changed !== undefined ? Number(edu.is_changed) : 1;
+        const actionType =
+          edu.action_type ||
+          (existing.request_type === "UPDATE" ? "UPDATE" : "ADD");
+        const originalEduId = edu.original_edu_id || edu.edu_id || null;
+
+        await conn.query(
+          `INSERT INTO education_pending_request (
+            request_id, tenant_id, emp_id,
+            education_level, stream, score, year_of_passout,
+            university, college_name,
+            action_type, original_edu_id, is_changed
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            tenantId,
+            nullIfEmpty(req.body.emp_id),
+            nullIfEmpty(edu.education_level),
+            nullIfEmpty(edu.stream),
+            nullIfEmpty(edu.score),
+            nullIfEmpty(edu.year_of_passout),
+            nullIfEmpty(edu.university),
+            nullIfEmpty(edu.college_name),
+            actionType,
+            originalEduId,
+            isChanged,
+          ],
+        );
+      }
+    }
+
+    await conn.commit();
+    return res
+      .status(200)
+      .json({ success: true, message: "Request resubmitted." });
+  } catch (err) {
+    await conn.rollback();
+    console.error("[PUT /pending-request/:id/resubmit]", err);
+    return res.status(500).json({ success: false, message: "Server error." });
+  } finally {
+    conn.release();
   }
 });
 

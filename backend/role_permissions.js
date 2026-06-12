@@ -15,8 +15,7 @@ const ALL_MODULES = [
   { key: "emp_attendance_face", label: "Face Attendance" },
   { key: "emp_site_attendance_face", label: "Site Entry Face Attendance" },
   { key: "emp_leave", label: "My Leave" },
-  { key: "emp_profile", label: "My Profile" },
-  { key: "emp_site", label: "Site / Assignments" },
+  { key: "emp_profile", label: "My Profile" }, 
   { key: "comp_off", label: "Comp-Off" },
 
   // ── Admin/HR-facing ──────────────────────────────────────────────
@@ -34,8 +33,7 @@ const ALL_MODULES = [
   { key: "report", label: "Reports" },
   { key: "policy_management", label: "Policy Management" },
   { key: "leave_management", label: "Leave Management" },
-  { key: "site_management", label: "Site Management" },
-  { key: "payroll", label: "Payroll" },
+  { key: "site_management", label: "Site Management" }, 
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

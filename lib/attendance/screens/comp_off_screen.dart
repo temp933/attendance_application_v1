@@ -62,10 +62,23 @@ class _CompOffScreenState extends State<CompOffScreen>
   // ─────────────────────────────────────────────────────────────────────────
   // Build
   // ─────────────────────────────────────────────────────────────────────────
-  @override
+ @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
+      appBar: AppBar(
+        backgroundColor: Color(0xFF1A56DB),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          'Comp-Off',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,11 +190,11 @@ class _CompOffScreenState extends State<CompOffScreen>
       indicator: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         gradient: const LinearGradient(
-          colors: [Color(0xFF3949AB), Color(0xFF5C6BC0)],
+          colors: [Color(0xFF1A56DB), Color(0xFF1A56DB)],
         ),
       ),
       labelColor: Colors.white,
-      unselectedLabelColor: Colors.grey.shade500,
+      unselectedLabelColor: const Color.fromARGB(255, 0, 0, 0),
       labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
       unselectedLabelStyle: const TextStyle(
         fontSize: 12,
