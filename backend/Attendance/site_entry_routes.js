@@ -196,6 +196,50 @@ async function getPolicy(tenantId) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Hierarchy helpers
+// ─────────────────────────────────────────────────────────────────────────────
+async function getSubtreeIds(tenantId, rootEmpId) {
+  const [rows] = await db.query(
+    `WITH RECURSIVE hierarchy AS (
+       SELECT emp_id
+       FROM employee_master
+       WHERE emp_id = ? AND tenant_id = ?
+       UNION ALL
+       SELECT e.emp_id
+       FROM employee_master e
+       INNER JOIN hierarchy h ON e.reporting_to_employee_id = h.emp_id
+       WHERE e.tenant_id = ?
+     )
+     SELECT emp_id FROM hierarchy`,
+    [rootEmpId, tenantId, tenantId],
+  );
+  return rows.map((r) => r.emp_id);
+}
+
+async function getCallerScopedIds(req) {
+  const tenantId = req.user.tenantId;
+  const roleName = (req.user?.role_name || "").toLowerCase().trim();
+  const isFullAccess = ["admin", "app_admin", "org_admin"].includes(roleName);
+
+  if (isFullAccess) return { tenantId, scopedIds: null };
+
+  const loginId = req.user?.login_id ?? req.user?.loginId;
+  if (!loginId) return { tenantId, scopedIds: [] };
+
+  const [[lm]] = await db.query(
+    "SELECT emp_id FROM login_master WHERE login_id = ? LIMIT 1",
+    [loginId],
+  );
+  const callerEmpId = lm?.emp_id;
+  if (!callerEmpId) return { tenantId, scopedIds: [] };
+
+  const subtree = await getSubtreeIds(tenantId, callerEmpId);
+  const scopedIds = subtree; // includes caller's own data + their reporting subtree
+
+  return { tenantId, scopedIds };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/site-entry/nearby-sites
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/nearby-sites", requireAuth, async (req, res) => {
@@ -583,8 +627,6 @@ router.post("/checkout", requireAuth, async (req, res) => {
       );
     }
 
-  
-
     res.json({
       success: true,
       message: "Checked out successfully.",
@@ -882,7 +924,7 @@ router.get("/history", requireAuth, async (req, res) => {
 // GET /api/site-entry/admin/all
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/admin/all", requireAuth, requireAdmin, async (req, res) => {
-  const { tenantId } = req.user;
+  const { tenantId, scopedIds } = await getCallerScopedIds(req);
   try {
     const date = req.query.date || todayDate();
     const siteId = req.query.site_id || "";
@@ -897,6 +939,23 @@ router.get("/admin/all", requireAuth, requireAdmin, async (req, res) => {
       "ea.work_date       = ?",
     ];
     const params = [tenantId, date];
+
+    if (scopedIds !== null) {
+      if (scopedIds.length === 0) {
+        return res.json({
+          success: true,
+          records: [],
+          stats: {
+            present_today: 0,
+            late_today: 0,
+            active_now: 0,
+            total_sessions: 0,
+          },
+        });
+      }
+      wheres.push(`ea.employee_id IN (${scopedIds.map(() => "?").join(",")})`);
+      params.push(...scopedIds);
+    }
 
     if (siteId) {
       wheres.push("ea.site_id = ?");
@@ -945,6 +1004,20 @@ router.get("/admin/all", requireAuth, requireAdmin, async (req, res) => {
       [...params, limit, offset],
     );
 
+    const statsWheres = [
+      "ea.tenant_id       = ?",
+      "ea.attendance_mode = 'site_entry'",
+      "ea.work_date       = ?",
+    ];
+    const statsParams = [tenantId, date];
+
+    if (scopedIds !== null && scopedIds.length > 0) {
+      statsWheres.push(
+        `ea.employee_id IN (${scopedIds.map(() => "?").join(",")})`,
+      );
+      statsParams.push(...scopedIds);
+    }
+
     const [[stats]] = await db.query(
       `SELECT
           COUNT(DISTINCT ea.employee_id)                                             AS present_today,
@@ -952,10 +1025,8 @@ router.get("/admin/all", requireAuth, requireAdmin, async (req, res) => {
           COUNT(DISTINCT CASE WHEN ea.status  = 'active' THEN ea.employee_id END)   AS active_now,
           COUNT(*)                                                                   AS total_sessions
        FROM employee_attendance ea
-       WHERE ea.tenant_id       = ?
-         AND ea.attendance_mode = 'site_entry'
-         AND ea.work_date       = ?`,
-      [tenantId, date],
+       WHERE ${statsWheres.join(" AND ")}`,
+      statsParams,
     );
 
     res.json({

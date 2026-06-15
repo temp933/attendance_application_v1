@@ -15,6 +15,8 @@ import '../services/app_admin_provider.dart';
 import 'app_admin_org_screen.dart';
 import '../providers/api_config.dart';
 import 'global_notify.dart';
+import 'app_admin_maintenance_screen.dart';
+
 const String baseUrl = ApiConfig.baseUrl;
 
 class AppAdminDashboardScreen extends StatefulWidget {
@@ -78,7 +80,8 @@ class _AppAdminDashboardScreenState extends State<AppAdminDashboardScreen>
       AppAdminCreateCompanyScreen(), // 1
       AppAdminPlanManagementScreen(), // 2
       AppAdminOrgScreen(), // 3
-      GlobalNotifyConsole(), // 4  
+      GlobalNotifyConsole(), // 4
+      AppAdminMaintenanceScreen(), //5
     ]);
   }
 
@@ -89,6 +92,7 @@ class _AppAdminDashboardScreenState extends State<AppAdminDashboardScreen>
     'Plan Management', // 2
     'Organization Management', // 3
     'Global Notifications', // 4
+    'Maintenance Dashboard',
   ];
 
   // ── Rail items ─────────────────────────────────────────────────────────────
@@ -117,6 +121,11 @@ class _AppAdminDashboardScreenState extends State<AppAdminDashboardScreen>
       icon: Icon(Icons.notifications_outlined),
       selectedIcon: Icon(Icons.notifications),
       label: Text('Global Notifications'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.notifications_outlined),
+      selectedIcon: Icon(Icons.notifications),
+      label: Text('Maintenance Dashboard'),
     ),
   ];
   // ── Build ──────────────────────────────────────────────────────────────────

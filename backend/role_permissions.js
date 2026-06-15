@@ -14,9 +14,7 @@ const ALL_MODULES = [
   { key: "emp_attendance_gps", label: "GPS Attendance" },
   { key: "emp_attendance_face", label: "Face Attendance" },
   { key: "emp_site_attendance_face", label: "Site Entry Face Attendance" },
-  { key: "emp_leave", label: "My Leave" },
-  { key: "emp_profile", label: "My Profile" }, 
-  { key: "comp_off", label: "Comp-Off" },
+  { key: "emp_leave", label: "My Leave" }, 
 
   // ── Admin/HR-facing ──────────────────────────────────────────────
   { key: "admin_attendance_normal", label: "Attendance Mgmt (Normal)" },
@@ -30,10 +28,9 @@ const ALL_MODULES = [
   { key: "approval", label: "Approvals" },
   { key: "face_approval", label: "Face Approval" },
   { key: "session_management", label: "Session Management" },
-  { key: "report", label: "Reports" },
   { key: "policy_management", label: "Policy Management" },
-  { key: "leave_management", label: "Leave Management" },
-  { key: "site_management", label: "Site Management" }, 
+  { key: "site_management", label: "Site Management" },
+  { key: "emp_profile", label: "My Profile" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,7 +88,7 @@ router.get("/roles", requireAuth, requireRole("admin"), async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/role-permissions?role_id=X
 // Returns permissions for a specific role, merged with ALL_MODULES
-// (modules not yet saved default to can_view=0, can_edit=0)
+// (modules not yet role_permissions default to can_view=0, can_edit=0)
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   const { tenantId } = req.user;

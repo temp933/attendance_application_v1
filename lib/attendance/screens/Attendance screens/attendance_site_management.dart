@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import '../../providers/api_config.dart';
-import 'attendance_policy_screen.dart';
 import 'admin_force_close_screen.dart';
 import '../admin_attendance_report.dart';
 
@@ -195,10 +194,12 @@ class SiteAttendanceManagementService {
 class SiteAttendanceManagementScreen extends StatefulWidget {
   final String authToken;
   final String tenantId;
+  final bool canEdit;
   const SiteAttendanceManagementScreen({
     super.key,
     required this.authToken,
     required this.tenantId,
+    this.canEdit = false,
   });
 
   @override
@@ -476,7 +477,7 @@ class _SiteAttendanceManagementScreenState
                 icon: const Icon(Icons.edit_calendar_rounded, color: _primary),
                 onPressed: _pickDate,
               ),
-              Stack(
+              if (widget.canEdit) Stack(
                 clipBehavior: Clip.none,
                 children: [
                   IconButton(
@@ -505,11 +506,12 @@ class _SiteAttendanceManagementScreenState
                     ),
                 ],
               ),
-              Stack(
+              if (widget.canEdit) Stack(
                 clipBehavior: Clip.none,
                 children: [
                   IconButton(
                     tooltip: 'Force close open sessions',
+
                     icon: const Icon(Icons.lock_open_rounded, color: _red),
                     onPressed: () => Navigator.push(
                       context,
@@ -535,19 +537,6 @@ class _SiteAttendanceManagementScreenState
                       ),
                     ),
                 ],
-              ),
-              IconButton(
-                tooltip: 'Policy settings',
-                icon: const Icon(Icons.tune_rounded, color: _primary),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AttendancePolicyScreen(
-                      authToken: widget.authToken,
-                      tenantId: widget.tenantId,
-                    ),
-                  ),
-                ),
               ),
             ],
           ),

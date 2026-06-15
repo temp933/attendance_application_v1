@@ -445,16 +445,18 @@ router.post("/logout", async (req, res) => {
       // ── Auto-close any open GPS/GPS_FACE attendance on logout ─────────────
       await db.query(
         `UPDATE employee_attendance
-         SET
-           checkout_time      = NOW(),
-           status             = 'completed',
-           force_closed       = 1,
-           force_close_reason = 'Auto-closed on logout',
-           force_closed_by    = ?
-         WHERE
-           employee_id        = ?
-           AND status         = 'active'
-           AND attendance_mode IN ('gps', 'gps_face')`,
+   SET
+     checkout_time      = NOW(),
+     checkout_latitude  = COALESCE(last_known_latitude, checkin_latitude),
+     checkout_longitude = COALESCE(last_known_longitude, checkin_longitude),
+     status             = 'completed',
+     force_closed       = 1,
+     force_close_reason = 'Auto-closed on logout',
+     force_closed_by    = ?
+   WHERE
+     employee_id        = ?
+     AND status         = 'active'
+     AND attendance_mode IN ('gps', 'gps_face', 'site_entry')`,
         [loginRow.emp_id, loginRow.emp_id],
       );
     }

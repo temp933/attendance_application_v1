@@ -22,7 +22,8 @@ const _warningLight = Color(0xFFFEF3C7);
 // ROOT SCREEN — TabBar wrapper
 // ═══════════════════════════════════════════════════════════════════════════════
 class DeptRoleDesgScreen extends StatefulWidget {
-  const DeptRoleDesgScreen({super.key});
+  final bool canEdit;
+  const DeptRoleDesgScreen({super.key, this.canEdit = true});
 
   @override
   State<DeptRoleDesgScreen> createState() => _DeptRoleDesgScreenState();
@@ -36,7 +37,7 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 4, vsync: this);
+    _tab = TabController(length: widget.canEdit ? 4 : 3, vsync: this);
   }
 
   @override
@@ -72,7 +73,6 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
                     labelColor: _primary,
                     unselectedLabelColor: _textMid,
                     labelStyle: const TextStyle(
-                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                     unselectedLabelStyle: const TextStyle(
@@ -82,11 +82,11 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
                     indicatorColor: _primary,
                     indicatorWeight: 2.5,
                     indicatorSize: TabBarIndicatorSize.tab,
-                    tabs: const [
-                      Tab(text: 'Departments'),
-                      Tab(text: 'Designations'),
-                      Tab(text: 'Roles'),
-                      Tab(text: 'Permissions'),
+                    tabs: [
+                      const Tab(text: 'Departments'),
+                      const Tab(text: 'Designations'),
+                      const Tab(text: 'Roles'),
+                      if (widget.canEdit) const Tab(text: 'Permissions'),
                     ],
                   ),
                 ),
@@ -101,10 +101,23 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
       body: TabBarView(
         controller: _tab,
         children: [
-          _DepartmentsTab(key: ValueKey('dept_$_refreshKey')),
-          _DesignationsTab(key: ValueKey('desg_$_refreshKey')),
-          _RolesTab(key: ValueKey('role_$_refreshKey')),
-          _PermissionsTab(key: ValueKey('perm_$_refreshKey')),
+          _DepartmentsTab(
+            key: ValueKey('dept_$_refreshKey'),
+            canEdit: widget.canEdit,
+          ),
+          _DesignationsTab(
+            key: ValueKey('desg_$_refreshKey'),
+            canEdit: widget.canEdit,
+          ),
+          _RolesTab(
+            key: ValueKey('role_$_refreshKey'),
+            canEdit: widget.canEdit,
+          ),
+          if (widget.canEdit)
+            _PermissionsTab(
+              key: ValueKey('perm_$_refreshKey'),
+              canEdit: widget.canEdit,
+            ),
         ],
       ),
     );
@@ -115,7 +128,8 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
 // TAB 1 — DEPARTMENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 class _DepartmentsTab extends StatefulWidget {
-  const _DepartmentsTab({super.key});
+  final bool canEdit;
+  const _DepartmentsTab({super.key, this.canEdit = true});
 
   @override
   State<_DepartmentsTab> createState() => _DepartmentsTabState();
@@ -153,7 +167,7 @@ class _DepartmentsTabState extends State<_DepartmentsTab>
         _SearchAddBar(
           hint: 'Search departments...',
           onSearch: (v) => setState(() => _search = v),
-          onAdd: _showFormDialog,
+          onAdd: widget.canEdit ? _showFormDialog : null,
         ),
         Expanded(
           child: FutureBuilder<List<DepartmentModel>>(
@@ -189,6 +203,7 @@ class _DepartmentsTabState extends State<_DepartmentsTab>
                 itemCount: list.length,
                 itemBuilder: (_, i) => _DeptCard(
                   item: list[i],
+                  canEdit: widget.canEdit,
                   onEdit: () => _showFormDialog(existing: list[i]),
                   onDelete: () => _confirmDelete(list[i]),
                 ),
@@ -268,11 +283,13 @@ class _DepartmentsTabState extends State<_DepartmentsTab>
 // ── Department Card ────────────────────────────────────────────────────────────
 class _DeptCard extends StatelessWidget {
   final DepartmentModel item;
+  final bool canEdit;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _DeptCard({
     required this.item,
+    this.canEdit = true,
     required this.onEdit,
     required this.onDelete,
   });
@@ -284,6 +301,7 @@ class _DeptCard extends StatelessWidget {
       code: '',
       name: item.departmentName,
       status: item.status,
+      canEdit: canEdit,
       onEdit: onEdit,
       onDelete: onDelete,
     );
@@ -294,8 +312,8 @@ class _DeptCard extends StatelessWidget {
 // TAB 2 — DESIGNATIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 class _DesignationsTab extends StatefulWidget {
-  const _DesignationsTab({super.key});
-
+  final bool canEdit;
+  const _DesignationsTab({super.key, this.canEdit = true});
   @override
   State<_DesignationsTab> createState() => _DesignationsTabState();
 }
@@ -341,7 +359,7 @@ class _DesignationsTabState extends State<_DesignationsTab>
         _SearchAddBar(
           hint: 'Search designations...',
           onSearch: (v) => setState(() => _search = v),
-          onAdd: _showFormDialog,
+          onAdd: widget.canEdit ? _showFormDialog : null,
         ),
         Expanded(
           child: FutureBuilder<List<DesignationModel>>(
@@ -381,6 +399,7 @@ class _DesignationsTabState extends State<_DesignationsTab>
                 itemCount: list.length,
                 itemBuilder: (_, i) => _DesgCard(
                   item: list[i],
+                  canEdit: widget.canEdit,
                   onEdit: () => _showFormDialog(existing: list[i]),
                   onDelete: () => _confirmDelete(list[i]),
                 ),
@@ -525,11 +544,13 @@ class _DesignationsTabState extends State<_DesignationsTab>
 // ── Designation Card ───────────────────────────────────────────────────────────
 class _DesgCard extends StatelessWidget {
   final DesignationModel item;
+  final bool canEdit;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _DesgCard({
     required this.item,
+    this.canEdit = true,
     required this.onEdit,
     required this.onDelete,
   });
@@ -543,6 +564,7 @@ class _DesgCard extends StatelessWidget {
       status: item.status,
       subtitle: item.departmentName,
       subtitleIcon: Icons.apartment_rounded,
+      canEdit: canEdit,
       onEdit: onEdit,
       onDelete: onDelete,
     );
@@ -553,7 +575,8 @@ class _DesgCard extends StatelessWidget {
 // TAB 3 — ROLES
 // ═══════════════════════════════════════════════════════════════════════════════
 class _RolesTab extends StatefulWidget {
-  const _RolesTab({super.key});
+  final bool canEdit;
+  const _RolesTab({super.key, this.canEdit = true});
 
   @override
   State<_RolesTab> createState() => _RolesTabState();
@@ -590,7 +613,7 @@ class _RolesTabState extends State<_RolesTab>
         _SearchAddBar(
           hint: 'Search roles...',
           onSearch: (v) => setState(() => _search = v),
-          onAdd: _showFormDialog,
+          onAdd: widget.canEdit ? _showFormDialog : null,
         ),
         Expanded(
           child: FutureBuilder<List<RoleModel>>(
@@ -626,6 +649,7 @@ class _RolesTabState extends State<_RolesTab>
                 itemCount: list.length,
                 itemBuilder: (_, i) => _RoleCard(
                   item: list[i],
+                  canEdit: widget.canEdit,
                   onEdit: () => _showFormDialog(existing: list[i]),
                   onDelete: () => _confirmDelete(list[i]),
                 ),
@@ -706,11 +730,13 @@ class _RolesTabState extends State<_RolesTab>
 // ── Role Card ──────────────────────────────────────────────────────────────────
 class _RoleCard extends StatelessWidget {
   final RoleModel item;
+  final bool canEdit;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _RoleCard({
     required this.item,
+    this.canEdit = true,
     required this.onEdit,
     required this.onDelete,
   });
@@ -722,6 +748,7 @@ class _RoleCard extends StatelessWidget {
       code: '',
       name: item.roleName,
       status: item.status,
+      canEdit: canEdit,
       onEdit: onEdit,
       onDelete: onDelete,
     );
@@ -740,6 +767,7 @@ class _MasterCard extends StatelessWidget {
   final String status;
   final String? subtitle;
   final IconData? subtitleIcon;
+  final bool canEdit;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -750,10 +778,10 @@ class _MasterCard extends StatelessWidget {
     required this.status,
     this.subtitle,
     this.subtitleIcon,
+    this.canEdit = true,
     required this.onEdit,
     required this.onDelete,
   });
-
   @override
   Widget build(BuildContext context) {
     final isActive = status == 'Active';
@@ -865,19 +893,21 @@ class _MasterCard extends StatelessWidget {
             ),
 
             // ── Actions ─────────────────────────────────────────────────────
-            _ActionButton(
-              icon: Icons.edit_outlined,
-              color: _textMid,
-              tooltip: 'Edit',
-              onTap: onEdit,
-            ),
-            const SizedBox(width: 2),
-            _ActionButton(
-              icon: Icons.delete_outline_rounded,
-              color: _danger,
-              tooltip: 'Delete',
-              onTap: onDelete,
-            ),
+            if (canEdit) ...[
+              _ActionButton(
+                icon: Icons.edit_outlined,
+                color: _textMid,
+                tooltip: 'Edit',
+                onTap: onEdit,
+              ),
+              const SizedBox(width: 2),
+              _ActionButton(
+                icon: Icons.delete_outline_rounded,
+                color: _danger,
+                tooltip: 'Delete',
+                onTap: onDelete,
+              ),
+            ],
           ],
         ),
       ),
@@ -889,13 +919,9 @@ class _MasterCard extends StatelessWidget {
 class _SearchAddBar extends StatelessWidget {
   final String hint;
   final ValueChanged<String> onSearch;
-  final VoidCallback onAdd;
+  final VoidCallback? onAdd;
 
-  const _SearchAddBar({
-    required this.hint,
-    required this.onSearch,
-    required this.onAdd,
-  });
+  const _SearchAddBar({required this.hint, required this.onSearch, this.onAdd});
 
   @override
   Widget build(BuildContext context) {
@@ -932,23 +958,27 @@ class _SearchAddBar extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           // Add button
-          ElevatedButton.icon(
-            onPressed: onAdd,
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text(
-              'Add',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _primary,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+          if (onAdd != null)
+            ElevatedButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text(
+                'Add',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 11,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -1583,7 +1613,8 @@ class _ErrorView extends StatelessWidget {
 }
 
 class _PermissionsTab extends StatefulWidget {
-  const _PermissionsTab({super.key});
+  final bool canEdit;
+  const _PermissionsTab({super.key, this.canEdit = true});
 
   @override
   State<_PermissionsTab> createState() => _PermissionsTabState();
@@ -1931,8 +1962,9 @@ class _PermissionsTabState extends State<_PermissionsTab>
                                 const SizedBox(width: 4),
                                 Switch(
                                   value: m.canEdit,
-                                  onChanged: (v) =>
-                                      setState(() => m.canEdit = v),
+                                  onChanged: widget.canEdit
+                                      ? (v) => setState(() => m.canEdit = v)
+                                      : null,
                                   activeColor: _success,
                                   materialTapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
@@ -1947,10 +1979,12 @@ class _PermissionsTabState extends State<_PermissionsTab>
                               const SizedBox(width: 4),
                               Switch(
                                 value: m.canView,
-                                onChanged: (v) => setState(() {
-                                  m.canView = v;
-                                  if (!v) m.canEdit = false;
-                                }),
+                                onChanged: widget.canEdit
+                                    ? (v) => setState(() {
+                                        m.canView = v;
+                                        if (!v) m.canEdit = false;
+                                      })
+                                    : null,
                                 activeColor: _primary,
                                 materialTapTargetSize:
                                     MaterialTapTargetSize.shrinkWrap,
@@ -1965,7 +1999,7 @@ class _PermissionsTabState extends State<_PermissionsTab>
         ),
 
         // ── Save Button ────────────────────────────────────────────────────
-        if (_selectedRole != null && !_modulesLoading)
+        if (widget.canEdit && _selectedRole != null && !_modulesLoading)
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             decoration: BoxDecoration(

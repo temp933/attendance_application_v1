@@ -168,10 +168,12 @@ class FaceGpsAttendanceManagementService {
 class FaceGpsAttendanceManagementScreen extends StatefulWidget {
   final String authToken;
   final String tenantId;
+  final bool canEdit;
   const FaceGpsAttendanceManagementScreen({
     super.key,
     required this.authToken,
     required this.tenantId,
+    this.canEdit = false,
   });
 
   @override
@@ -456,70 +458,72 @@ class _FaceGpsAttendanceManagementScreenState
                 icon: const Icon(Icons.edit_calendar_rounded, color: _primary),
                 onPressed: _pickDate,
               ),
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  IconButton(
-                    tooltip: 'Report',
-                    icon: const Icon(Icons.report, color: _red),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => AdminAttendanceReportScreen(
-                          mode:
-                              'gps_face', // pass 'gps' or 'gps_face' as needed
+              if (widget.canEdit)
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      tooltip: 'Report',
+                      icon: const Icon(Icons.report, color: _red),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AdminAttendanceReportScreen(
+                            mode:
+                                'gps_face', // pass 'gps' or 'gps_face' as needed
+                          ),
                         ),
-                      ),
-                    ).then((_) => _loadData()),
-                  ),
-                  // Badge — only show when there are active sessions
-                  if ((_stats?.activeNow ?? 0) > 0)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: _red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
+                      ).then((_) => _loadData()),
                     ),
-                ],
-              ),
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  IconButton(
-                    tooltip: 'Force close open sessions',
-                    icon: const Icon(Icons.lock_open_rounded, color: _red),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => AdminForceCloseScreen(
-                          loginId: 57,
-                          mode: 'gps_face',
+                    // Badge — only show when there are active sessions
+                    if ((_stats?.activeNow ?? 0) > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: _red,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                       ),
-                    ).then((_) => _loadData()),
-                  ),
-                  // Badge — only show when there are active sessions
-                  if ((_stats?.activeNow ?? 0) > 0)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: _red,
-                          shape: BoxShape.circle,
+                  ],
+                ),
+              if (widget.canEdit)
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      tooltip: 'Force close open sessions',
+                      icon: const Icon(Icons.lock_open_rounded, color: _red),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AdminForceCloseScreen(
+                            loginId: 57,
+                            mode: 'gps_face',
+                          ),
                         ),
-                      ),
+                      ).then((_) => _loadData()),
                     ),
-                ],
-              ),
+                    // Badge — only show when there are active sessions
+                    if ((_stats?.activeNow ?? 0) > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: _red,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               IconButton(
                 tooltip: 'Policy settings',
                 icon: const Icon(Icons.tune_rounded, color: _primary),

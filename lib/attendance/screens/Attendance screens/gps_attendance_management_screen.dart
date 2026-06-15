@@ -171,10 +171,12 @@ class GpsAttendanceManagementService {
 class GpsAttendanceManagementScreen extends StatefulWidget {
   final String authToken;
   final String tenantId;
+  final bool canEdit;
   const GpsAttendanceManagementScreen({
     super.key,
     required this.authToken,
     required this.tenantId,
+    this.canEdit = false, 
   });
 
   @override
@@ -457,7 +459,7 @@ class _GpsAttendanceManagementScreenState
                 icon: const Icon(Icons.edit_calendar_rounded, color: _primary),
                 onPressed: _pickDate,
               ),
-              Stack(
+             if (widget.canEdit) Stack(
                 clipBehavior: Clip.none,
                 children: [
                   IconButton(
@@ -467,7 +469,7 @@ class _GpsAttendanceManagementScreenState
                       context,
                       MaterialPageRoute(
                         builder: (_) => AdminAttendanceReportScreen(
-                          mode: 'gps', // pass 'gps' or 'gps_face' as needed
+                          mode: 'gps',  // pass 'gps' or 'gps_face' as needed
                         ),
                       ),
                     ).then((_) => _loadData()),
@@ -488,7 +490,7 @@ class _GpsAttendanceManagementScreenState
                     ),
                 ],
               ),
-              Stack(
+             if (widget.canEdit) Stack(
                 clipBehavior: Clip.none,
                 children: [
                   IconButton(

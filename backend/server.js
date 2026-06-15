@@ -72,12 +72,12 @@ async function sendOtpEmail(to, otp, orgName) {
     to,
     subject: `Your OTP for ${orgName} Registration`,
     html: `
-        <div style="font-family:sans-serif;padding:20px;">
-          <h2>Your OTP</h2>
-          <h1>${otp}</h1>
-          <p>This OTP expires in 10 minutes.</p>
-        </div>
-      `,
+          <div style="font-family:sans-serif;padding:20px;">
+            <h2>Your OTP</h2>
+            <h1>${otp}</h1>
+            <p>This OTP expires in 10 minutes.</p>
+          </div>
+        `,
   });
 }
 
@@ -134,8 +134,8 @@ app.post("/api/auth/send-otp", otpLimiter, async (req, res) => {
     const contact_number = req.body.contact_number?.trim();
     const [existingRows] = await db.query(
       `SELECT tenant_id FROM tenants
-       WHERE admin_email IN (?, ?) OR hr_email IN (?, ?) OR contact_number = ?
-       LIMIT 1`,
+        WHERE admin_email IN (?, ?) OR hr_email IN (?, ?) OR contact_number = ?
+        LIMIT 1`,
       [admin_email, hr_email, admin_email, hr_email, contact_number],
     );
 
@@ -288,8 +288,8 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
   // ── Re-check duplicate org (email/contact) before completing ─────────────
   const [dupCheck] = await db.query(
     `SELECT tenant_id FROM tenants
-     WHERE admin_email = ? OR hr_email = ? OR contact_number = ?
-     LIMIT 1`,
+      WHERE admin_email = ? OR hr_email = ? OR contact_number = ?
+      LIMIT 1`,
     [normalizedAdminEmail, normalizedHrEmail, contact_number],
   );
   if (dupCheck.length > 0) {
@@ -305,7 +305,7 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
     // ── 1. Duplicate org check ────────────────────────────────────────────
     const [[existingOrg]] = await conn.query(
       `SELECT tenant_id FROM tenants
-       WHERE admin_email = ? OR hr_email = ? OR contact_number = ? LIMIT 1`,
+        WHERE admin_email = ? OR hr_email = ? OR contact_number = ? LIMIT 1`,
       [normalizedAdminEmail, normalizedHrEmail, contact_number],
     );
     if (existingOrg) {
@@ -370,11 +370,11 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
     // ── 6. Insert tenant ──────────────────────────────────────────────────
     await conn.query(
       `INSERT INTO tenants
-    (tenant_id, company_name, contact_person, contact_number,
-     admin_email, hr_email, max_users, company_address,
-     domain_name, gst_number, status,
-     trial_ends_at, created_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'trial', ?, NOW())`,
+      (tenant_id, company_name, contact_person, contact_number,
+      admin_email, hr_email, max_users, company_address,
+      domain_name, gst_number, status,
+      trial_ends_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'trial', ?, NOW())`,
       [
         tenantId,
         org_name,
@@ -400,36 +400,36 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
     // ── 8. Insert 3 default roles for this tenant ─────────────────────────
     const [adminRoleResult] = await conn.query(
       `INSERT INTO role_master (tenant_id, role_name, status, is_deleted, created_at)
-   VALUES (?, 'Admin', 'Active', 0, NOW())`,
+    VALUES (?, 'Admin', 'Active', 0, NOW())`,
       [tenantId],
     );
     const adminRoleId = adminRoleResult.insertId;
 
     const [hrRoleResult] = await conn.query(
       `INSERT INTO role_master (tenant_id, role_name, status, is_deleted, created_at)
-   VALUES (?, 'HR', 'Active', 0, NOW())`,
+    VALUES (?, 'HR', 'Active', 0, NOW())`,
       [tenantId],
     );
     const hrRoleId = hrRoleResult.insertId;
 
     await conn.query(
       `INSERT INTO role_master (tenant_id, role_name, status, is_deleted, created_at)
-   VALUES (?, 'Employee', 'Active', 0, NOW())`,
+    VALUES (?, 'Employee', 'Active', 0, NOW())`,
       [tenantId],
     );
     // ── 8.5. Create default Department & Designation ──────────────────────
     const [deptResult] = await conn.query(
       `INSERT INTO department_master
-        (tenant_id, department_name, status, is_deleted, created_at)
-       VALUES (?, 'General', 'Active', 0, NOW())`,
+          (tenant_id, department_name, status, is_deleted, created_at)
+        VALUES (?, 'General', 'Active', 0, NOW())`,
       [tenantId],
     );
     const defaultDeptId = deptResult.insertId;
 
     const [desigResult] = await conn.query(
       `INSERT INTO designation_master
-        (tenant_id, department_id, designation_name, status, is_deleted, created_at)
-       VALUES (?, ?, 'General', 'Active', 0, NOW())`,
+          (tenant_id, department_id, designation_name, status, is_deleted, created_at)
+        VALUES (?, ?, 'General', 'Active', 0, NOW())`,
       [tenantId, defaultDeptId],
     );
     const defaultDesigId = desigResult.insertId;
@@ -441,15 +441,15 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
     // ── 9. Insert Admin employee ──────────────────────────────────────────
     const [adminEmpResult] = await conn.query(
       `INSERT INTO employee_master
-      (tenant_id, employee_code, first_name, mid_name, last_name,
-       email_id, phone_number, date_of_birth, gender,
-       designation_id, role_id, date_of_joining,
-       employment_type, work_type,
-       permanent_address, communication_address,
-       father_name, emergency_contact, emergency_contact_relation,
-       aadhar_number, pan_number, pf_number, esic_number,
-       years_experience, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())`,
+        (tenant_id, employee_code, first_name, mid_name, last_name,
+        email_id, phone_number, date_of_birth, gender,
+        designation_id, role_id, date_of_joining,
+        employment_type, work_type,
+        permanent_address, communication_address,
+        father_name, emergency_contact, emergency_contact_relation,
+        aadhar_number, pan_number, pf_number, esic_number,
+        years_experience, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())`,
       [
         tenantId,
         adminEmpCode,
@@ -488,15 +488,15 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
     // ── 10. Insert HR employee ────────────────────────────────────────────
     const [hrEmpResult] = await conn.query(
       `INSERT INTO employee_master
-      (tenant_id, employee_code, first_name, mid_name, last_name,
-       email_id, phone_number, date_of_birth, gender,
-       designation_id, role_id, date_of_joining,
-       employment_type, work_type,
-       permanent_address, communication_address,
-       father_name, emergency_contact, emergency_contact_relation,
-       aadhar_number, pan_number, pf_number, esic_number,
-       years_experience, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())`,
+        (tenant_id, employee_code, first_name, mid_name, last_name,
+        email_id, phone_number, date_of_birth, gender,
+        designation_id, role_id, date_of_joining,
+        employment_type, work_type,
+        permanent_address, communication_address,
+        father_name, emergency_contact, emergency_contact_relation,
+        aadhar_number, pan_number, pf_number, esic_number,
+        years_experience, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())`,
       [
         tenantId,
         hrEmpCode,
@@ -536,9 +536,9 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
     // ── 12. Insert Admin login ────────────────────────────────────────────
     await conn.query(
       `INSERT INTO login_master
-          (tenant_id, emp_id, username, contact_number,
-           password, role_id, is_first_login, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 1, 'Active', NOW())`,
+            (tenant_id, emp_id, username, contact_number,
+            password, role_id, is_first_login, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, 1, 'Active', NOW())`,
       [
         tenantId,
         adminEmpId,
@@ -552,9 +552,9 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
     // ── 13. Insert HR login ───────────────────────────────────────────────
     await conn.query(
       `INSERT INTO login_master
-          (tenant_id, emp_id, username, contact_number,
-           password, role_id, is_first_login, status, created_at)
-        VALUES (?,   ?, ?, ?, ?, ?, 1, 'Active', NOW())`,
+            (tenant_id, emp_id, username, contact_number,
+            password, role_id, is_first_login, status, created_at)
+          VALUES (?,   ?, ?, ?, ?, ?, 1, 'Active', NOW())`,
       [
         tenantId,
         hrEmpId,
@@ -585,19 +585,6 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
       "manage_user",
       "dept_management",
     ];
-
-    // const MODE_MODULES = {
-    //   1: ["emp_attendance_normal", "admin_attendance_normal", "approval"],
-    //   2: ["emp_attendance_gps", "admin_attendance_gps", "approval"],
-    //   3: ["emp_attendance_face", "admin_attendance_face", "face_approval"],
-    //   4: [
-    //     "emp_site_attendance_face",
-    //     "admin_attendance_site",
-    //     "face_approval",
-    //     "emp_site",
-    //     "site_management",
-    //   ],
-    // };
 
     const enableSite = req.body.enable_site_module === true;
 
@@ -644,8 +631,8 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
       ]);
       await conn.query(
         `INSERT INTO role_permissions (tenant_id, role_id, module_key, can_view, can_edit)
-         VALUES ?
-         ON DUPLICATE KEY UPDATE can_view = VALUES(can_view), can_edit = VALUES(can_edit)`,
+          VALUES ?
+          ON DUPLICATE KEY UPDATE can_view = VALUES(can_view), can_edit = VALUES(can_edit)`,
         [adminPermValues],
       );
 
@@ -659,8 +646,8 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
       ]);
       await conn.query(
         `INSERT INTO role_permissions (tenant_id, role_id, module_key, can_view, can_edit)
-         VALUES ?
-         ON DUPLICATE KEY UPDATE can_view = VALUES(can_view), can_edit = VALUES(can_edit)`,
+          VALUES ?
+          ON DUPLICATE KEY UPDATE can_view = VALUES(can_view), can_edit = VALUES(can_edit)`,
         [hrPermValues],
       );
     }
@@ -712,13 +699,13 @@ app.post("/api/auth/forgot-password/send-otp", otpLimiter, async (req, res) => {
 
     const [users] = await db.query(
       `SELECT lm.login_id, lm.username, lm.contact_number, lm.tenant_id,
-              rm.role_name,
-              t.admin_email, t.hr_email, e.email_id
-       FROM login_master lm
-       LEFT JOIN tenants t ON t.tenant_id = lm.tenant_id
-       LEFT JOIN employee_master e ON e.emp_id = lm.emp_id
-       LEFT JOIN role_master rm ON rm.role_id = lm.role_id
-       WHERE lm.username = ? AND lm.contact_number = ? LIMIT 1`,
+                rm.role_name,
+                t.admin_email, t.hr_email, e.email_id
+        FROM login_master lm
+        LEFT JOIN tenants t ON t.tenant_id = lm.tenant_id
+        LEFT JOIN employee_master e ON e.emp_id = lm.emp_id
+        LEFT JOIN role_master rm ON rm.role_id = lm.role_id
+        WHERE lm.username = ? AND lm.contact_number = ? LIMIT 1`,
       [username, contact_number],
     );
 
@@ -745,8 +732,8 @@ app.post("/api/auth/forgot-password/send-otp", otpLimiter, async (req, res) => {
 
     await db.query(
       `UPDATE login_master SET reset_otp = ?,
-       reset_otp_expiry = DATE_ADD(NOW(), INTERVAL 10 MINUTE)
-       WHERE login_id = ?`,
+        reset_otp_expiry = DATE_ADD(NOW(), INTERVAL 10 MINUTE)
+        WHERE login_id = ?`,
       [otp, user.login_id],
     );
 
@@ -755,11 +742,11 @@ app.post("/api/auth/forgot-password/send-otp", otpLimiter, async (req, res) => {
       to: email,
       subject: "Password Reset OTP",
       html: `
-        <div style="font-family:sans-serif;padding:20px;">
-          <h2>Password Reset OTP</h2>
-          <h1>${otp}</h1>
-          <p>This OTP expires in 10 minutes.</p>
-        </div>`,
+          <div style="font-family:sans-serif;padding:20px;">
+            <h2>Password Reset OTP</h2>
+            <h1>${otp}</h1>
+            <p>This OTP expires in 10 minutes.</p>
+          </div>`,
     });
 
     res.json({ message: "OTP sent successfully." });
@@ -879,7 +866,9 @@ app.use("/api/app-admin/plans", planRoutes);
 const systemModulesRoutes = require("./system_modules_routes");
 app.use("/api/app-admin/system-modules", systemModulesRoutes);
 
-// ── CATCH-ALL for /api/app-admin — must be LAST among app-admin routes
+const maintenanceDashboard = require("./app-admin/maintenance_dashboard");
+app.use("/api/app-admin", requireAppAdmin, maintenanceDashboard);
+
 const ManageOrganizationRouter = require("./app_admin_org_router");
 app.use("/api/app-admin", ManageOrganizationRouter);
 

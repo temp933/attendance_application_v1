@@ -1500,6 +1500,31 @@ router.get("/all-history", async (req, res) => {
   if (!tenant_id)
     return send(res, 401, false, "Unauthorized: tenant not identified");
 
+  const callerEmpId = req.user?.employee_id || req.user?.emp_id;
+  const callerRole  = (req.user?.role_name || "").toLowerCase().trim();
+  const isFullAccess = ["admin", "hr", "app_admin", "org_admin"].includes(callerRole);
+
+  let scopedEmpIds = null;
+  if (!isFullAccess && callerEmpId) {
+    const [rows] = await db.query(
+      `WITH RECURSIVE hierarchy AS (
+        SELECT emp_id FROM employee_master
+        WHERE emp_id = ? AND tenant_id = ?
+        UNION ALL
+        SELECT e.emp_id FROM employee_master e
+        INNER JOIN hierarchy h ON e.reporting_to_employee_id = h.emp_id
+        WHERE e.tenant_id = ?
+      )
+      SELECT emp_id FROM hierarchy`,
+      [callerEmpId, tenant_id, tenant_id],
+    );
+    scopedEmpIds = rows
+      .map((r) => r.emp_id)
+      .filter((id) => id !== Number(callerEmpId));
+    if (scopedEmpIds.length === 0)
+      return send(res, 200, true, "All leaves fetched", { total: 0, data: [] });
+  }
+
   const {
     status,
     leave_type_id,
@@ -1511,6 +1536,11 @@ router.get("/all-history", async (req, res) => {
 
   const params = [tenant_id];
   let extraWhere = "";
+
+  if (scopedEmpIds !== null) {
+    extraWhere += ` AND lm.emp_id IN (${scopedEmpIds.map(() => "?").join(",")})`;
+    params.push(...scopedEmpIds);
+  }
 
   if (status) {
     extraWhere += " AND lm.final_status = ?";

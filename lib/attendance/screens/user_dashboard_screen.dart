@@ -27,10 +27,11 @@ import './Attendance screens/gps_attendance_management_screen.dart';
 import './Attendance screens/face_gps_attendance_management_screen.dart';
 import './Attendance screens/attendance_site_management.dart';
 import './policy_management_screen.dart';
+import './report_management_screen.dart';
 import './manage_location.dart';
 // ── Employee screens ──────────────────────────────────────────────────────────
 // import 'emp_home_screen.dart';
-import 'emp_leave_screen.dart'; 
+import 'emp_leave_screen.dart';
 import './Attendance screens/normal_in_out.dart';
 import './Attendance screens/attendance_gps.dart';
 import './Attendance screens/face_gps_attendance.dart';
@@ -68,7 +69,7 @@ class _ModuleDef {
 // All 19 modules — admin decides who sees what
 // ─────────────────────────────────────────────────────────────────────────────
 final List<_ModuleDef> _allModules = [
-  // ── Employee-facing ────────────────────────────────────────────────────────
+  // ── 1. Dashboard ───────────────────────────────────────────────────────────
   _ModuleDef(
     key: 'emp_dashboard',
     title: 'Dashboard',
@@ -84,6 +85,8 @@ final List<_ModuleDef> _allModules = [
           required canEdit,
         }) => AdminHomeScreen(employeeId: employeeId),
   ),
+
+  // ── 2. My Attendance (employee self-service) ───────────────────────────────
   _ModuleDef(
     key: 'emp_attendance_normal',
     title: 'Attendance',
@@ -132,10 +135,10 @@ final List<_ModuleDef> _allModules = [
   ),
   _ModuleDef(
     key: 'emp_site_attendance_face',
-    title: 'Site Entry Face Attendance',
-    icon: Icons.face_outlined,
-    selectedIcon: Icons.face,
-    navLabel: 'site Face',
+    title: 'Site Attendance',
+    icon: Icons.location_city_outlined,
+    selectedIcon: Icons.location_city,
+    navLabel: 'Site',
     builder:
         ({
           required employeeId,
@@ -148,12 +151,13 @@ final List<_ModuleDef> _allModules = [
         ),
   ),
 
+  // ── 3. My Leave & Profile ──────────────────────────────────────────────────
   _ModuleDef(
     key: 'emp_leave',
     title: 'My Leave',
     icon: Icons.event_note_outlined,
     selectedIcon: Icons.event_note,
-    navLabel: 'Leave',
+    navLabel: 'My Leave',
     builder:
         ({
           required employeeId,
@@ -163,23 +167,8 @@ final List<_ModuleDef> _allModules = [
           required canEdit,
         }) => LeaveScreen(),
   ),
-  _ModuleDef(
-    key: 'emp_profile',
-    title: 'My Profile',
-    icon: Icons.person_outline,
-    selectedIcon: Icons.person,
-    navLabel: 'Profile',
-    builder:
-        ({
-          required employeeId,
-          required roleId,
-          required tenantId,
-          required authToken,
-          required canEdit,
-        }) => EmployeeProfileScreen(employeeId: employeeId),
-  ),
 
-  // ── Admin/HR-facing ────────────────────────────────────────────────────────
+  // ── 4. Attendance Management (admin/HR view) ───────────────────────────────
   _ModuleDef(
     key: 'admin_attendance_normal',
     title: 'Normal Attendance',
@@ -215,6 +204,7 @@ final List<_ModuleDef> _allModules = [
         }) => GpsAttendanceManagementScreen(
           tenantId: tenantId,
           authToken: authToken,
+          canEdit: canEdit,
         ),
   ),
   _ModuleDef(
@@ -233,14 +223,14 @@ final List<_ModuleDef> _allModules = [
         }) => FaceGpsAttendanceManagementScreen(
           tenantId: tenantId,
           authToken: authToken,
+          canEdit: canEdit,
         ),
   ),
-
   _ModuleDef(
     key: 'admin_attendance_site',
     title: 'Site Attendance',
-    icon: Icons.face_retouching_natural_outlined,
-    selectedIcon: Icons.face_retouching_natural,
+    icon: Icons.corporate_fare_outlined,
+    selectedIcon: Icons.corporate_fare,
     navLabel: 'Site Att.',
     builder:
         ({
@@ -252,8 +242,28 @@ final List<_ModuleDef> _allModules = [
         }) => SiteAttendanceManagementScreen(
           tenantId: tenantId,
           authToken: authToken,
+          canEdit: canEdit,
         ),
   ),
+
+  // ── 5. Approvals ───────────────────────────────────────────────────────────
+  _ModuleDef(
+    key: 'leave_approval',
+    title: 'Leave Approval',
+    icon: Icons.leave_bags_at_home_outlined,
+    selectedIcon: Icons.leave_bags_at_home,
+    navLabel: 'Leave Approval',
+    builder:
+        ({
+          required employeeId,
+          required roleId,
+          required tenantId,
+          required authToken,
+          required canEdit,
+        }) => LeaveApprovalScreen(),
+  ),
+
+  // ── 6. People Management ───────────────────────────────────────────────────
   _ModuleDef(
     key: 'dept_management',
     title: 'Departments & Roles',
@@ -267,8 +277,9 @@ final List<_ModuleDef> _allModules = [
           required tenantId,
           required authToken,
           required canEdit,
-        }) => DeptRoleDesgScreen(),
+        }) => DeptRoleDesgScreen(canEdit: canEdit),
   ),
+
   _ModuleDef(
     key: 'manage_user',
     title: 'Manage Users',
@@ -288,7 +299,6 @@ final List<_ModuleDef> _allModules = [
           canEdit: canEdit,
         ),
   ),
-
   _ModuleDef(
     key: 'approval',
     title: 'Approvals',
@@ -304,6 +314,7 @@ final List<_ModuleDef> _allModules = [
           required canEdit,
         }) => AdminApprovalPage(),
   ),
+
   _ModuleDef(
     key: 'face_approval',
     title: 'Face Approval',
@@ -319,37 +330,8 @@ final List<_ModuleDef> _allModules = [
           required canEdit,
         }) => AdminFaceApprovalPage(),
   ),
-  _ModuleDef(
-    key: 'leave_approval',
-    title: 'Leave Approval',
-    icon: Icons.leave_bags_at_home_outlined,
-    selectedIcon: Icons.leave_bags_at_home,
-    navLabel: 'Leave',
-    builder:
-        ({
-          required employeeId,
-          required roleId,
-          required tenantId,
-          required authToken,
-          required canEdit,
-        }) => LeaveApprovalScreen(),
-  ),
 
-  _ModuleDef(
-    key: 'session_management',
-    title: 'Session Management',
-    icon: Icons.lock_clock_outlined,
-    selectedIcon: Icons.lock_clock,
-    navLabel: 'Sessions',
-    builder:
-        ({
-          required employeeId,
-          required roleId,
-          required tenantId,
-          required authToken,
-          required canEdit,
-        }) => AdminSessionManagementScreen(),
-  ),
+  // ── 7. Configuration ───────────────────────────────────────────────────────
   _ModuleDef(
     key: 'policy_management',
     title: 'Policy Management',
@@ -369,9 +351,9 @@ final List<_ModuleDef> _allModules = [
   _ModuleDef(
     key: 'site_management',
     title: 'Site Management',
-    icon: Icons.lock_clock_outlined,
-    selectedIcon: Icons.lock_clock,
-    navLabel: 'Site',
+    icon: Icons.map_outlined,
+    selectedIcon: Icons.map,
+    navLabel: 'Sites',
     builder:
         ({
           required employeeId,
@@ -380,6 +362,39 @@ final List<_ModuleDef> _allModules = [
           required authToken,
           required canEdit,
         }) => ManageLocationPage(canEdit: canEdit),
+  ),
+
+  // ── 8. System ──────────────────────────────────────────────────────────────
+  _ModuleDef(
+    key: 'session_management',
+    title: 'Session Management',
+    icon: Icons.lock_clock_outlined,
+    selectedIcon: Icons.lock_clock,
+    navLabel: 'Sessions',
+    builder:
+        ({
+          required employeeId,
+          required roleId,
+          required tenantId,
+          required authToken,
+          required canEdit,
+        }) => AdminSessionManagementScreen(),
+  ),
+
+  _ModuleDef(
+    key: 'emp_profile',
+    title: 'My Profile',
+    icon: Icons.person_outline,
+    selectedIcon: Icons.person,
+    navLabel: 'Profile',
+    builder:
+        ({
+          required employeeId,
+          required roleId,
+          required tenantId,
+          required authToken,
+          required canEdit,
+        }) => EmployeeProfileScreen(employeeId: employeeId),
   ),
 ];
 
