@@ -80,4 +80,41 @@ router.get("/trial-status", async (req, res) => {
   }
 });
 
+// GET /api/tenant/my-org
+router.get('/my-org', async (req, res) => {
+  try {
+    const tenantId = req.user.tenant_id ?? req.user.tenantId;
+
+    const [rows] = await db.query(
+      `SELECT t.*,
+          DATEDIFF(COALESCE(t.plan_ends_at, t.trial_ends_at), CURDATE()) AS days_remaining,
+          COUNT(DISTINCT e.emp_id) AS employee_count
+       FROM tenants t
+       LEFT JOIN employee_master e ON e.tenant_id = t.tenant_id AND e.status = 'Active'
+       WHERE t.tenant_id = ?
+       GROUP BY t.tenant_id`,
+      [tenantId]
+    );
+
+    const org = rows[0];
+    if (!org) return res.status(404).json({ success: false, message: 'Organization not found.' });
+
+    let score = 100;
+    if (org.days_remaining !== null && org.days_remaining < 7) score -= 30;
+    if (org.days_remaining !== null && org.days_remaining < 0) score -= 40;
+    if (org.status === 'suspended') score -= 50;
+    if (org.status === 'expired') score = 0;
+    org.health_score = Math.max(0, score);
+
+    if (org.company_logo && Buffer.isBuffer(org.company_logo)) {
+      org.company_logo = org.company_logo.toString('base64');
+    }
+
+    res.json({ success: true, data: org });
+  } catch (err) {
+    console.error('[tenant/my-org]', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch organization.' });
+  }
+});
+
 module.exports = router;

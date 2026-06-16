@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import 'change_password_screen.dart';
 import '../App Admin/app_admin_dashboard_screen.dart';
@@ -1017,6 +1019,9 @@ class _SignUpTabState extends State<_SignUpTab> {
   bool _loading = false;
   String? _error;
 
+  // ── Logo ──────────────────────────────────────────────────────────────────
+  Uint8List? _logoBytes;
+  String? _logoMimeType; // 'image/jpeg' | 'image/png' | 'image/webp'
   @override
   void dispose() {
     for (final c in [
@@ -1310,6 +1315,8 @@ class _SignUpTabState extends State<_SignUpTab> {
         body: jsonEncode({
           'session_id': _sessionId,
           'org_name': _orgNameCtrl.text.trim(),
+          if (_logoBytes != null) 'company_logo': base64Encode(_logoBytes!),
+          if (_logoMimeType != null) 'company_logo_type': _logoMimeType,
           'contact_person': _contactPersonCtrl.text.trim(),
           'contact_number': _contactNumCtrl.text.trim(),
           'admin_email': _adminEmailCtrl.text.trim(),
@@ -1406,6 +1413,29 @@ class _SignUpTabState extends State<_SignUpTab> {
       if (!mounted) return false;
       setState(() => _resendCd--);
       return _resendCd > 0;
+    });
+  }
+
+  Future<void> _pickLogo() async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 85,
+    );
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    final ext = file.path.split('.').last.toLowerCase();
+    final mime = ext == 'png'
+        ? 'image/png'
+        : ext == 'webp'
+        ? 'image/webp'
+        : 'image/jpeg';
+    if (!mounted) return;
+    setState(() {
+      _logoBytes = bytes;
+      _logoMimeType = mime;
     });
   }
 
@@ -1572,6 +1602,17 @@ class _SignUpTabState extends State<_SignUpTab> {
           ),
 
           const SizedBox(height: 12),
+          // ── Company Logo ────────────────────────────────────────────────
+          _LogoPicker(
+            bytes: _logoBytes,
+            onPick: _pickLogo,
+            onRemove: () => setState(() {
+              _logoBytes = null;
+              _logoMimeType = null;
+            }),
+          ),
+          const SizedBox(height: 12),
+
           _AttendanceModeSelector(
             selected: _selectedMode,
             hasError: _selectedMode == null && _error != null,
@@ -2996,6 +3037,170 @@ class _AttendanceModeSelector extends StatelessWidget {
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+// ── Logo picker widget ────────────────────────────────────────────────────────
+class _LogoPicker extends StatelessWidget {
+  final Uint8List? bytes;
+  final VoidCallback onPick;
+  final VoidCallback onRemove;
+
+  const _LogoPicker({
+    required this.bytes,
+    required this.onPick,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section label
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF2FF),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'Company Logo (optional)',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _primary,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Divider(color: Colors.indigo.shade50, thickness: 1),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+
+        GestureDetector(
+          onTap: onPick,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            height: 110,
+            decoration: BoxDecoration(
+              color: bytes != null ? Colors.white : const Color(0xFFF5F5FF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: bytes != null
+                    ? _primary.withOpacity(0.4)
+                    : Colors.grey.shade200,
+                width: bytes != null ? 1.5 : 1,
+                style: bytes != null ? BorderStyle.solid : BorderStyle.solid,
+              ),
+            ),
+            child: bytes != null
+                ? Stack(
+                    children: [
+                      // Preview
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(11),
+                        child: SizedBox.expand(
+                          child: Image.memory(bytes!, fit: BoxFit.contain),
+                        ),
+                      ),
+                      // Remove button
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: GestureDetector(
+                          onTap: onRemove,
+                          child: Container(
+                            width: 26,
+                            height: 26,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.55),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Edit overlay hint
+                      Positioned(
+                        bottom: 6,
+                        right: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.45),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.edit, color: Colors.white, size: 11),
+                              SizedBox(width: 4),
+                              Text(
+                                'Change',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: _primary.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.add_photo_alternate_outlined,
+                          color: _primary,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Tap to upload logo',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _primary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'PNG, JPG or WEBP · max 512 × 512',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
       ],
     );
   }

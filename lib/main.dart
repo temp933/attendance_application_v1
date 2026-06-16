@@ -1574,7 +1574,7 @@ class _SplashRouterState extends State<SplashRouter> {
     final int roleId = int.tryParse(freshSession['role'] ?? '0') ?? 0;
 
     List<Map<String, dynamic>>? permissions;
-    if (userType != 'app_admin') {
+    if (userType != 'app_admin' && userType != 'org_admin') {
       permissions = await PermissionsService.getMyPermissions();
       if (!mounted) return;
     }
@@ -1602,7 +1602,8 @@ class _SplashRouterState extends State<SplashRouter> {
           );
 
     // ── 5. Smart permission gate — only on mobile, only first time per user ─
-    if (_isMobile && !isAppAdmin) {
+    final bool isOrgAdmin = userType == 'org_admin';
+    if (_isMobile && !isAppAdmin && !isOrgAdmin) {
       final needs = _PermNeeds.fromModules(permissions);
       final prefs = await SharedPreferences.getInstance();
       final alreadyGranted =

@@ -27,7 +27,7 @@ import './Attendance screens/gps_attendance_management_screen.dart';
 import './Attendance screens/face_gps_attendance_management_screen.dart';
 import './Attendance screens/attendance_site_management.dart';
 import './policy_management_screen.dart';
-import './report_management_screen.dart';
+import '../App Admin/org_profile_screen.dart';
 import './manage_location.dart';
 // ── Employee screens ──────────────────────────────────────────────────────────
 // import 'emp_home_screen.dart';
@@ -396,6 +396,22 @@ final List<_ModuleDef> _allModules = [
           required canEdit,
         }) => EmployeeProfileScreen(employeeId: employeeId),
   ),
+
+   _ModuleDef(
+    key: 'Org_Profile',
+    title: 'Org Profile',
+    icon: Icons.business_outlined,
+    selectedIcon: Icons.business,
+    navLabel: 'Org Profile',
+    builder:
+        ({
+          required employeeId,
+          required roleId,
+          required tenantId,
+          required authToken,
+          required canEdit,
+        }) => OrgProfileScreen(tenantId: tenantId, canEdit: false),
+  ),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -480,6 +496,14 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
       _visibleModules = [];
       _canEditMap = {};
       for (final module in _allModules) {
+        // Org_Profile is always excluded from role permissions — org_admin only
+        if (module.key == 'Org_Profile') {
+          if (widget.userType == 'org_admin') {
+            _visibleModules.add(module);
+            _canEditMap[module.key] = true;
+          }
+          continue;
+        }
         final perm = permMap[module.key];
         if (perm != null &&
             (perm['can_view'] == 1 || perm['can_view'] == true)) {
@@ -492,7 +516,9 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
     }
 
     // No permissions passed → full access fallback (should only happen in dev)
-    _visibleModules = List.from(_allModules);
+    _visibleModules = _allModules
+        .where((m) => m.key != 'Org_Profile' || widget.userType == 'org_admin')
+        .toList();
     _canEditMap = {for (final m in _allModules) m.key: true};
   }
 

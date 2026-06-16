@@ -1,8 +1,10 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiConfig {
-  static const String face_url = 'https://unrivaled-headset-unmanaged.ngrok-free.dev';
-  static const String baseUrl = 'https://unrivaled-headset-unmanaged.ngrok-free.dev/api';
+  static const String face_url =
+      'https://unrivaled-headset-unmanaged.ngrok-free.dev';
+  static const String baseUrl =
+      'https://unrivaled-headset-unmanaged.ngrok-free.dev/api';
 
   // ── Single source of truth for all SharedPreferences keys ─────────
   static const _kToken = 'session_token';

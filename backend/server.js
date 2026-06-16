@@ -368,13 +368,18 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
     }
 
     // ── 6. Insert tenant ──────────────────────────────────────────────────
+    // Decode logo if provided (sent as base64 from Flutter)
+    const logoBase64 = req.body.company_logo ?? null;
+    const logoType = req.body.company_logo_type ?? null;
+    const logoBuffer = logoBase64 ? Buffer.from(logoBase64, "base64") : null;
+
     await conn.query(
       `INSERT INTO tenants
       (tenant_id, company_name, contact_person, contact_number,
       admin_email, hr_email, max_users, company_address,
       domain_name, gst_number, status,
-      trial_ends_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'trial', ?, NOW())`,
+      trial_ends_at, company_logo, company_logo_type, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'trial', ?, ?, ?, NOW())`,
       [
         tenantId,
         org_name,
@@ -387,6 +392,8 @@ app.post("/api/auth/complete", completeLimiter, async (req, res) => {
         domain_name,
         gst_number || null,
         toMysqlDate(trialEndsAt),
+        logoBuffer,
+        logoType,
       ],
     );
 
