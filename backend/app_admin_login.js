@@ -126,37 +126,33 @@ router.post("/login", async (req, res) => {
         message: "Account temporarily locked due to multiple failed attempts.",
       });
     }
-
-    // PASSWORD CHECK
+    // PASSWORD CHECK — before active-session check to avoid leaking state
     const passwordMatch = await bcrypt.compare(password, admin.password_hash);
 
     if (!passwordMatch) {
       const failedAttempts = (admin.failed_attempts || 0) + 1;
-
-      let lockedUntil = null;
-
-      // LOCK AFTER 5 FAILURES
-      if (failedAttempts >= 5) {
-        lockedUntil = new Date(Date.now() + 15 * 60 * 1000);
-      }
+      const lockedUntil =
+        failedAttempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
 
       await db.query(
-        `
-        UPDATE app_admin_master
-        SET
-          failed_attempts = ?,
-          locked_until = ?
-        WHERE admin_id = ?
-        `,
+        `UPDATE app_admin_master SET failed_attempts = ?, locked_until = ? WHERE admin_id = ?`,
         [failedAttempts, lockedUntil, admin.admin_id],
       );
 
-      return res.status(401).json({
-        message: "Invalid credentials.",
+      return res.status(401).json({ message: "Invalid credentials." });
+    }
+
+    // BLOCK ALL ACTIVE SESSIONS (any IP, any device)
+    if (admin.device_logged_in === 1) {
+      return res.status(409).json({
+        message: "Already logged in on another device.",
+        already_active: true,
+        last_login_ip: admin.last_login_ip || "unknown",
       });
     }
 
     // RESET FAILED ATTEMPTS
+
     await db.query(
       `
       UPDATE app_admin_master
@@ -183,10 +179,9 @@ router.post("/login", async (req, res) => {
     const otp = generateOtp();
 
     // HASH OTP
-    const otpHash = await bcrypt.hash(otp, 10);
+    const otpHash = await bcrypt.hash(otp, 8);
 
     const sessionId = generateSessionId();
-
     // STORE OTP
     await db.query(
       `INSERT INTO app_admin_otps
@@ -262,7 +257,6 @@ router.post("/verify", async (req, res) => {
     }
 
     const record = records[0];
-    
 
     // ATTEMPTS CHECK
     if (record.attempts >= record.max_attempts) {
@@ -313,16 +307,21 @@ router.post("/verify", async (req, res) => {
       [record.otp_id],
     );
 
-    // UPDATE LOGIN DETAILS
+    // GENERATE JTI
+    const jti = crypto.randomBytes(16).toString("hex");
+
+    // UPDATE LOGIN DETAILS + STORE JTI + MARK DEVICE LOGGED IN
     await db.query(
       `
       UPDATE app_admin_master
       SET
         last_login_at = NOW(),
-        last_login_ip = ?
+        last_login_ip = ?,
+        active_jti    = ?,
+        device_logged_in = 1
       WHERE admin_id = ?
       `,
-      [req.ip, record.admin_id],
+      [req.ip, jti, record.admin_id],
     );
 
     // JWT TOKEN
@@ -331,13 +330,13 @@ router.post("/verify", async (req, res) => {
         adminId: record.admin_id,
         username: record.username,
         userType: "app_admin",
+        jti,
       },
       JWT_SECRET,
       {
         expiresIn: "8h",
       },
     );
-
     return res.status(200).json({
       token,
       adminId: record.admin_id,
@@ -420,7 +419,7 @@ router.post("/resend", async (req, res) => {
     // NEW OTP
     const otp = generateOtp();
 
-    const otpHash = await bcrypt.hash(otp, 10);
+    const otpHash = await bcrypt.hash(otp, 8);
 
     const newSessionId = generateSessionId();
 
@@ -459,6 +458,107 @@ router.post("/resend", async (req, res) => {
     return res.status(500).json({
       message: "Internal server error.",
     });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// FORCE LOGIN (kick existing session, re-verify same OTP session)
+// POST /api/auth/app-admin/force-login
+// ─────────────────────────────────────────────────────────────
+router.post("/force-login", async (req, res) => {
+  try {
+    const { session_id } = req.body;
+
+    if (!session_id) {
+      return res.status(400).json({ message: "Session ID is required." });
+    }
+
+    // VALIDATE SESSION STILL EXISTS AND IS USED (just verified)
+    const [records] = await db.query(
+      `SELECT o.otp_id, o.admin_id, a.username, a.email
+       FROM app_admin_otps o
+       INNER JOIN app_admin_master a ON a.admin_id = o.admin_id
+       WHERE o.session_id = ?
+       AND o.is_used = 1
+       AND o.verified_at IS NOT NULL
+       AND o.verified_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+        LIMIT 1`,
+      [session_id],
+    );
+
+    if (records.length === 0) {
+      return res.status(400).json({
+        message: "Force-login window expired. Please log in again.",
+      });
+    }
+
+    const record = records[0];
+
+    // GENERATE NEW JTI — kicks old device on its next request
+    const jti = crypto.randomBytes(16).toString("hex");
+
+    await db.query(
+      `UPDATE app_admin_master
+       SET last_login_at = NOW(),
+           last_login_ip = ?,
+           active_jti    = ?,
+           device_logged_in = 1
+       WHERE admin_id = ?`,
+      [req.ip, jti, record.admin_id],
+    );
+
+    const token = jwt.sign(
+      {
+        adminId: record.admin_id,
+        username: record.username,
+        userType: "app_admin",
+        jti,
+      },
+      JWT_SECRET,
+      { expiresIn: "8h" },
+    );
+
+    return res.status(200).json({
+      token,
+      adminId: record.admin_id,
+      username: record.username,
+      userType: "app_admin",
+      message: "Login successful.",
+    });
+  } catch (error) {
+    console.error("[APP_ADMIN_FORCE_LOGIN_ERROR]", error);
+    return res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// LOGOUT
+// POST /api/auth/app-admin/logout
+// ─────────────────────────────────────────────────────────────
+ 
+router.post("/logout", async (req, res) => {
+  try {
+    // Extract token directly — don't block logout if JTI already cleared
+    const authHeader = req.headers["authorization"];
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(400).json({ message: "Token required." });
+    }
+    let adminId;
+    try {
+      const decoded = jwt.verify(authHeader.split(" ")[1], JWT_SECRET);
+      adminId = decoded.adminId;
+    } catch (_) {
+      return res.status(200).json({ message: "Already logged out." });
+    }
+    console.log("[LOGOUT] admin_id:", adminId);
+    await db.query(
+      `UPDATE app_admin_master SET active_jti = NULL, device_logged_in = 0 WHERE admin_id = ?`,
+      [adminId],
+    );
+    return res.status(200).json({ message: "Logged out successfully." });
+  } catch (error) {
+    console.error("[APP_ADMIN_LOGOUT_ERROR]", error);
+    return res.status(500).json({ message: "Internal server error." });
   }
 });
 

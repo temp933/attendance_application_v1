@@ -1,21 +1,10 @@
-/**
- * global_notify.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Super Admin Global Notification Service
- *
- * Responsibilities
- *  • resolveTargets()       — expand scope into (tenant_id, emp_id, fcm_token) rows
- *  • sendGlobalNotification() — write logs, fire FCM in batches, update counters
- *  • retryFailed()          — re-queue FAILED logs for a notification
- *  • initGlobalCron()       — every-minute cron to dispatch scheduled notifications
- * ─────────────────────────────────────────────────────────────────────────────
- */
+// global_notify.js
 
 "use strict";
 
 const cron = require("node-cron");
-const admin = require("firebase-admin");
-const db = require("./config/db"); // mysql2 pool (promise-compatible)
+const { getAdmin } = require("./firebase_admin"); // ← shared singleton
+const db = require("./config/db");
 
 // FCM multicast batch size — FCM /v1 max is 500 per sendEachForMulticast call
 const FCM_BATCH_SIZE = 500;
@@ -138,7 +127,7 @@ async function sendFcmBatch(tokens, title, body, data = {}) {
   };
 
   try {
-    const result = await admin.messaging().sendEachForMulticast(message);
+    const result = await getAdmin().messaging().sendEachForMulticast(message);
     return result;
   } catch (err) {
     console.error("[global-notify] FCM multicast error:", err.message);
@@ -422,9 +411,8 @@ async function runScheduledCron() {
 }
 
 function initGlobalCron() {
-  cron.schedule("* * * * *", runScheduledCron, {
-    timezone: process.env.TZ || "Asia/Kolkata",
-  });
+  getAdmin(); // ensure Firebase initialized
+  cron.schedule("* * * * *", runScheduledCron, { timezone: "Asia/Kolkata" });
   console.log("[global-notify] Scheduled notification cron started.");
 }
 

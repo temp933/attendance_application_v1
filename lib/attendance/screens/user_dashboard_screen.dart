@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
-
+import '../services/notify.dart';
 import '../providers/api_config.dart';
 import '../providers/attendance_provider.dart';
 import '../services/auth_service.dart';
@@ -397,7 +397,7 @@ final List<_ModuleDef> _allModules = [
         }) => EmployeeProfileScreen(employeeId: employeeId),
   ),
 
-   _ModuleDef(
+  _ModuleDef(
     key: 'Org_Profile',
     title: 'Org Profile',
     icon: Icons.business_outlined,
@@ -488,7 +488,7 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
 
   // ── Resolve visible modules ───────────────────────────────────────────────
   void _resolvePermissions() {
-    // If permissions list provided, always filter by it (even for org_admin)
+    // Filter by permissions list for ALL users including org_admin
     if (widget.permissions != null && widget.permissions!.isNotEmpty) {
       final permMap = <String, Map<String, dynamic>>{
         for (final p in widget.permissions!) p['module_key'] as String: p,
@@ -496,7 +496,7 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
       _visibleModules = [];
       _canEditMap = {};
       for (final module in _allModules) {
-        // Org_Profile is always excluded from role permissions — org_admin only
+        // Org_Profile is always visible to org_admin regardless of role_permissions
         if (module.key == 'Org_Profile') {
           if (widget.userType == 'org_admin') {
             _visibleModules.add(module);
@@ -515,11 +515,10 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
       return;
     }
 
-    // No permissions passed → full access fallback (should only happen in dev)
-    _visibleModules = _allModules
-        .where((m) => m.key != 'Org_Profile' || widget.userType == 'org_admin')
-        .toList();
-    _canEditMap = {for (final m in _allModules) m.key: true};
+    // permissions is null/empty — only happens for app_admin (shouldn't reach here)
+    // or dev fallback: show nothing to be safe
+    _visibleModules = [];
+    _canEditMap = {};
   }
 
   // ── Build pages ───────────────────────────────────────────────────────────
@@ -616,14 +615,20 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                 (defaultTargetPlatform == TargetPlatform.android ||
                     defaultTargetPlatform == TargetPlatform.iOS))
               IconButton(
-                tooltip: 'Notifications',
-                icon: const Icon(
-                  Icons.notifications_outlined,
-                  color: Colors.white,
+                icon: Stack(
+                  children: [
+                    const Icon(
+                      Icons.notifications_outlined,
+                      color: Color.fromARGB(255, 255, 255, 255),
+                    ),
+                    // Unread badge — optional, wire to NotifyService if you track count
+                  ],
                 ),
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => NotificationScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const NotificationInboxScreen(),
+                  ),
                 ),
               ),
             const SizedBox(width: 4),

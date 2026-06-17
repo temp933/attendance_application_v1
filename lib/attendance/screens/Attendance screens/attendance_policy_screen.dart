@@ -115,7 +115,7 @@ class AttendancePolicyService {
   }) async {
     final res = await http.get(
       Uri.parse('$_base/policy'),
-      headers: {'Authorization': 'Bearer $authToken', 'x-tenant-id': tenantId},
+      headers: ApiConfig.headers,
     );
     if (res.statusCode == 200) {
       final body = jsonDecode(res.body) as Map<String, dynamic>;
@@ -133,11 +133,7 @@ class AttendancePolicyService {
   }) async {
     final res = await http.post(
       Uri.parse('$_base/policy'),
-      headers: {
-        'Authorization': 'Bearer $authToken',
-        'x-tenant-id': tenantId,
-        'Content-Type': 'application/json',
-      },
+      headers: {...ApiConfig.headers, 'Content-Type': 'application/json'},
       body: jsonEncode(policy.toJson()),
     );
     if (res.statusCode == 200) {
@@ -558,7 +554,7 @@ class _AttendancePolicyScreenState extends State<AttendancePolicyScreen> {
           : FloatingActionButton.extended(
               onPressed: _saving ? null : _save,
               backgroundColor: _primary,
-               foregroundColor: Colors.white,
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),

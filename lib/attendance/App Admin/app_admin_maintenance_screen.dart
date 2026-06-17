@@ -4,6 +4,9 @@ import 'package:flutter/services.dart';
 import '../providers/api_config.dart';
 import '../providers/api_client.dart';
 import 'org_profile_screen.dart';
+import 'global_notify.dart';
+import '../services/auth_service.dart';
+import '../screens/login_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DESIGN TOKENS — match rest of app
@@ -159,7 +162,7 @@ class _AppAdminMaintenanceScreenState extends State<AppAdminMaintenanceScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 5, vsync: this);
+    _tab = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -170,8 +173,62 @@ class _AppAdminMaintenanceScreenState extends State<AppAdminMaintenanceScreen>
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox.expand(
-      child: Column(
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Administrator',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: Color(0xFF1A56DB),
+        foregroundColor: const Color.fromARGB(255, 255, 255, 255),
+        elevation: 0,
+        centerTitle: false,
+        actions: [
+          IconButton(
+            tooltip: 'Logout',
+            icon: const Icon(Icons.logout, size: 20),
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text(
+                    'Logout',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                  content: const Text('Are you sure you want to logout?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _red,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Logout'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm != true || !mounted) return;
+              try {
+                await ApiClient.post('/auth/app-admin/logout', {});
+              } catch (_) {}
+              if (!mounted) return;
+              await AuthService.clearSession();
+              if (!mounted) return;
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (_) => false,
+              );
+            },
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: Column(
         children: [
           // ── Tab bar ──
           Container(
@@ -181,7 +238,7 @@ class _AppAdminMaintenanceScreenState extends State<AppAdminMaintenanceScreen>
               isScrollable: true,
               tabAlignment: TabAlignment.start,
               labelColor: _primary,
-              unselectedLabelColor: _textMid,
+              unselectedLabelColor: const Color.fromARGB(122, 0, 0, 0),
               indicatorColor: _primary,
               indicatorWeight: 2.5,
               labelStyle: const TextStyle(
@@ -213,6 +270,10 @@ class _AppAdminMaintenanceScreenState extends State<AppAdminMaintenanceScreen>
                   icon: Icon(Icons.backup_outlined, size: 18),
                   text: 'Backup',
                 ),
+                Tab(
+                  icon: Icon(Icons.notifications_outlined, size: 18),
+                  text: 'Notify',
+                ),
               ],
             ),
           ), // ← closes SizedBox.expand
@@ -226,6 +287,7 @@ class _AppAdminMaintenanceScreenState extends State<AppAdminMaintenanceScreen>
                 _HealthTab(),
                 _ActivityTab(),
                 _BackupTab(),
+                _NotifyTab(),
               ],
             ),
           ),
@@ -517,76 +579,80 @@ class _OrgsTabState extends State<_OrgsTab> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   TextField(
-                controller: _searchCtrl,
-                decoration: InputDecoration(
-                  hintText: 'Search by name, email, or ID…',
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    size: 20,
-                    color: _textMid,
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'Search by name, email, or ID…',
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        size: 20,
+                        color: _textMid,
+                      ),
+                      suffixIcon: _searchCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                _load(reset: true);
+                              },
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: _border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: _border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: _primary),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      isDense: true,
+                    ),
+                    onSubmitted: (_) => _load(reset: true),
                   ),
-                  suffixIcon: _searchCtrl.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            _load(reset: true);
-                          },
-                        )
-                      : null,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: _border),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: _border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: _primary),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  isDense: true,
-                ),
-                onSubmitted: (_) => _load(reset: true),
-              ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                clipBehavior: Clip.none,
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: _statusFilters
-                      .map(
-                        (s) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                            label: Text(s[0].toUpperCase() + s.substring(1)),
-                            selected: _status == s,
-                            onSelected: (_) {
-                              setState(() => _status = s);
-                              _load(reset: true);
-                            },
-                            selectedColor: _primary.withValues(alpha: 0.15),
-                            checkmarkColor: _primary,
-                            labelStyle: TextStyle(
-                              color: _status == s ? _primary : _textMid,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    clipBehavior: Clip.none,
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: _statusFilters
+                          .map(
+                            (s) => Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: FilterChip(
+                                label: Text(
+                                  s[0].toUpperCase() + s.substring(1),
+                                ),
+                                selected: _status == s,
+                                onSelected: (_) {
+                                  setState(() => _status = s);
+                                  _load(reset: true);
+                                },
+                                selectedColor: _primary.withValues(alpha: 0.15),
+                                checkmarkColor: _primary,
+                                labelStyle: TextStyle(
+                                  color: _status == s ? _primary : _textMid,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                side: BorderSide(
+                                  color: _status == s ? _primary : _border,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                              ),
                             ),
-                            side: BorderSide(
-                              color: _status == s ? _primary : _border,
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-              const SizedBox(height: 6),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
                 ],
               ),
             ),
@@ -910,90 +976,95 @@ class _ActivityTabState extends State<_ActivityTab> {
             child: Container(
               color: Colors.white,
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-          child: Column(
-            children: [
-              Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _searchCtrl,
-                      decoration: _searchDeco('Search logs…'),
-                      onSubmitted: (_) => _load(reset: true),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _searchCtrl,
+                          decoration: _searchDeco('Search logs…'),
+                          onSubmitted: (_) => _load(reset: true),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _cleaning
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: _primary,
+                              ),
+                            )
+                          : IconButton(
+                              tooltip: 'Cleanup old logs',
+                              icon: const Icon(
+                                Icons.delete_sweep_outlined,
+                                color: _red,
+                              ),
+                              onPressed: _cleanup,
+                            ),
+                      IconButton(
+                        tooltip: 'Export CSV',
+                        icon: const Icon(
+                          Icons.download_outlined,
+                          color: _primary,
+                        ),
+                        onPressed: () {
+                          final url = _MaintenanceService.exportLogsUrl();
+                          Clipboard.setData(ClipboardData(text: url));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Export URL copied to clipboard'),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  _cleaning
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: _primary,
+                  const SizedBox(height: 6),
+
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    clipBehavior: Clip.none,
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: _actionTypes.map((t) {
+                        final label = t == 'all'
+                            ? 'All'
+                            : t.replaceAll('_', ' ');
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(
+                              label,
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            selected: _actionType == t,
+                            onSelected: (_) {
+                              setState(() => _actionType = t);
+                              _load(reset: true);
+                            },
+                            selectedColor: _primary.withValues(alpha: 0.15),
+                            labelStyle: TextStyle(
+                              color: _actionType == t ? _primary : _textMid,
+                            ),
+                            side: BorderSide(
+                              color: _actionType == t ? _primary : _border,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
                           ),
-                        )
-                      : IconButton(
-                          tooltip: 'Cleanup old logs',
-                          icon: const Icon(
-                            Icons.delete_sweep_outlined,
-                            color: _red,
-                          ),
-                          onPressed: _cleanup,
-                        ),
-                  IconButton(
-                    tooltip: 'Export CSV',
-                    icon: const Icon(Icons.download_outlined, color: _primary),
-                    onPressed: () {
-                      final url = _MaintenanceService.exportLogsUrl();
-                      Clipboard.setData(ClipboardData(text: url));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Export URL copied to clipboard'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                clipBehavior: Clip.none,
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: _actionTypes.map((t) {
-                    final label = t == 'all' ? 'All' : t.replaceAll('_', ' ');
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(
-                          label,
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        selected: _actionType == t,
-                        onSelected: (_) {
-                          setState(() => _actionType = t);
-                          _load(reset: true);
-                        },
-                        selectedColor: _primary.withValues(alpha: 0.15),
-                        labelStyle: TextStyle(
-                          color: _actionType == t ? _primary : _textMid,
-                        ),
-                        side: BorderSide(
-                          color: _actionType == t ? _primary : _border,
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
             ),
           ),
-        ),
           if (_loading)
             const SliverFillRemaining(
               child: Center(child: CircularProgressIndicator(color: _primary)),
@@ -1022,6 +1093,7 @@ class _ActivityTabState extends State<_ActivityTab> {
       ),
     );
   }
+
   Widget _buildPagination() {
     if (_totalPages <= 1) return const SizedBox.shrink();
     return Padding(
@@ -2474,6 +2546,116 @@ class _ScopeChip extends StatelessWidget {
       ),
     ),
   );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TAB 6 — NOTIFICATIONS
+// ═════════════════════════════════════════════════════════════════════════════
+class _NotifyTab extends StatelessWidget {
+  const _NotifyTab();
+
+  @override
+  Widget build(BuildContext context) {
+    // Strip the GlobalNotifyConsole's own Scaffold/AppBar so it
+    // sits cleanly inside the maintenance screen's TabBarView.
+    return const _NotifyTabBody();
+  }
+}
+
+class _NotifyTabBody extends StatefulWidget {
+  const _NotifyTabBody();
+
+  @override
+  State<_NotifyTabBody> createState() => _NotifyTabBodyState();
+}
+
+class _NotifyTabBodyState extends State<_NotifyTabBody> {
+  late final GnService _svc;
+
+  @override
+  void initState() {
+    super.initState();
+    _svc = GnService(baseUrl: ApiConfig.baseUrl, token: ApiConfig.getToken());
+  }
+
+  int _tab = 0;
+
+  static const _tabs = [
+    (icon: Icons.dashboard_outlined, label: 'Overview'),
+    (icon: Icons.send_outlined, label: 'Send'),
+    (icon: Icons.history_outlined, label: 'History'),
+    (icon: Icons.schedule_outlined, label: 'Scheduled'),
+    (icon: Icons.bar_chart_outlined, label: 'Analytics'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final screens = [
+      GnOverviewScreen(svc: _svc),
+      GnSendScreen(svc: _svc),
+      GnHistoryScreen(svc: _svc),
+      GnScheduledScreen(svc: _svc),
+      GnAnalyticsScreen(svc: _svc),
+    ];
+
+    return Column(
+      children: [
+        // ── Inner sub-tab bar ──────────────────────────────────────────
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: List.generate(_tabs.length, (i) {
+                final t = _tabs[i];
+                final sel = _tab == i;
+                return GestureDetector(
+                  onTap: () => setState(() => _tab = i),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: sel ? _primary : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: sel ? _primary : _border),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          t.icon,
+                          size: 14,
+                          color: sel ? Colors.white : _textMid,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          t.label,
+                          style: TextStyle(
+                            color: sel ? Colors.white : _textMid,
+                            fontSize: 12,
+                            fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ),
+        const Divider(height: 1, color: _border),
+        // ── Screen body ────────────────────────────────────────────────
+        Expanded(
+          child: IndexedStack(index: _tab, children: screens),
+        ),
+      ],
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -6,13 +6,14 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import 'change_password_screen.dart';
-import '../App Admin/app_admin_dashboard_screen.dart';
 import 'forgot_password_screen.dart';
 import '../providers/api_config.dart';
 import 'user_dashboard_screen.dart';
 import '../services/permissions_service.dart';
 import '../services/background_service.dart';
+import '../services/notify.dart';
 import 'package:flutter/foundation.dart';
+import '../App Admin/app_admin_maintenance_screen.dart';
 import 'package:flutter/services.dart' show TargetPlatform;
 
 // ─── API base ────────────────────────────────────────────────────────────────
@@ -28,8 +29,14 @@ const _errorRed = Color(0xFFEF4444);
 const _amber = Color(0xFFF59E0B);
 const _green = Color(0xFF10B981);
 
-// ─── App Admin username constant ─────────────────────────────────────────────
+// ─── Privileged admin usernames ───────────────────────────────────────────────
 const _appAdminUsername = 'App_Admin';
+const _superAdminUsername = 'Super_Admin';
+
+// Add more privileged usernames here in future:
+// const _billingAdminUsername = 'Billing_Admin';
+
+const _privilegedUsernames = {_appAdminUsername, _superAdminUsername};
 
 // ─────────────────────────────────────────────────────────────────────────────
 class LoginScreen extends StatefulWidget {
@@ -81,12 +88,7 @@ class _LoginScreenState extends State<LoginScreen>
 
     // ── Strictly check userType first, fall back to roleId only as tiebreaker ──
     if (userType == 'app_admin') {
-      screen = AppAdminDashboardScreen(
-        loginId: loginId,
-        employeeId: empId.toString(),
-        roleId: roleId.toString(),
-        tenantId: tenantId,
-      );
+      screen = AppAdminMaintenanceScreen();
     } else {
       // HR, Employee, TL, Manager → permission-filtered dashboard
       screen = UserDashboardScreen(
@@ -267,6 +269,7 @@ class _SignInTabState extends State<_SignInTab> {
   bool _otpSent = false;
   int _resendCd = 0;
   String? _error;
+  bool _errorIsWarning = false;
 
   // ── App Admin OTP flow state ──────────────────────────────────────────────
   bool _isAppAdminFlow = false;
@@ -283,16 +286,20 @@ class _SignInTabState extends State<_SignInTab> {
     super.dispose();
   }
 
-  // ── Detect App Admin username ─────────────────────────────────────────────
-  bool get _isAppAdminUsername =>
-      _usernameCtrl.text.trim() == _appAdminUsername;
+  // ── Detect privileged username (App Admin, Super Admin, etc.) ────────────
+  bool get _isPrivilegedUsername => _privilegedUsernames.any(
+    (u) => u.toLowerCase() == _usernameCtrl.text.trim().toLowerCase(),
+  );
+
+  // Returns the OTP endpoint prefix for the current privileged user
+  String get _adminAuthBase => '/auth/app-admin';
 
   // ── Regular password login ────────────────────────────────────────────────
   Future<void> _loginWithPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Intercept App Admin
-    if (_isAppAdminUsername) {
+    // Intercept privileged admins (App Admin, Super Admin, etc.)
+    if (_isPrivilegedUsername) {
       await _initiateAppAdminLogin();
       return;
     }
@@ -323,10 +330,11 @@ class _SignInTabState extends State<_SignInTab> {
     setState(() {
       _loading = true;
       _error = null;
+      _errorIsWarning = false;
     });
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/auth/app-admin/login'),
+        Uri.parse('$_baseUrl$_adminAuthBase/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'username': _usernameCtrl.text.trim(),
@@ -344,12 +352,20 @@ class _SignInTabState extends State<_SignInTab> {
         });
         debugPrint('🔑 sessionId stored: $_appAdminSessionId');
         _startResendCd();
+      } else if (res.statusCode == 409 && body['already_active'] == true) {
+        setState(() {
+          _errorIsWarning = true;
+          _error =
+              'Already logged in on another device (${body['last_login_ip'] ?? 'unknown'}). '
+              'Please sign out there first or contact support.';
+        });
       } else {
-        setState(
-          () => _error =
+        setState(() {
+          _errorIsWarning = false;
+          _error =
               body['message'] as String? ??
-              'Invalid credentials. Please try again.',
-        );
+              'Invalid credentials. Please try again.';
+        });
       }
     } catch (_) {
       setState(() => _error = 'Network error. Check your connection.');
@@ -368,21 +384,103 @@ class _SignInTabState extends State<_SignInTab> {
     setState(() {
       _loading = true;
       _error = null;
+      _errorIsWarning = false;
     });
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/auth/app-admin/verify'),
+        Uri.parse('$_baseUrl$_adminAuthBase/verify'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'session_id': _appAdminSessionId, 'otp': otp}),
       );
       final body = jsonDecode(res.body) as Map<String, dynamic>;
+
+      if (res.statusCode == 409 && body['already_active'] == true) {
+        if (!mounted) return;
+        final ip = body['last_login_ip'] ?? 'another device';
+        final force = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            title: const Text(
+              'Already Logged In',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+            content: Text(
+              'An active session exists from $ip.\n\nDo you want to sign out that device and continue here?',
+              style: const TextStyle(fontSize: 13),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFEF4444),
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Sign Out Other Device'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        if (force != true) {
+          // User cancelled — reset to login screen so they get a fresh OTP next time
+          setState(() {
+            _isAppAdminFlow = false;
+            _appAdminSessionId = '';
+            _appAdminEmailHint = '';
+            _appAdminOtpCtrl.clear();
+            _error = null;
+          });
+          return;
+        }
+        // FORCE LOGIN
+        final forceRes = await http.post(
+          Uri.parse('$_baseUrl/auth/app-admin/force-login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'session_id': _appAdminSessionId}),
+        );
+        final forceBody = jsonDecode(forceRes.body) as Map<String, dynamic>;
+        if (forceRes.statusCode != 200) {
+          setState(
+            () => _error =
+                forceBody['message'] as String? ?? 'Force login failed.',
+          );
+          return;
+        }
+        // treat as successful login
+        if (!mounted) return;
+        FocusScope.of(context).unfocus();
+        final appAdminToken = forceBody['token'] as String? ?? '';
+        ApiConfig.setToken(appAdminToken);
+        await AuthService.saveSession(
+          loginId: (forceBody['adminId'] as num?)?.toInt().toString() ?? '0',
+          empId: '0',
+          role: '6',
+          userType: forceBody['userType'] as String? ?? 'app_admin',
+          username: forceBody['username'] as String? ?? 'App_Admin',
+          sessionToken: appAdminToken,
+          tenantId: 'global',
+        );
+        if (!mounted) return;
+        final screen = _resolveAdminScreen(
+          forceBody['userType'] as String? ?? '',
+        );
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => screen),
+          (r) => false,
+        );
+        return;
+      }
 
       if (res.statusCode == 200) {
         if (!mounted) return;
         FocusScope.of(context).unfocus();
 
         final appAdminToken = body['token'] as String? ?? '';
-
         // ✅ Set token in ApiConfig memory BEFORE navigating
         ApiConfig.setToken(appAdminToken);
 
@@ -400,20 +498,25 @@ class _SignInTabState extends State<_SignInTab> {
           tenantId: 'global',
         );
 
-        widget.onNavigate(
-          loginId:
-              (body['adminId'] as num?)?.toInt() ??
-              0, // ← 'adminId' not 'loginId'
-          empId: 0,
-          roleId: 6,
-          userType: body['userType'] as String? ?? 'app_admin',
-          tenantId: 'global',
+        final screen = _resolveAdminScreen(body['userType'] as String? ?? '');
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => screen),
+          (r) => false,
         );
       } else {
-        setState(
-          () =>
-              _error = body['message'] as String? ?? 'OTP verification failed.',
-        );
+        final msg = body['message'] as String? ?? 'OTP verification failed.';
+        setState(() => _error = msg);
+        // If session expired, reset so user can re-login cleanly
+        if (res.statusCode == 400) {
+          await Future.delayed(const Duration(seconds: 2));
+          if (!mounted) return;
+          setState(() {
+            _isAppAdminFlow = false;
+            _appAdminSessionId = '';
+            _appAdminEmailHint = '';
+            _appAdminOtpCtrl.clear();
+          });
+        }
       }
     } catch (_) {
       setState(() => _error = 'Unexpected error. Please try again.');
@@ -430,7 +533,7 @@ class _SignInTabState extends State<_SignInTab> {
     });
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/auth/app-admin/resend'),
+        Uri.parse('$_baseUrl$_adminAuthBase/resend'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'session_id': _appAdminSessionId}),
       );
@@ -458,6 +561,19 @@ class _SignInTabState extends State<_SignInTab> {
       setState(() => _error = 'Network error.');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // ── Resolve which screen to navigate to based on userType ────────────────
+  Widget _resolveAdminScreen(String userType) {
+    switch (userType) {
+      case 'app_admin':
+        return const AppAdminMaintenanceScreen();
+      case 'super_admin':
+        // TODO: return const SuperAdminScreen();
+        return const AppAdminMaintenanceScreen(); // placeholder
+      default:
+        return const AppAdminMaintenanceScreen();
     }
   }
 
@@ -547,11 +663,30 @@ class _SignInTabState extends State<_SignInTab> {
       tenantId: tenantId,
     );
 
-    // ── Start background tracking — mobile only, non-app_admin ───────────
+    // ── FCM token sync + background tracking — mobile only, non-app_admin ─
     if (!kIsWeb &&
         userType != 'app_admin' &&
         (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS)) {
+      // Sync FCM token FIRST so notification delivery works immediately
+      try {
+        await NotifyService.instance.initializeFCM();
+        await NotifyService.instance.syncDeviceSession();
+        debugPrint('[Login] FCM token synced after login');
+
+        // Push any global notifications missed while logged out
+        final missedRes = await http.get(
+          Uri.parse('${ApiConfig.baseUrl}/api/notifications/missed-global'),
+          headers: {'Authorization': 'Bearer $token', 'x-tenant-id': tenantId},
+        );
+        final missedBody = jsonDecode(missedRes.body);
+        debugPrint(
+          '[Login] Missed notifications pushed: ${missedBody['pushed'] ?? 0}',
+        );
+      } catch (e) {
+        debugPrint('[Login] FCM sync/missed failed (non-fatal): $e');
+      }
+
       final int? sessionId =
           int.tryParse(data['sessionId']?.toString() ?? '') ??
           int.tryParse(data['session_id']?.toString() ?? '');
@@ -740,7 +875,7 @@ class _SignInTabState extends State<_SignInTab> {
 
             if (_error != null) ...[
               const SizedBox(height: 10),
-              _AppErrorBanner(message: _error!),
+              _AppErrorBanner(message: _error!, isWarning: _errorIsWarning),
             ],
             const SizedBox(height: 14),
 
@@ -864,7 +999,7 @@ class _SignInTabState extends State<_SignInTab> {
 
           if (_error != null) ...[
             const SizedBox(height: 10),
-            _AppErrorBanner(message: _error!),
+            _AppErrorBanner(message: _error!, isWarning: _errorIsWarning),
           ],
           const SizedBox(height: 20),
 
@@ -2718,12 +2853,11 @@ class _AppOrDivider extends StatelessWidget {
 
 class _AppErrorBanner extends StatelessWidget {
   final String message;
-  const _AppErrorBanner({required this.message});
-  bool get _isLockout =>
-      message.contains('locked') || message.contains('another device');
+  final bool isWarning;
+  const _AppErrorBanner({required this.message, this.isWarning = false});
   @override
   Widget build(BuildContext context) {
-    final color = _isLockout ? _amber : _errorRed;
+    final color = isWarning ? _amber : _errorRed;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -2734,9 +2868,7 @@ class _AppErrorBanner extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            _isLockout
-                ? Icons.lock_clock_outlined
-                : Icons.error_outline_rounded,
+            isWarning ? Icons.lock_clock_outlined : Icons.error_outline_rounded,
             size: 18,
             color: color,
           ),

@@ -464,7 +464,11 @@ router.post("/logout", async (req, res) => {
     // ── Invalidate session ──────────────────────────────────────────────────
     await db.query(
       `UPDATE login_master
-       SET session_token = NULL, device_logged_in = 0, session_device = NULL
+       SET session_token    = NULL,
+           device_logged_in = 0,
+           device_active    = 0,
+           fcm_token        = NULL,
+           session_device   = NULL
        WHERE login_id = ?`,
       [login_id],
     );

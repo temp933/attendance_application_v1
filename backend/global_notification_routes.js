@@ -1,15 +1,5 @@
-/**
- * global_notification_routes.js
- * ─────────────────────────────────────────────────────────────────────────────
- * REST API for the Super Admin Global Notification Console.
- *
- * Mount in server.js:
- *   const globalNotifRoutes = require("./global_notification_routes");
- *   app.use("/api/app-admin/notifications", appAdminAuthMiddleware, globalNotifRoutes);
- *
- * All routes require Super Admin authentication (appAdminAuthMiddleware).
- * ─────────────────────────────────────────────────────────────────────────────
- */
+// global_notification_routes.js
+
 
 "use strict";
 
