@@ -70,7 +70,7 @@ class EmployeeService {
   }
 
   // ================= DASHBOARD DATA =================
-  // REPLACE WITH:
+
   static Future<Map<String, dynamic>> fetchDashboardData() async {
     final response = await http.get(
       Uri.parse('$baseUrl/dashboard'),
@@ -581,6 +581,58 @@ class EmployeeService {
       throw Exception(data['message'] ?? 'Failed to fetch attendance summary');
     }
     throw Exception('Failed to fetch attendance summary');
+  }
+
+  // ================= DASHBOARD TREND (7-day) =================
+  static Future<List<Map<String, dynamic>>> fetchDashboardTrend({
+    int days = 7,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/dashboard/trend?days=$days'),
+      headers: ApiConfig.headers,
+    );
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (body['success'] == true) {
+        return List<Map<String, dynamic>>.from(body['data']);
+      }
+      throw Exception(body['message'] ?? 'Failed to fetch trend data');
+    }
+    throw Exception('Failed to fetch trend data');
+  }
+
+  // ================= DEPARTMENT BREAKDOWN =================
+  static Future<List<Map<String, dynamic>>> fetchDepartmentBreakdown() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/dashboard/department-breakdown'),
+      headers: ApiConfig.headers,
+    );
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (body['success'] == true) {
+        return List<Map<String, dynamic>>.from(body['data']);
+      }
+      throw Exception(
+        body['message'] ?? 'Failed to fetch department breakdown',
+      );
+    }
+    throw Exception('Failed to fetch department breakdown');
+  }
+
+  // ================= USER HOME DASHBOARD =================
+  static Future<Map<String, dynamic>> fetchUserDashboard(
+    String employeeId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/user-dashboard'),
+      headers: ApiConfig.headers,
+    );
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (body['success'] == true) return body;
+      throw Exception(body['message'] ?? 'Failed to fetch user dashboard');
+    }
+    throw Exception('Failed to fetch user dashboard');
   }
 }
 

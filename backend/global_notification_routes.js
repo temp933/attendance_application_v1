@@ -1,6 +1,5 @@
 // global_notification_routes.js
 
-
 "use strict";
 
 const router = require("express").Router();
@@ -24,14 +23,21 @@ router.get("/dashboard", async (req, res) => {
     const [totals] = await q(
       `SELECT
          COUNT(*)                                    AS total_notifications,
-         SUM(sent_count)                             AS total_sent,
-         SUM(delivered_count)                        AS total_delivered,
-         SUM(failed_count)                           AS total_failed,
-         SUM(opened_count)                           AS total_opened,
          SUM(status = 'scheduled')                   AS scheduled_count,
          SUM(status = 'sending')                     AS sending_count
        FROM global_notifications`,
     );
+    const [liveTotals] = await q(
+      `SELECT
+         SUM(delivery_status = 'sent')                               AS total_sent,
+         SUM(delivery_status = 'failed')                             AS total_failed,
+         SUM(delivery_status = 'sent' AND opened_at IS NOT NULL)     AS total_opened
+       FROM global_notification_logs`,
+    );
+    totals.total_sent      = liveTotals.total_sent     || 0;
+    totals.total_delivered = liveTotals.total_sent     || 0;
+    totals.total_failed    = liveTotals.total_failed   || 0;
+    totals.total_opened    = liveTotals.total_opened   || 0;
 
     const recent = await q(
       `SELECT id, title, type, scope, status,
@@ -43,9 +49,12 @@ router.get("/dashboard", async (req, res) => {
     );
 
     // Open rate (aggregate)
-    const openRate = totals.total_sent
-      ? ((totals.total_opened / totals.total_sent) * 100).toFixed(1)
-      : "0.0";
+    const openRate =
+      totals.total_sent && totals.total_opened <= totals.total_sent
+        ? ((totals.total_opened / totals.total_sent) * 100).toFixed(1)
+        : totals.total_sent
+        ? "100.0"
+        : "0.0";
 
     res.json({
       success: true,
@@ -82,7 +91,8 @@ router.post("/send", async (req, res) => {
       scope = "all",
       scope_meta = null,
       image_url = null,
-      scheduled_at = null, // ISO string or null
+      scheduled_at = null,
+      recipients = "all", // "all" | "admin_only" | "hr_only" | "admin_hr"
     } = req.body;
 
     if (!title?.trim() || !message?.trim()) {
@@ -124,8 +134,8 @@ router.post("/send", async (req, res) => {
 
     const [result] = await db.query(
       `INSERT INTO global_notifications
-         (title, message, type, scope, scope_meta, image_url, created_by, scheduled_at, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (title, message, type, scope, scope_meta, image_url, created_by, scheduled_at, status, recipients)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         title.trim(),
         message.trim(),
@@ -136,6 +146,7 @@ router.post("/send", async (req, res) => {
         createdBy,
         scheduleTs,
         status,
+        recipients,
       ],
     );
 
@@ -265,6 +276,23 @@ router.get("/:id", async (req, res) => {
     if (!notif)
       return res.status(404).json({ success: false, message: "Not found." });
 
+    // Recalculate live counts from logs (more accurate than stored counters)
+    const [liveCounts] = await q(
+      `SELECT
+         COUNT(*)                                        AS total_targets,
+         SUM(delivery_status = 'sent')                  AS sent_count,
+         SUM(delivery_status = 'failed')                AS failed_count,
+         SUM(delivery_status = 'pending')               AS pending_count,
+         SUM(delivery_status = 'sent' AND opened_at IS NOT NULL) AS opened_count
+       FROM global_notification_logs
+       WHERE notification_id = ?`,
+      [id],
+    );
+    notif.total_targets  = liveCounts.total_targets  || notif.total_targets;
+    notif.sent_count     = liveCounts.sent_count     || 0;
+    notif.failed_count   = liveCounts.failed_count   || 0;
+    notif.opened_count   = liveCounts.opened_count   || 0;
+
     // Delivery status breakdown
     const breakdown = await q(
       `SELECT delivery_status, COUNT(*) AS count
@@ -287,14 +315,20 @@ router.get("/:id", async (req, res) => {
 
     // Per-org delivery stats
     const orgStats = await q(
-      `SELECT tenant_id,
-              SUM(delivery_status = 'sent')      AS sent,
-              SUM(delivery_status = 'failed')    AS failed,
-              SUM(opened_at IS NOT NULL)         AS opened,
-              COUNT(*)                           AS total
-       FROM   global_notification_logs
-       WHERE  notification_id = ?
-       GROUP  BY tenant_id`,
+      `SELECT 
+              gnl.tenant_id,
+              t.company_name,
+              SUM(gnl.delivery_status = 'sent')      AS sent,
+              SUM(gnl.delivery_status = 'failed')    AS failed,
+              SUM(gnl.delivery_status = 'pending')   AS pending,
+               SUM(gnl.delivery_status = 'sent' AND gnl.opened_at IS NOT NULL) AS opened,
+              COUNT(*)                               AS total
+       FROM   global_notification_logs gnl
+       LEFT JOIN tenants t 
+             ON t.tenant_id COLLATE utf8mb4_unicode_ci 
+              = gnl.tenant_id COLLATE utf8mb4_unicode_ci
+       WHERE  gnl.notification_id = ?
+       GROUP  BY gnl.tenant_id, t.company_name`,
       [id],
     );
 
@@ -307,12 +341,10 @@ router.get("/:id", async (req, res) => {
     });
   } catch (err) {
     console.error("[global-notif-routes] GET /:id:", err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to fetch notification detail.",
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch notification detail.",
+    });
   }
 });
 
@@ -453,8 +485,8 @@ router.get("/analytics/summary", async (req, res) => {
 // Dry-run: how many employees / orgs would be targeted?
 router.post("/preview-targets", async (req, res) => {
   try {
-    const { scope, scope_meta } = req.body;
-    const targets = await resolveTargets(scope, scope_meta || {});
+    const { scope, scope_meta, recipients = "all" } = req.body;
+    const targets = await resolveTargets(scope, scope_meta || {}, recipients);
 
     const tenantSet = [...new Set(targets.map((t) => t.tenant_id))];
 
@@ -493,6 +525,23 @@ router.post("/mark-opened", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to mark opened." });
+  }
+});
+
+// ─── GET /orgs ────────────────────────────────────────────────────────────────
+// Returns tenant list for the org picker dropdown.
+router.get("/orgs", async (req, res) => {
+  try {
+    const rows = await q(
+      `SELECT tenant_id, company_name, status, plan_id
+       FROM   tenants
+       WHERE  status IN ('active', 'trial', 'expired')
+       ORDER  BY company_name ASC`,
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error("[global-notif-routes] GET /orgs:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch orgs." });
   }
 });
 

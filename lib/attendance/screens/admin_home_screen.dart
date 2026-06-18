@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../common/utils/greeting_util.dart';
 import '../services/employee_service.dart';
-import 'admin_manage_user.dart';
-import '../providers/api_config.dart';
 
-// ── Design tokens (matches your existing screens) ─────────────────────────────
+// ── Design tokens ───────────────────────────────────────────────────────────
 const _primary = Color(0xFF1A56DB);
 const _primaryLight = Color(0xFFEEF2FF);
 const _surface = Color(0xFFF8FAFF);
@@ -29,7 +27,18 @@ class AdminHomeScreen extends StatefulWidget {
   final String employeeId;
   final void Function(int index)? onNavigate;
 
-  const AdminHomeScreen({super.key, required this.employeeId, this.onNavigate});
+  /// Role gates — pass these from wherever you already resolve permissions
+  /// (e.g. PermissionService.canView('leave_management') etc.)
+  final bool canViewApprovals;
+  final bool canViewDepartmentBreakdown;
+
+  const AdminHomeScreen({
+    super.key,
+    required this.employeeId,
+    this.onNavigate,
+    this.canViewApprovals = true,
+    this.canViewDepartmentBreakdown = true,
+  });
 
   @override
   State<AdminHomeScreen> createState() => _AdminHomeScreenState();
@@ -46,7 +55,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int absentCount = 0;
   int lateEntryCount = 0;
   int onSiteCount = 0;
-  int pendingCount = 0;
+  bool hasSiteModule = false;
+  int pendingLeaveCount = 0;
+  int pendingProfileCount = 0;
+
+  List<Map<String, dynamic>> _trend = [];
+  List<Map<String, dynamic>> _deptBreakdown = [];
 
   DateTime? _lastFetched;
 
@@ -62,13 +76,23 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     if (isRefresh) setState(() => _isRefreshing = true);
 
     try {
-      final results = await Future.wait([
+      final futures = <Future>[
         EmployeeService.fetchEmployeeName(int.parse(widget.employeeId)),
         EmployeeService.fetchDashboardData(),
-      ]);
+        EmployeeService.fetchDashboardTrend(days: 7),
+      ];
+      if (widget.canViewDepartmentBreakdown) {
+        futures.add(EmployeeService.fetchDepartmentBreakdown());
+      }
+
+      final results = await Future.wait(futures);
 
       final name = results[0] as String;
       final dashboard = results[1] as Map<String, dynamic>;
+      final trend = results[2] as List<Map<String, dynamic>>;
+      final dept = widget.canViewDepartmentBreakdown
+          ? results[3] as List<Map<String, dynamic>>
+          : <Map<String, dynamic>>[];
 
       if (!mounted) return;
       setState(() {
@@ -78,7 +102,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         absentCount = (dashboard['absent'] as num?)?.toInt() ?? 0;
         lateEntryCount = (dashboard['lateEntry'] as num?)?.toInt() ?? 0;
         onSiteCount = (dashboard['activeSites'] as num?)?.toInt() ?? 0;
-        pendingCount = (dashboard['pendingRequests'] as num?)?.toInt() ?? 0;
+        hasSiteModule = dashboard['hasSiteModule'] == true;
+        pendingLeaveCount = (dashboard['pendingLeave'] as num?)?.toInt() ?? 0;
+        pendingProfileCount =
+            (dashboard['pendingProfile'] as num?)?.toInt() ?? 0;
+        _trend = trend;
+        _deptBreakdown = dept;
         _isLoading = false;
         _isRefreshing = false;
         _lastFetched = DateTime.now();
@@ -87,7 +116,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       debugPrint('AdminHome _fetchAll error: $e');
       if (!mounted) return;
       setState(() {
-        _adminName = 'Admin';
+        _adminName = _adminName.isEmpty ? 'Admin' : _adminName;
         _isLoading = false;
         _isRefreshing = false;
       });
@@ -120,10 +149,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 onRefresh: () => _fetchAll(isRefresh: true),
                 child: CustomScrollView(
                   slivers: [
-                    // ── Top bar ──────────────────────────────────────────────
                     SliverToBoxAdapter(child: _buildTopBar()),
 
-                    // ── Stat cards ───────────────────────────────────────────
                     SliverToBoxAdapter(
                       child: _SectionHeader(
                         label: "Today's overview",
@@ -204,28 +231,111 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                             label: 'Late entry',
                             valueColor: _warning,
                           ),
-                          _StatCard(
-                            icon: Icons.location_on_outlined,
-                            iconBg: _indigoLight,
-                            iconColor: _indigo,
-                            value: onSiteCount.toString(),
-                            label: 'On-site today',
-                            valueColor: _indigo,
-                          ),
+                          if (hasSiteModule)
+                            _StatCard(
+                              icon: Icons.location_on_outlined,
+                              iconBg: _indigoLight,
+                              iconColor: _indigo,
+                              value: onSiteCount.toString(),
+                              label: 'On-site today',
+                              valueColor: _indigo,
+                            )
+                          else
+                            _StatCard(
+                              icon: Icons.insights_outlined,
+                              iconBg: _indigoLight,
+                              iconColor: _indigo,
+                              value: totalEmployees > 0
+                                  ? '${((presentCount / totalEmployees) * 100).round()}%'
+                                  : '0%',
+                              label: 'Attendance rate',
+                              valueColor: _indigo,
+                            ),
                           _StatCard(
                             icon: Icons.beach_access_outlined,
                             iconBg: _purpleLight,
                             iconColor: _purple,
-                            value: pendingCount.toString(),
+                            value: (pendingLeaveCount + pendingProfileCount)
+                                .toString(),
                             label: 'Pending requests',
                             valueColor: _purple,
+                            onTap: widget.canViewApprovals
+                                ? () => widget.onNavigate?.call(4)
+                                : null,
                           ),
                         ]),
                       ),
                     ),
 
-                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                    // ── Attendance trend chart ──────────────────────────────
+                    SliverToBoxAdapter(
+                      child: _SectionHeader(label: 'Attendance trend · 7 days'),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                        child: _TrendCard(trend: _trend),
+                      ),
+                    ),
+
+                    // ── Pending approvals ───────────────────────────────────
+                    if (widget.canViewApprovals) ...[
+                      SliverToBoxAdapter(
+                        child: _SectionHeader(
+                          label: 'Pending approvals',
+                          trailing: GestureDetector(
+                            onTap: () => widget.onNavigate?.call(4),
+                            child: const Text(
+                              'View all',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                          child: Column(
+                            children: [
+                              _ApprovalRow(
+                                icon: Icons.beach_access_outlined,
+                                label: 'Leave requests',
+                                count: pendingLeaveCount,
+                                onTap: () => widget.onNavigate?.call(4),
+                              ),
+                              const SizedBox(height: 8),
+                              _ApprovalRow(
+                                icon: Icons.person_search_outlined,
+                                label: 'Profile update requests',
+                                count: pendingProfileCount,
+                                onTap: () => widget.onNavigate?.call(5),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    // ── Department breakdown ────────────────────────────────
+                    if (widget.canViewDepartmentBreakdown &&
+                        _deptBreakdown.isNotEmpty) ...[
+                      SliverToBoxAdapter(
+                        child: _SectionHeader(label: 'Department breakdown'),
+                      ),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                          child: _DeptBreakdownCard(rows: _deptBreakdown),
+                        ),
+                      ),
+                    ],
+
+                    const SliverPadding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 32),
                     ),
                   ],
                 ),
@@ -236,7 +346,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   // ── Top bar widget ─────────────────────────────────────────────────────────
   Widget _buildTopBar() {
-    // REPLACE WITH:
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: const BoxDecoration(
@@ -245,7 +354,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       ),
       child: Row(
         children: [
-          // Greeting
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,8 +378,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           const SizedBox(width: 12),
 
           const SizedBox(width: 8),
-
-          // Notification bell
         ],
       ),
     );
@@ -282,7 +388,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 // SHARED WIDGETS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ── Section header ─────────────────────────────────────────────────────────────
 class _SectionHeader extends StatelessWidget {
   final String label;
   final Widget? trailing;
@@ -310,7 +415,6 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-// ── Stat card ──────────────────────────────────────────────────────────────────
 class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color iconBg;
@@ -352,7 +456,6 @@ class _StatCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Icon + arrow row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -373,7 +476,6 @@ class _StatCard extends StatelessWidget {
                   ),
               ],
             ),
-            // Value + label
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -402,21 +504,17 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ── Quick nav tile ─────────────────────────────────────────────────────────────
-class _NavTile extends StatelessWidget {
+// ── Pending approval row ───────────────────────────────────────────────────
+class _ApprovalRow extends StatelessWidget {
   final IconData icon;
-  final Color iconBg;
-  final Color iconColor;
   final String label;
-  final String sub;
+  final int count;
   final VoidCallback? onTap;
 
-  const _NavTile({
+  const _ApprovalRow({
     required this.icon,
-    required this.iconBg,
-    required this.iconColor,
     required this.label,
-    required this.sub,
+    required this.count,
     this.onTap,
   });
 
@@ -427,53 +525,223 @@ class _NavTile extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: _card,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: _border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         child: Row(
           children: [
             Container(
-              width: 36,
-              height: 36,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(10),
+                color: _surface,
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, size: 18, color: iconColor),
+              child: Icon(icon, size: 16, color: _textMid),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     label,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: _textDark,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    sub,
-                    style: const TextStyle(fontSize: 10, color: _textLight),
-                    overflow: TextOverflow.ellipsis,
+                    '$count awaiting review',
+                    style: const TextStyle(fontSize: 11, color: _textMid),
                   ),
                 ],
               ),
             ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: _textLight,
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Attendance trend mini bar chart (no extra package needed) ──────────────
+class _TrendCard extends StatelessWidget {
+  final List<Map<String, dynamic>> trend;
+  const _TrendCard({required this.trend});
+
+  @override
+  Widget build(BuildContext context) {
+    if (trend.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _border),
+        ),
+        padding: const EdgeInsets.all(20),
+        alignment: Alignment.center,
+        child: const Text(
+          'No attendance data yet',
+          style: TextStyle(fontSize: 12, color: _textLight),
+        ),
+      );
+    }
+
+    final maxVal = trend
+        .map((e) => (e['present'] as num?)?.toInt() ?? 0)
+        .fold<int>(0, (a, b) => a > b ? a : b);
+    final safeMax = maxVal == 0 ? 1 : maxVal;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 10),
+      child: SizedBox(
+        height: 140,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: trend.map((e) {
+            final present = (e['present'] as num?)?.toInt() ?? 0;
+            final dateStr = e['date']?.toString() ?? '';
+            final dayLabel = _shortDay(dateStr);
+            final barHeight = 96 * (present / safeMax);
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      present.toString(),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: _textMid,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      height: barHeight.clamp(4, 96),
+                      decoration: BoxDecoration(
+                        color: _primary,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      dayLabel,
+                      style: const TextStyle(fontSize: 10, color: _textLight),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  String _shortDay(String isoDate) {
+    try {
+      final d = DateTime.parse(isoDate);
+      const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return names[d.weekday - 1];
+    } catch (_) {
+      return '';
+    }
+  }
+}
+
+// ── Department breakdown progress list ──────────────────────────────────────
+class _DeptBreakdownCard extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  const _DeptBreakdownCard({required this.rows});
+
+  Color _colorFor(int pct) {
+    if (pct >= 90) return _success;
+    if (pct >= 75) return _primary;
+    return _warning;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 4),
+      child: Column(
+        children: rows.map((r) {
+          final name = r['departmentName']?.toString() ?? 'Unknown';
+          final pct = (r['percentage'] as num?)?.toInt() ?? 0;
+          final color = _colorFor(pct);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: _textDark,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      '$pct%',
+                      style: const TextStyle(fontSize: 12, color: _textMid),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: (pct / 100).clamp(0.0, 1.0),
+                    minHeight: 6,
+                    backgroundColor: _surface,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }

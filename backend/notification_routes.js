@@ -316,9 +316,24 @@ router.get("/missed-global", async (req, res) => {
              (notification_id, tenant_id, emp_id, fcm_token, delivery_status, sent_at)
            VALUES (?, ?, ?, ?, 'sent', NOW())
            ON DUPLICATE KEY UPDATE
-             delivery_status = 'sent', fcm_token = VALUES(fcm_token),
-             failure_reason = NULL, sent_at = NOW()`,
+             delivery_status = 'sent',
+             fcm_token       = VALUES(fcm_token),
+             failure_reason  = NULL,
+             sent_at         = COALESCE(sent_at, NOW())`,
           [notif.id, tenantId, empId, fcmToken],
+        );
+        // Also update the parent notification's counters
+        await db.query(
+          `UPDATE global_notifications
+           SET sent_count     = (SELECT COUNT(*) FROM global_notification_logs
+                                 WHERE notification_id = ? AND delivery_status = 'sent'),
+               total_targets  = (SELECT COUNT(*) FROM global_notification_logs
+                                 WHERE notification_id = ?),
+               opened_count   = (SELECT COUNT(*) FROM global_notification_logs
+                                 WHERE notification_id = ? AND delivery_status = 'sent'
+                                   AND opened_at IS NOT NULL)
+           WHERE id = ?`,
+          [notif.id, notif.id, notif.id, notif.id],
         );
         pushed++;
       } catch (err) {

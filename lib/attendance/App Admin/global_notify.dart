@@ -73,7 +73,8 @@ class GnNotification {
     imageUrl: j['image_url'],
   );
 
-  double get openRate => sentCount > 0 ? (openedCount / sentCount * 100) : 0.0;
+  double get openRate =>
+      sentCount > 0 ? (openedCount / sentCount * 100).clamp(0.0, 100.0) : 0.0;
   double get deliveryRate =>
       totalTargets > 0 ? (sentCount / totalTargets * 100) : 0.0;
 }
@@ -232,6 +233,9 @@ class GnService {
 
   Future<Map<String, dynamic>> dashboard() => _get('/dashboard', (d) => d);
 
+  Future<List<Map<String, dynamic>>> orgs() =>
+      _get('/orgs', (d) => List<Map<String, dynamic>>.from(d['data']));
+
   Future<Map<String, dynamic>> history({
     int page = 1,
     int limit = 20,
@@ -266,11 +270,13 @@ class GnService {
     Map<String, dynamic>? scopeMeta,
     String? imageUrl,
     String? scheduledAt,
+    String recipients = 'all',
   }) => _post('/send', {
     'title': title,
     'message': message,
     'type': type,
     'scope': scope,
+    'recipients': recipients,
     if (scopeMeta != null) 'scope_meta': scopeMeta,
     if (imageUrl != null) 'image_url': imageUrl,
     if (scheduledAt != null) 'scheduled_at': scheduledAt,
@@ -466,6 +472,7 @@ class _StatCard extends StatelessWidget {
   final String? sub;
 
   const _StatCard({
+    super.key,
     required this.label,
     required this.value,
     required this.color,
@@ -904,14 +911,36 @@ class _GlobalNotifyConsoleState extends State<GlobalNotifyConsole> {
     _svc = GnService(baseUrl: ApiConfig.baseUrl, token: ApiConfig.getToken());
   }
 
+  final _overviewKey = GlobalKey<GnOverviewScreenState>();
+  final _historyKey = GlobalKey<_GnHistoryScreenState>();
+  final _scheduledKey = GlobalKey<_GnScheduledScreenState>();
+  final _analyticsKey = GlobalKey<_GnAnalyticsScreenState>();
+
+  void _refreshCurrentTab(int i) {
+    switch (i) {
+      case 0:
+        _overviewKey.currentState?._load();
+        break;
+      case 2:
+        _historyKey.currentState?._load();
+        break;
+      case 3:
+        _scheduledKey.currentState?._load();
+        break;
+      case 4:
+        _analyticsKey.currentState?._load();
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final screens = [
-      GnOverviewScreen(svc: _svc),
+      GnOverviewScreen(key: _overviewKey, svc: _svc),
       GnSendScreen(svc: _svc),
-      GnHistoryScreen(svc: _svc),
-      GnScheduledScreen(svc: _svc),
-      GnAnalyticsScreen(svc: _svc),
+      GnHistoryScreen(key: _historyKey, svc: _svc),
+      GnScheduledScreen(key: _scheduledKey, svc: _svc),
+      GnAnalyticsScreen(key: _analyticsKey, svc: _svc),
     ];
 
     return Scaffold(
@@ -974,7 +1003,12 @@ class _GlobalNotifyConsoleState extends State<GlobalNotifyConsole> {
                       final t = _tabs[i];
                       final sel = _tab == i;
                       return GestureDetector(
-                        onTap: () => setState(() => _tab = i),
+                        onTap: () {
+                          if (_tab == i) {
+                            _refreshCurrentTab(i);
+                          }
+                          setState(() => _tab = i);
+                        },
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 160),
                           margin: const EdgeInsets.only(right: 6),
@@ -1030,7 +1064,7 @@ class _GlobalNotifyConsoleState extends State<GlobalNotifyConsole> {
 
 class GnOverviewScreen extends StatefulWidget {
   final GnService svc;
-  const GnOverviewScreen({required this.svc});
+  const GnOverviewScreen({super.key, required this.svc});
 
   @override
   State<GnOverviewScreen> createState() => GnOverviewScreenState();
@@ -1041,6 +1075,7 @@ class GnOverviewScreenState extends State<GnOverviewScreen> {
   List<GnNotification> _recent = [];
   bool _loading = true;
   String? _errMsg;
+  DateTime _lastUpdated = DateTime.now();
 
   @override
   void initState() {
@@ -1061,11 +1096,13 @@ class GnOverviewScreenState extends State<GnOverviewScreen> {
             .map((e) => GnNotification.fromJson(e))
             .toList();
         _loading = false;
+        _lastUpdated = DateTime.now();
       });
     } catch (e) {
       setState(() {
         _errMsg = e.toString();
         _loading = false;
+        _lastUpdated = DateTime.now();
       });
     }
   }
@@ -1175,7 +1212,7 @@ class GnOverviewScreenState extends State<GnOverviewScreen> {
     MaterialPageRoute(
       builder: (_) => _DetailScreen(svc: widget.svc, id: id),
     ),
-  );
+  ).then((_) => _load());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1193,17 +1230,22 @@ class _GnSendScreenState extends State<GnSendScreen> {
   final _titleCtrl = TextEditingController();
   final _msgCtrl = TextEditingController();
   final _imgCtrl = TextEditingController();
-  final _tenantCtrl = TextEditingController();
   final _planCtrl = TextEditingController();
   final _versionCtrl = TextEditingController();
 
   String _type = 'general';
   String _scope = 'all';
+  String _recipients = 'all'; // NEW
   bool _schedule = false;
   DateTime? _scheduledAt;
   bool _sending = false;
   GnTargetPreview? _preview;
   bool _previewing = false;
+
+  // Org picker state
+  List<Map<String, dynamic>> _orgs = [];
+  List<Map<String, dynamic>> _selectedOrgs = [];
+  bool _orgsLoading = false;
 
   final _types = [
     'general',
@@ -1221,14 +1263,32 @@ class _GnSendScreenState extends State<GnSendScreen> {
     'by_version',
   ];
 
+  static const _recipientOptions = [
+    ('all', 'All Employees', Icons.people_outline),
+    ('admin_hr', 'Admin & HR only', Icons.admin_panel_settings_outlined),
+    ('admin_only', 'Admin only', Icons.manage_accounts_outlined),
+    ('hr_only', 'HR only', Icons.badge_outlined),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOrgs();
+  }
+
+  Future<void> _loadOrgs() async {
+    setState(() => _orgsLoading = true);
+    try {
+      final list = await widget.svc.orgs();
+      setState(() => _orgs = list);
+    } catch (_) {}
+    setState(() => _orgsLoading = false);
+  }
+
   Map<String, dynamic>? get _scopeMeta {
     switch (_scope) {
       case 'selected':
-        final ids = _tenantCtrl.text
-            .split(',')
-            .map((e) => e.trim())
-            .where((e) => e.isNotEmpty)
-            .toList();
+        final ids = _selectedOrgs.map((o) => o['tenant_id'] as String).toList();
         return ids.isEmpty ? null : {'tenant_ids': ids};
       case 'by_plan':
         final p = _planCtrl.text.trim();
@@ -1261,6 +1321,10 @@ class _GnSendScreenState extends State<GnSendScreen> {
       _snack('Title and message are required');
       return;
     }
+    if (_scope == 'selected' && _selectedOrgs.isEmpty) {
+      _snack('Please select at least one organisation');
+      return;
+    }
     setState(() => _sending = true);
     try {
       await widget.svc.send(
@@ -1273,6 +1337,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
         scheduledAt: _schedule && _scheduledAt != null
             ? _scheduledAt!.toIso8601String()
             : null,
+        recipients: _recipients, // NEW
       );
       _snack(
         _schedule
@@ -1287,6 +1352,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
         _preview = null;
         _schedule = false;
         _scheduledAt = null;
+        _selectedOrgs = [];
       });
     } catch (e) {
       _snack('Failed: $e');
@@ -1344,6 +1410,284 @@ class _GnSendScreenState extends State<GnSendScreen> {
     );
   }
 
+  Future<void> _showOrgPicker() async {
+    final searchCtrl = TextEditingController();
+    List<Map<String, dynamic>> filtered = List.from(_orgs);
+    final tempSelected = Set<String>.from(
+      _selectedOrgs.map((o) => o['tenant_id'] as String),
+    );
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            void doFilter(String q) {
+              setModal(() {
+                filtered = q.isEmpty
+                    ? List.from(_orgs)
+                    : _orgs
+                          .where(
+                            (o) =>
+                                (o['company_name'] as String)
+                                    .toLowerCase()
+                                    .contains(q.toLowerCase()) ||
+                                (o['tenant_id'] as String)
+                                    .toLowerCase()
+                                    .contains(q.toLowerCase()),
+                          )
+                          .toList();
+              });
+            }
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.75,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              expand: false,
+              builder: (_, scrollCtrl) => Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'Select Organisations',
+                              style: TextStyle(
+                                color: _textPri,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const Spacer(),
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedOrgs = _orgs
+                                      .where(
+                                        (o) => tempSelected.contains(
+                                          o['tenant_id'],
+                                        ),
+                                      )
+                                      .toList();
+                                  _preview = null;
+                                });
+                                Navigator.pop(ctx);
+                              },
+                              child: const Text(
+                                'Done',
+                                style: TextStyle(
+                                  color: _accent,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: _bg,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: _borderCol),
+                          ),
+                          child: TextField(
+                            controller: searchCtrl,
+                            onChanged: doFilter,
+                            style: const TextStyle(
+                              color: _textPri,
+                              fontSize: 13,
+                            ),
+                            decoration: const InputDecoration(
+                              hintText: 'Search org name or ID...',
+                              hintStyle: TextStyle(
+                                color: _textMut,
+                                fontSize: 13,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search,
+                                color: _textMut,
+                                size: 18,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Text(
+                              '${tempSelected.length} selected',
+                              style: const TextStyle(
+                                color: _accent,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const Spacer(),
+                            if (tempSelected.isNotEmpty)
+                              GestureDetector(
+                                onTap: () =>
+                                    setModal(() => tempSelected.clear()),
+                                child: const Text(
+                                  'Clear all',
+                                  style: TextStyle(color: _error, fontSize: 12),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(height: 1, color: _borderCol),
+                  Expanded(
+                    child: _orgsLoading
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: _accent,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : filtered.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No organisations found',
+                              style: TextStyle(color: _textMut),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: scrollCtrl,
+                            itemCount: filtered.length,
+                            itemBuilder: (_, i) {
+                              final org = filtered[i];
+                              final tid = org['tenant_id'] as String;
+                              final isSelected = tempSelected.contains(tid);
+                              final status = org['status'] as String? ?? '';
+                              final statusColor = status == 'active'
+                                  ? _success
+                                  : status == 'trial'
+                                  ? _warning
+                                  : _textMut;
+                              return InkWell(
+                                onTap: () => setModal(() {
+                                  if (isSelected)
+                                    tempSelected.remove(tid);
+                                  else
+                                    tempSelected.add(tid);
+                                }),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? _accent.withOpacity(0.05)
+                                        : Colors.transparent,
+                                    border: Border(
+                                      bottom: BorderSide(color: _divider),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 20,
+                                        height: 20,
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? _accent
+                                              : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? _accent
+                                                : _borderCol,
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                        child: isSelected
+                                            ? const Icon(
+                                                Icons.check,
+                                                color: _white,
+                                                size: 13,
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              org['company_name'] as String? ??
+                                                  tid,
+                                              style: const TextStyle(
+                                                color: _textPri,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            Text(
+                                              tid,
+                                              style: const TextStyle(
+                                                color: _textMut,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 7,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: statusColor.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          status,
+                                          style: TextStyle(
+                                            color: statusColor,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    searchCtrl.dispose();
+  }
+
   InputDecoration _fieldDec(String label, {String? hint, IconData? icon}) =>
       InputDecoration(
         labelText: label,
@@ -1374,6 +1718,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
         ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // ── Type picker ──────────────────────────────────────────────
             _SectionHeader('Notification Type', icon: Icons.category_outlined),
             const SizedBox(height: 10),
             SizedBox(
@@ -1428,7 +1773,52 @@ class _GnSendScreenState extends State<GnSendScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            _SectionHeader('Target Audience', icon: Icons.people_outline),
+
+            // ── Recipients picker (NEW) ───────────────────────────────────
+            _SectionHeader('Send To', icon: Icons.group_outlined),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _recipientOptions.map((opt) {
+                final (value, label, icon) = opt;
+                final sel = _recipients == value;
+                return GestureDetector(
+                  onTap: () => setState(() => _recipients = value),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: sel ? _accent : _white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: sel ? _accent : _borderCol),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, color: sel ? _white : _textMut, size: 14),
+                        const SizedBox(width: 6),
+                        Text(
+                          label,
+                          style: TextStyle(
+                            color: sel ? _white : _textSec,
+                            fontSize: 12,
+                            fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 18),
+
+            // ── Target Audience ──────────────────────────────────────────
+            _SectionHeader('Target Audience', icon: Icons.business_outlined),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -1439,6 +1829,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
                   onTap: () => setState(() {
                     _scope = s;
                     _preview = null;
+                    if (s != 'selected') _selectedOrgs = [];
                   }),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
@@ -1464,18 +1855,98 @@ class _GnSendScreenState extends State<GnSendScreen> {
               }).toList(),
             ),
             const SizedBox(height: 12),
+
+            // ── Org picker (replaces raw text field) ─────────────────────
             if (_scope == 'selected') ...[
-              TextField(
-                controller: _tenantCtrl,
-                style: const TextStyle(color: _textPri, fontSize: 13),
-                decoration: _fieldDec(
-                  'Tenant IDs (comma separated)',
-                  hint: 'TENANT1, TENANT2, ...',
-                  icon: Icons.business_outlined,
+              GestureDetector(
+                onTap: _showOrgPicker,
+                child: _LCard(
+                  borderColor: _accent.withOpacity(0.3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 13,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.business_outlined,
+                        color: _accent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _selectedOrgs.isEmpty
+                            ? const Text(
+                                'Tap to select organisations...',
+                                style: TextStyle(color: _textMut, fontSize: 13),
+                              )
+                            : Text(
+                                _selectedOrgs.length == 1
+                                    ? _selectedOrgs.first['company_name'] ??
+                                          _selectedOrgs.first['tenant_id']
+                                    : '${_selectedOrgs.length} organisations selected',
+                                style: const TextStyle(
+                                  color: _textPri,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                      ),
+                      Icon(Icons.arrow_forward_ios, color: _textMut, size: 13),
+                    ],
+                  ),
                 ),
               ),
+              if (_selectedOrgs.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _selectedOrgs.map((o) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _accent.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: _accent.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            o['company_name'] ?? o['tenant_id'],
+                            style: const TextStyle(
+                              color: _accent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: () => setState(() {
+                              _selectedOrgs.removeWhere(
+                                (x) => x['tenant_id'] == o['tenant_id'],
+                              );
+                              _preview = null;
+                            }),
+                            child: const Icon(
+                              Icons.close,
+                              size: 12,
+                              color: _accent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
               const SizedBox(height: 10),
             ],
+
             if (_scope == 'by_plan') ...[
               TextField(
                 controller: _planCtrl,
@@ -1500,6 +1971,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
               ),
               const SizedBox(height: 10),
             ],
+
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
@@ -1542,7 +2014,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
                           children: [
                             TextSpan(
                               text:
-                                  '${_fmt(_preview!.totalEmployees)} employees',
+                                  '${_fmt(_preview!.totalEmployees)} recipients',
                               style: const TextStyle(
                                 color: _accent,
                                 fontWeight: FontWeight.w700,
@@ -1550,13 +2022,12 @@ class _GnSendScreenState extends State<GnSendScreen> {
                             ),
                             const TextSpan(text: ' across '),
                             TextSpan(
-                              text: '${_preview!.totalOrgs} organizations',
+                              text: '${_preview!.totalOrgs} organisations',
                               style: const TextStyle(
                                 color: _accent,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            const TextSpan(text: ' will be targeted'),
                           ],
                         ),
                       ),
@@ -1566,7 +2037,9 @@ class _GnSendScreenState extends State<GnSendScreen> {
               ),
               const SizedBox(height: 10),
             ],
+
             const SizedBox(height: 8),
+            // ── Content ──────────────────────────────────────────────────
             _SectionHeader('Content', icon: Icons.edit_outlined),
             const SizedBox(height: 10),
             TextField(
@@ -1601,6 +2074,8 @@ class _GnSendScreenState extends State<GnSendScreen> {
               ),
             ),
             const SizedBox(height: 16),
+
+            // ── Schedule toggle ───────────────────────────────────────────
             _LCard(
               borderColor: _warning.withOpacity(0.35),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -1619,7 +2094,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
                   const Spacer(),
                   Switch(
                     value: _schedule,
-                    activeColor: _accent,
+                    activeThumbColor: _accent,
                     onChanged: (v) => setState(() => _schedule = v),
                   ),
                 ],
@@ -1666,6 +2141,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
               ),
             ],
             const SizedBox(height: 16),
+
             if (_type == 'emergency_alert') ...[
               _LCard(
                 borderColor: _error.withOpacity(0.4),
@@ -1679,8 +2155,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Emergency alerts are delivered with high priority'
-                        ' and may override DND settings.',
+                        'Emergency alerts are delivered with high priority and may override DND settings.',
                         style: TextStyle(color: _error, fontSize: 12),
                       ),
                     ),
@@ -1689,6 +2164,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
               ),
               const SizedBox(height: 16),
             ],
+
             SizedBox(
               width: double.infinity,
               height: 48,
@@ -1748,27 +2224,19 @@ class _GnSendScreenState extends State<GnSendScreen> {
 
   @override
   void dispose() {
-    for (final c in [
-      _titleCtrl,
-      _msgCtrl,
-      _imgCtrl,
-      _tenantCtrl,
-      _planCtrl,
-      _versionCtrl,
-    ]) {
+    for (final c in [_titleCtrl, _msgCtrl, _imgCtrl, _planCtrl, _versionCtrl]) {
       c.dispose();
     }
     super.dispose();
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 8 — HISTORY SCREEN  ← ALL FIXES HERE
 // ─────────────────────────────────────────────────────────────────────────────
 
 class GnHistoryScreen extends StatefulWidget {
   final GnService svc;
-  const GnHistoryScreen({required this.svc});
+  const GnHistoryScreen({super.key, required this.svc});
   @override
   State<GnHistoryScreen> createState() => _GnHistoryScreenState();
 }
@@ -2057,19 +2525,27 @@ class _GnHistoryScreenState extends State<GnHistoryScreen> {
               : _errMsg != null
               ? _ErrorView(message: _errMsg!, onRetry: _load)
               : _items.isEmpty
-              ? const _EmptyState()
-              : ListView.separated(
-                  padding: const EdgeInsets.all(14),
-                  itemCount: _items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (ctx, i) => _NotifTile(
-                    _items[i],
-                    onTap: () => Navigator.push(
-                      ctx,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            _DetailScreen(svc: widget.svc, id: _items[i].id),
-                      ),
+              ? RefreshIndicator(
+                  onRefresh: _load,
+                  color: _accent,
+                  child: ListView(children: const [_EmptyState()]),
+                )
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  color: _accent,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(14),
+                    itemCount: _items.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (ctx, i) => _NotifTile(
+                      _items[i],
+                      onTap: () => Navigator.push(
+                        ctx,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              _DetailScreen(svc: widget.svc, id: _items[i].id),
+                        ),
+                      ).then((_) => _load(reset: true)),
                     ),
                   ),
                 ),
@@ -2134,7 +2610,7 @@ class _GnHistoryScreenState extends State<GnHistoryScreen> {
 
 class GnScheduledScreen extends StatefulWidget {
   final GnService svc;
-  const GnScheduledScreen({required this.svc});
+  const GnScheduledScreen({super.key, required this.svc});
   @override
   State<GnScheduledScreen> createState() => _GnScheduledScreenState();
 }
@@ -2438,7 +2914,7 @@ class _GnScheduledScreenState extends State<GnScheduledScreen> {
 
 class GnAnalyticsScreen extends StatefulWidget {
   final GnService svc;
-  const GnAnalyticsScreen({required this.svc});
+  const GnAnalyticsScreen({super.key, required this.svc});
   @override
   State<GnAnalyticsScreen> createState() => _GnAnalyticsScreenState();
 }
@@ -2665,18 +3141,36 @@ class _DetailScreen extends StatefulWidget {
   State<_DetailScreen> createState() => _DetailScreenState();
 }
 
-class _DetailScreenState extends State<_DetailScreen> {
+class _DetailScreenState extends State<_DetailScreen>
+    with WidgetsBindingObserver {
   GnNotification? _n;
   List<Map<String, dynamic>> _breakdown = [];
   List<Map<String, dynamic>> _orgStats = [];
   bool _loading = true;
   String? _errMsg;
   bool _retrying = false;
-
+  Timer? _autoRefresh;
+  DateTime _lastUpdated = DateTime.now();
   @override
   void initState() {
     super.initState();
     _load();
+    _autoRefresh = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _load();
+    });
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    _autoRefresh?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -2696,6 +3190,7 @@ class _DetailScreenState extends State<_DetailScreen> {
       setState(() {
         _errMsg = e.toString();
         _loading = false;
+        _lastUpdated = DateTime.now();
       });
     }
   }
@@ -2734,19 +3229,33 @@ class _DetailScreenState extends State<_DetailScreen> {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: const BackButton(color: _textPri),
-        title: const Text(
-          'Notification Detail',
-          style: TextStyle(
-            color: _textPri,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Notification Detail',
+              style: TextStyle(
+                color: _textPri,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              'Updated ${DateFormat('h:mm:ss a').format(_lastUpdated)}',
+              style: const TextStyle(color: _textMut, fontSize: 10),
+            ),
+          ],
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: const Color(0xFFE8EAED)),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: _accent, size: 20),
+            onPressed: _loading ? null : _load,
+            tooltip: 'Refresh',
+          ),
           if (_n?.status == 'sent' && (_n?.failedCount ?? 0) > 0)
             TextButton.icon(
               onPressed: _retrying ? null : _retry,
@@ -2846,7 +3355,13 @@ class _DetailScreenState extends State<_DetailScreen> {
             const SizedBox(width: 8),
             Expanded(child: _MiniStat('Sent', _fmt(n.sentCount), _success)),
             const SizedBox(width: 8),
-            Expanded(child: _MiniStat('Failed', _fmt(n.failedCount), _error)),
+            Expanded(
+              child: _MiniStat(
+                'Pending',
+                _fmt(n.totalTargets - n.sentCount - n.failedCount),
+                _warning,
+              ),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: _MiniStat(
@@ -2950,7 +3465,9 @@ class _DetailScreenState extends State<_DetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      o['tenant_id'] as String? ?? '',
+                      (o['company_name'] as String?)?.isNotEmpty == true
+                          ? o['company_name'] as String
+                          : o['tenant_id'] as String? ?? '',
                       style: const TextStyle(
                         color: _textPri,
                         fontSize: 13,
@@ -2964,6 +3481,12 @@ class _DetailScreenState extends State<_DetailScreen> {
                           icon: Icons.send_outlined,
                           value: '$sent/$total',
                           color: _success,
+                        ),
+                        const SizedBox(width: 12),
+                        _StatPill(
+                          icon: Icons.hourglass_empty_outlined,
+                          value: '${o['pending'] ?? 0}',
+                          color: _warning,
                         ),
                         const SizedBox(width: 12),
                         _StatPill(
@@ -3016,7 +3539,7 @@ class _MiniStat extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  const _MiniStat(this.label, this.value, this.color);
+  const _MiniStat(this.label, this.value, this.color, {super.key});
 
   @override
   Widget build(BuildContext context) => _LCard(
@@ -3044,7 +3567,7 @@ class _MiniStat extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  const _EmptyState({super.key});
 
   @override
   Widget build(BuildContext context) => const Padding(
@@ -3067,7 +3590,7 @@ class _EmptyState extends StatelessWidget {
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
-  const _ErrorView({required this.message, required this.onRetry});
+  const _ErrorView({super.key, required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) => Center(

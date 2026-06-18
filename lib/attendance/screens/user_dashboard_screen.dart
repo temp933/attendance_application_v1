@@ -30,7 +30,7 @@ import './policy_management_screen.dart';
 import '../App Admin/org_profile_screen.dart';
 import './manage_location.dart';
 // ── Employee screens ──────────────────────────────────────────────────────────
-// import 'emp_home_screen.dart';
+import 'user_home_screen.dart';
 import 'emp_leave_screen.dart';
 import './Attendance screens/normal_in_out.dart';
 import './Attendance screens/attendance_gps.dart';
@@ -83,9 +83,23 @@ final List<_ModuleDef> _allModules = [
           required tenantId,
           required authToken,
           required canEdit,
+        }) => UserHomeScreen(employeeId: employeeId),
+  ),
+ _ModuleDef(
+    key: 'admin_dashboard',
+    title: 'Dashboard',
+    icon: Icons.dashboard_outlined,
+    selectedIcon: Icons.dashboard,
+    navLabel: 'Dashboard',
+    builder:
+        ({
+          required employeeId,
+          required roleId,
+          required tenantId,
+          required authToken,
+          required canEdit,
         }) => AdminHomeScreen(employeeId: employeeId),
   ),
-
   // ── 2. My Attendance (employee self-service) ───────────────────────────────
   _ModuleDef(
     key: 'emp_attendance_normal',

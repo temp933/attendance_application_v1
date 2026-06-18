@@ -14,9 +14,10 @@ const ALL_MODULES = [
   { key: "emp_attendance_gps", label: "GPS Attendance" },
   { key: "emp_attendance_face", label: "Face Attendance" },
   { key: "emp_site_attendance_face", label: "Site Entry Face Attendance" },
-  { key: "emp_leave", label: "My Leave" }, 
+  { key: "emp_leave", label: "My Leave" },
 
   // ── Admin/HR-facing ──────────────────────────────────────────────
+  { key: "admin_dashboard", label: "Admin Dashboard" },
   { key: "admin_attendance_normal", label: "Attendance Mgmt (Normal)" },
   { key: "admin_attendance_gps", label: "Attendance Mgmt (GPS)" },
   { key: "admin_attendance_face", label: "Attendance Mgmt (Face)" },

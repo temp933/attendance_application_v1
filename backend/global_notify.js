@@ -25,7 +25,7 @@ async function q(sql, params = []) {
  * @param {object} scopeMeta     - extra parameters (tenant_ids[], plan_id, version_string)
  * @returns {Promise<Array>}
  */
-async function resolveTargets(scope, scopeMeta = {}) {
+async function resolveTargets(scope, scopeMeta = {}, recipients = "all") {
   let tenantFilter = "";
   let params = [];
 
@@ -70,6 +70,29 @@ async function resolveTargets(scope, scopeMeta = {}) {
     params.push(scopeMeta.version_string);
   }
 
+  let recipientJoin = "";
+  let recipientWhere = "";
+  if (recipients === "admin_only") {
+    recipientJoin = `INNER JOIN role_master rm
+            ON  rm.role_id = em.role_id
+            AND rm.tenant_id COLLATE utf8mb4_unicode_ci
+              = em.tenant_id COLLATE utf8mb4_unicode_ci`;
+    recipientWhere = `AND rm.role_name = 'Admin'`;
+  } else if (recipients === "hr_only") {
+    recipientJoin = `INNER JOIN role_master rm
+            ON  rm.role_id = em.role_id
+            AND rm.tenant_id COLLATE utf8mb4_unicode_ci
+              = em.tenant_id COLLATE utf8mb4_unicode_ci`;
+    recipientWhere = `AND rm.role_name = 'HR'`;
+  } else if (recipients === "admin_hr") {
+    recipientJoin = `INNER JOIN role_master rm
+            ON  rm.role_id = em.role_id
+            AND rm.tenant_id COLLATE utf8mb4_unicode_ci
+              = em.tenant_id COLLATE utf8mb4_unicode_ci`;
+    recipientWhere = `AND rm.role_name IN ('Admin', 'HR')`;
+  }
+  // "all" → no join, no filter — returns every employee with a valid FCM token
+
   const rows = await q(
     `SELECT
         em.tenant_id,
@@ -85,12 +108,11 @@ async function resolveTargets(scope, scopeMeta = {}) {
             AND lm.tenant_id COLLATE utf8mb4_unicode_ci
               = em.tenant_id COLLATE utf8mb4_unicode_ci
             AND lm.status             = 'Active'
-            AND lm.device_active      = 1
-            AND lm.notification_enabled = 1
             AND lm.fcm_token         IS NOT NULL
-            AND lm.force_logout       = 0
             ${versionWhere}
-     WHERE  ${tenantFilter}`,
+     ${recipientJoin}
+     WHERE  ${tenantFilter}
+     ${recipientWhere}`,
     params,
   );
 
@@ -171,8 +193,11 @@ async function sendGlobalNotification(notificationId) {
 
   // 2. Resolve targets
   const scopeMeta = notif.scope_meta ? JSON.parse(notif.scope_meta) : {};
-  const targets = await resolveTargets(notif.scope, scopeMeta);
-
+  const targets = await resolveTargets(
+    notif.scope,
+    scopeMeta,
+    notif.recipients || "all",
+  );
   if (!targets.length) {
     await db.query(
       `UPDATE global_notifications SET status = 'sent', total_targets = 0 WHERE id = ?`,
@@ -182,20 +207,30 @@ async function sendGlobalNotification(notificationId) {
     return;
   }
 
-  // 3. Bulk-insert log rows
-  const logValues = targets.map(({ tenant_id, emp_id, fcm_token }) => [
-    notificationId,
-    tenant_id,
-    emp_id,
-    fcm_token,
-    "pending",
-  ]);
-  await db.query(
-    `INSERT IGNORE INTO global_notification_logs
-       (notification_id, tenant_id, emp_id, fcm_token, delivery_status)
-     VALUES ?`,
-    [logValues],
+  // 3. Bulk-insert log rows for ALL employees in targeted tenants (not just token holders)
+  const tenantIds = [...new Set(targets.map((t) => t.tenant_id))];
+  const tenantPlaceholders = tenantIds.map(() => "?").join(",");
+  const [allEmployees] = await db.query(
+    `SELECT em.emp_id, em.tenant_id
+     FROM employee_master em
+     WHERE em.tenant_id IN (${tenantPlaceholders}) AND em.status = 'Active'`,
+    tenantIds,
   );
+  if (allEmployees.length > 0) {
+    const allLogValues = allEmployees.map(({ tenant_id, emp_id }) => [
+      notificationId,
+      tenant_id,
+      emp_id,
+      null,
+      "pending",
+    ]);
+    await db.query(
+      `INSERT IGNORE INTO global_notification_logs
+         (notification_id, tenant_id, emp_id, fcm_token, delivery_status)
+       VALUES ?`,
+      [allLogValues],
+    );
+  }
 
   // 4. Bulk-insert tenant target rows (distinct tenants)
   const tenantSet = [...new Set(targets.map((t) => t.tenant_id))];
@@ -229,11 +264,12 @@ async function sendGlobalNotification(notificationId) {
 
       await db.query(
         `UPDATE global_notification_logs
-         SET delivery_status = ?, failure_reason = ?, sent_at = NOW()
+         SET delivery_status = ?, failure_reason = ?, fcm_token = ?, sent_at = NOW()
          WHERE notification_id = ? AND emp_id = ? AND tenant_id = ?`,
         [
           success ? "sent" : "failed",
           success ? null : (response?.error?.message ?? "FCM error"),
+          batch[j].fcm_token,
           notificationId,
           emp_id,
           tenant_id,

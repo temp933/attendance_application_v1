@@ -673,16 +673,6 @@ class _SignInTabState extends State<_SignInTab> {
         await NotifyService.instance.initializeFCM();
         await NotifyService.instance.syncDeviceSession();
         debugPrint('[Login] FCM token synced after login');
-
-        // Push any global notifications missed while logged out
-        final missedRes = await http.get(
-          Uri.parse('${ApiConfig.baseUrl}/api/notifications/missed-global'),
-          headers: {'Authorization': 'Bearer $token', 'x-tenant-id': tenantId},
-        );
-        final missedBody = jsonDecode(missedRes.body);
-        debugPrint(
-          '[Login] Missed notifications pushed: ${missedBody['pushed'] ?? 0}',
-        );
       } catch (e) {
         debugPrint('[Login] FCM sync/missed failed (non-fatal): $e');
       }
