@@ -2583,8 +2583,7 @@ class _NotifyTabBodyState extends State<_NotifyTabBody> {
   static const _tabs = [
     (icon: Icons.dashboard_outlined, label: 'Overview'),
     (icon: Icons.send_outlined, label: 'Send'),
-    (icon: Icons.history_outlined, label: 'History'),
-    (icon: Icons.schedule_outlined, label: 'Scheduled'),
+    (icon: Icons.history_outlined, label: 'History'), 
     (icon: Icons.bar_chart_outlined, label: 'Analytics'),
   ];
 
@@ -2594,7 +2593,7 @@ class _NotifyTabBodyState extends State<_NotifyTabBody> {
       GnOverviewScreen(svc: _svc),
       GnSendScreen(svc: _svc),
       GnHistoryScreen(svc: _svc),
-      GnScheduledScreen(svc: _svc),
+      // GnScheduledScreen(svc: _svc),
       GnAnalyticsScreen(svc: _svc),
     ];
 

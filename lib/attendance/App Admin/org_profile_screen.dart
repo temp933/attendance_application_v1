@@ -3,8 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import '../providers/api_client.dart';
-import '../providers/api_config.dart';
+import '../providers/api_client.dart'; 
 
 // ─── Palette (matches maintenance screen) ────────────────────────────────────
 const Color _primary = Color(0xFF1A56DB);
@@ -274,11 +273,47 @@ class _OrgProfileScreenState extends State<OrgProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bodyContent = _loading
+        ? const Center(child: CircularProgressIndicator(color: _primary))
+        : _error != null
+        ? _ErrorView(message: _error!, onRetry: _load)
+        : RefreshIndicator(
+            color: _primary,
+            onRefresh: _load,
+            child: _OrgProfileBody(
+              org: _org!,
+              canEdit: widget.canEdit,
+              editing: _editing,
+              isAppAdmin: widget.isAppAdmin,
+              companyNameCtrl: _companyNameCtrl,
+              contactPersonCtrl: _contactPersonCtrl,
+              contactNumberCtrl: _contactNumberCtrl,
+              adminEmailCtrl: _adminEmailCtrl,
+              hrEmailCtrl: _hrEmailCtrl,
+              domainCtrl: _domainCtrl,
+              gstCtrl: _gstCtrl,
+              timezoneCtrl: _timezoneCtrl,
+              addressCtrl: _addressCtrl,
+              maxUsersCtrl: _maxUsersCtrl,
+              onStatusChanged: (newStatus) {
+                setState(() => _org!['status'] = newStatus);
+              },
+              onLogoChanged: (bytes, mime) {
+                setState(() {
+                  _org!['_logoBytes'] = bytes;
+                  _org!['company_logo_type'] = mime;
+                });
+              },
+              onRefresh: _load,
+            ),
+          );
+
+    if (!widget.isAppAdmin) return bodyContent;
+
     return Scaffold(
       backgroundColor: _surface,
       appBar: AppBar(
-        backgroundColor: Color(0xFF1A56DB),
-
+        backgroundColor: const Color(0xFF1A56DB),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
@@ -343,40 +378,7 @@ class _OrgProfileScreenState extends State<OrgProfileScreen> {
           child: Container(height: 1, color: _border),
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: _primary))
-          : _error != null
-          ? _ErrorView(message: _error!, onRetry: _load)
-          : RefreshIndicator(
-              color: _primary,
-              onRefresh: _load,
-              child: _OrgProfileBody(
-                org: _org!,
-                canEdit: widget.canEdit,
-                editing: _editing,
-                isAppAdmin: widget.isAppAdmin,
-                companyNameCtrl: _companyNameCtrl,
-                contactPersonCtrl: _contactPersonCtrl,
-                contactNumberCtrl: _contactNumberCtrl,
-                adminEmailCtrl: _adminEmailCtrl,
-                hrEmailCtrl: _hrEmailCtrl,
-                domainCtrl: _domainCtrl,
-                gstCtrl: _gstCtrl,
-                timezoneCtrl: _timezoneCtrl,
-                addressCtrl: _addressCtrl,
-                maxUsersCtrl: _maxUsersCtrl,
-                onStatusChanged: (newStatus) {
-                  setState(() => _org!['status'] = newStatus);
-                },
-                onLogoChanged: (bytes, mime) {
-                  setState(() {
-                    _org!['_logoBytes'] = bytes;
-                    _org!['company_logo_type'] = mime;
-                  });
-                },
-                onRefresh: _load,
-              ),
-            ),
+      body: bodyContent,
     );
   }
 }
@@ -1162,10 +1164,7 @@ class _ActionsCardState extends State<_ActionsCard> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
-          title: const Text(
-            'Reset Admin Password',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-          ),
+          
           content: TextField(
             controller: ctrl,
             obscureText: hidePass,
@@ -1319,33 +1318,7 @@ class _ActionsCardState extends State<_ActionsCard> {
                 const Divider(height: 1, color: _border),
                 const SizedBox(height: 12),
 
-                // ── Reset password ──────────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _resetLoading ? null : _resetPassword,
-                    icon: _resetLoading
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: _primary,
-                            ),
-                          )
-                        : const Icon(Icons.lock_reset_outlined, size: 16),
-                    label: const Text('Reset Admin Password'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _primary,
-                      side: const BorderSide(color: _primary),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                ],
             ),
           ),
         ],

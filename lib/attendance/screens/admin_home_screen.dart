@@ -259,9 +259,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                                 .toString(),
                             label: 'Pending requests',
                             valueColor: _purple,
-                            onTap: widget.canViewApprovals
-                                ? () => widget.onNavigate?.call(4)
-                                : null,
                           ),
                         ]),
                       ),

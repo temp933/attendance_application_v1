@@ -13,7 +13,7 @@ int _parseInt(dynamic v) => v == null ? 0 : int.tryParse(v.toString()) ?? 0;
 double _parseDouble(dynamic v) =>
     v == null ? 0.0 : double.tryParse(v.toString()) ?? 0.0;
 
-class GnNotification {
+class OrgNotification {
   final int id;
   final String title;
   final String message;
@@ -23,7 +23,6 @@ class GnNotification {
   final int totalTargets;
   final int sentCount;
   final int failedCount;
-  final int deliveredCount;
   final int openedCount;
   final String createdBy;
   final DateTime createdAt;
@@ -31,7 +30,7 @@ class GnNotification {
   final DateTime? scheduledAt;
   final String? imageUrl;
 
-  GnNotification({
+  OrgNotification({
     required this.id,
     required this.title,
     required this.message,
@@ -41,7 +40,6 @@ class GnNotification {
     required this.totalTargets,
     required this.sentCount,
     required this.failedCount,
-    required this.deliveredCount,
     required this.openedCount,
     required this.createdBy,
     required this.createdAt,
@@ -50,7 +48,7 @@ class GnNotification {
     this.imageUrl,
   });
 
-  factory GnNotification.fromJson(Map<String, dynamic> j) => GnNotification(
+  factory OrgNotification.fromJson(Map<String, dynamic> j) => OrgNotification(
     id: _parseInt(j['id']),
     title: j['title'] ?? '',
     message: j['message'] ?? '',
@@ -60,9 +58,8 @@ class GnNotification {
     totalTargets: _parseInt(j['total_targets']),
     sentCount: _parseInt(j['sent_count']),
     failedCount: _parseInt(j['failed_count']),
-    deliveredCount: _parseInt(j['delivered_count']),
     openedCount: _parseInt(j['opened_count']),
-    createdBy: j['created_by'] ?? '',
+    createdBy: j['created_by']?.toString() ?? '',
     createdAt: j['created_at'] != null
         ? DateTime.tryParse(j['created_at']) ?? DateTime.now()
         : DateTime.now(),
@@ -75,94 +72,75 @@ class GnNotification {
 
   double get openRate =>
       sentCount > 0 ? (openedCount / sentCount * 100).clamp(0.0, 100.0) : 0.0;
-  double get deliveryRate =>
-      totalTargets > 0 ? (sentCount / totalTargets * 100) : 0.0;
 }
 
-class GnDashboardSummary {
+class OrgDashboardSummary {
   final int totalNotifications;
   final int totalSent;
-  final int totalDelivered;
   final int totalFailed;
   final int totalOpened;
   final int scheduledCount;
-  final int sendingCount;
   final double openRate;
 
-  GnDashboardSummary({
+  OrgDashboardSummary({
     required this.totalNotifications,
     required this.totalSent,
-    required this.totalDelivered,
     required this.totalFailed,
     required this.totalOpened,
     required this.scheduledCount,
-    required this.sendingCount,
     required this.openRate,
   });
 
-  factory GnDashboardSummary.fromJson(Map<String, dynamic> j) =>
-      GnDashboardSummary(
+  factory OrgDashboardSummary.fromJson(Map<String, dynamic> j) =>
+      OrgDashboardSummary(
         totalNotifications: _parseInt(j['total_notifications']),
         totalSent: _parseInt(j['total_sent']),
-        totalDelivered: _parseInt(j['total_delivered']),
         totalFailed: _parseInt(j['total_failed']),
         totalOpened: _parseInt(j['total_opened']),
         scheduledCount: _parseInt(j['scheduled_count']),
-        sendingCount: _parseInt(j['sending_count']),
         openRate: _parseDouble(j['open_rate']),
       );
 }
 
-class GnTargetPreview {
+class OrgTargetPreview {
   final int totalEmployees;
-  final int totalOrgs;
-  final List<String> orgIds;
 
-  GnTargetPreview({
-    required this.totalEmployees,
-    required this.totalOrgs,
-    required this.orgIds,
-  });
+  OrgTargetPreview({required this.totalEmployees});
 
-  factory GnTargetPreview.fromJson(Map<String, dynamic> j) => GnTargetPreview(
-    totalEmployees: _parseInt(j['total_employees']),
-    totalOrgs: _parseInt(j['total_orgs']),
-    orgIds: List<String>.from(j['org_ids'] ?? []),
-  );
+  factory OrgTargetPreview.fromJson(Map<String, dynamic> j) =>
+      OrgTargetPreview(totalEmployees: _parseInt(j['total_employees']));
 }
 
-class GnAnalyticsTrend {
+class OrgAnalyticsTrend {
   final String date;
-  final int total;
   final int sent;
   final int failed;
   final int opened;
 
-  GnAnalyticsTrend({
+  OrgAnalyticsTrend({
     required this.date,
-    required this.total,
     required this.sent,
     required this.failed,
     required this.opened,
   });
 
-  factory GnAnalyticsTrend.fromJson(Map<String, dynamic> j) => GnAnalyticsTrend(
-    date: j['date'] ?? '',
-    total: _parseInt(j['total']),
-    sent: _parseInt(j['sent']),
-    failed: _parseInt(j['failed']),
-    opened: _parseInt(j['opened']),
-  );
+  factory OrgAnalyticsTrend.fromJson(Map<String, dynamic> j) =>
+      OrgAnalyticsTrend(
+        date: j['date'] ?? '',
+        sent: _parseInt(j['sent']),
+        failed: _parseInt(j['failed']),
+        opened: _parseInt(j['opened']),
+      );
 }
 
-class GnTypeBreakdown {
+class OrgTypeBreakdown {
   final String type;
   final int total;
   final int totalSent;
   final int totalFailed;
   final double openRate;
 
-  GnTypeBreakdown({
+  OrgTypeBreakdown({
     required this.type,
     required this.total,
     required this.totalSent,
@@ -170,7 +148,7 @@ class GnTypeBreakdown {
     required this.openRate,
   });
 
-  factory GnTypeBreakdown.fromJson(Map<String, dynamic> j) => GnTypeBreakdown(
+  factory OrgTypeBreakdown.fromJson(Map<String, dynamic> j) => OrgTypeBreakdown(
     type: j['type'] ?? '',
     total: _parseInt(j['total']),
     totalSent: _parseInt(j['total_sent']),
@@ -181,15 +159,16 @@ class GnTypeBreakdown {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 2 — SERVICE
+// tenant_id is automatically injected by authMiddleware via the JWT token
 // ─────────────────────────────────────────────────────────────────────────────
 
-class GnService {
+class OrgNotifyService {
   final String baseUrl;
   final String token;
 
-  const GnService({required this.baseUrl, required this.token});
+  const OrgNotifyService({required this.baseUrl, required this.token});
 
-  String get _base => '$baseUrl/app-admin/notifications';
+  String get _base => '$baseUrl/org-notifications';
 
   Map<String, String> get _headers => {
     'Content-Type': 'application/json',
@@ -233,34 +212,34 @@ class GnService {
 
   Future<Map<String, dynamic>> dashboard() => _get('/dashboard', (d) => d);
 
-  Future<List<Map<String, dynamic>>> orgs() =>
-      _get('/orgs', (d) => List<Map<String, dynamic>>.from(d['data']));
+  Future<List<Map<String, dynamic>>> departments() =>
+      _get('/departments', (d) => List<Map<String, dynamic>>.from(d['data']));
 
-  Future<Map<String, dynamic>> history({
-    int page = 1,
-    int limit = 20,
-    String? type,
-    String? status,
-    String? tenantId,
-    String? dateFrom,
-    String? dateTo,
-    String? search,
-  }) async {
-    final q = <String, String>{
-      'page': '$page',
-      'limit': '$limit',
-      if (type != null) 'type': type,
-      if (status != null) 'status': status,
-      if (tenantId != null) 'tenant_id': tenantId,
-      if (dateFrom != null) 'date_from': dateFrom,
-      if (dateTo != null) 'date_to': dateTo,
-      if (search != null && search.isNotEmpty) 'search': search,
-    };
-    final uri = Uri.parse('$_base/history').replace(queryParameters: q);
-    final res = await http.get(uri, headers: _headers);
-    if (res.statusCode == 200) return json.decode(res.body);
-    throw Exception('history failed: ${res.statusCode}');
-  }
+  Future<List<Map<String, dynamic>>> roles() =>
+      _get('/roles', (d) => List<Map<String, dynamic>>.from(d['data']));
+
+  Future<List<Map<String, dynamic>>> employees() =>
+      _get('/employees', (d) => List<Map<String, dynamic>>.from(d['data']));
+
+  // Future<Map<String, dynamic>> history({
+  //   int page = 1,
+  //   int limit = 20,
+  //   String? type,
+  //   String? status,
+  //   String? search,
+  // }) async {
+  //   final q = <String, String>{
+  //     'page': '$page',
+  //     'limit': '$limit',
+  //     if (type != null) 'type': type,
+  //     if (status != null) 'status': status,
+  //     if (search != null && search.isNotEmpty) 'search': search,
+  //   };
+  //   final uri = Uri.parse('$_base/history').replace(queryParameters: q);
+  //   final res = await http.get(uri, headers: _headers);
+  //   if (res.statusCode == 200) return json.decode(res.body);
+  //   throw Exception('history failed: ${res.statusCode}');
+  // }
 
   Future<Map<String, dynamic>> send({
     required String title,
@@ -270,13 +249,11 @@ class GnService {
     Map<String, dynamic>? scopeMeta,
     String? imageUrl,
     String? scheduledAt,
-    String recipients = 'all',
   }) => _post('/send', {
     'title': title,
     'message': message,
     'type': type,
     'scope': scope,
-    'recipients': recipients,
     if (scopeMeta != null) 'scope_meta': scopeMeta,
     if (imageUrl != null) 'image_url': imageUrl,
     if (scheduledAt != null) 'scheduled_at': scheduledAt,
@@ -284,28 +261,23 @@ class GnService {
 
   Future<Map<String, dynamic>> detail(int id) => _get('/$id', (d) => d);
   Future<void> cancel(int id) => _patch('/$id/cancel');
-  Future<void> reschedule(int id, String scheduledAt) =>
-      _patch('/$id/reschedule', {'scheduled_at': scheduledAt});
   Future<Map<String, dynamic>> retry(int id) =>
       _post('/$id/retry', {}, (d) => d);
 
- 
   Future<Map<String, dynamic>> analytics() =>
       _get('/analytics/summary', (d) => d);
 
-  Future<GnTargetPreview> previewTargets({
+  Future<OrgTargetPreview> previewTargets({
     required String scope,
     Map<String, dynamic>? scopeMeta,
-    String recipients = 'all',
   }) => _post('/preview-targets', {
     'scope': scope,
-    'recipients': recipients,
     if (scopeMeta != null) 'scope_meta': scopeMeta,
-  }, (d) => GnTargetPreview.fromJson(d));
+  }, (d) => OrgTargetPreview.fromJson(d));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION 3 — LIGHT THEME CONSTANTS
+// SECTION 3 — THEME CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const _bg = Color(0xFFF5F6FA);
@@ -316,11 +288,24 @@ const _warning = Color(0xFFFFB703);
 const _error = Color(0xFFEF476F);
 const _purple = Color(0xFF7209B7);
 const _cyan = Color(0xFF4CC9F0);
+const _teal = Color(0xFF0F9B8E);
 const _textPri = Color(0xFF1A1A2E);
 const _textSec = Color(0xFF6B7280);
 const _textMut = Color(0xFF9CA3AF);
 const _borderCol = Color(0xFFE2E8F0);
 const _divider = Color(0xFFF1F3F4);
+
+// Org-specific types — no global/system types like app_update/billing_reminder
+const _orgTypes = [
+  'general',
+  'announcement',
+  'policy_update',
+  'urgent',
+  'reminder',
+];
+
+// Org-specific scopes
+const _orgScopes = ['all', 'by_department', 'by_role', 'specific'];
 
 Color _statusColor(String s) {
   switch (s.toLowerCase()) {
@@ -345,14 +330,14 @@ Color _typeColor(String t) {
   switch (t.toLowerCase()) {
     case 'general':
       return _accent;
-    case 'maintenance':
-      return _warning;
-    case 'app_update':
-      return _cyan;
-    case 'billing_reminder':
+    case 'announcement':
       return _purple;
-    case 'emergency_alert':
+    case 'policy_update':
+      return _teal;
+    case 'urgent':
       return _error;
+    case 'reminder':
+      return _warning;
     default:
       return _textSec;
   }
@@ -362,14 +347,14 @@ String _typeLabel(String t) {
   switch (t) {
     case 'general':
       return 'General';
-    case 'maintenance':
-      return 'Maintenance';
-    case 'app_update':
-      return 'App Update';
-    case 'billing_reminder':
-      return 'Billing Reminder';
-    case 'emergency_alert':
-      return 'Emergency Alert';
+    case 'announcement':
+      return 'Announcement';
+    case 'policy_update':
+      return 'Policy Update';
+    case 'urgent':
+      return 'Urgent';
+    case 'reminder':
+      return 'Reminder';
     default:
       return t;
   }
@@ -379,14 +364,14 @@ IconData _typeIcon(String t) {
   switch (t) {
     case 'general':
       return Icons.campaign_outlined;
-    case 'maintenance':
-      return Icons.build_outlined;
-    case 'app_update':
-      return Icons.system_update_alt_outlined;
-    case 'billing_reminder':
-      return Icons.receipt_long_outlined;
-    case 'emergency_alert':
-      return Icons.warning_amber_rounded;
+    case 'announcement':
+      return Icons.record_voice_over_outlined;
+    case 'policy_update':
+      return Icons.policy_outlined;
+    case 'urgent':
+      return Icons.priority_high_rounded;
+    case 'reminder':
+      return Icons.alarm_outlined;
     default:
       return Icons.notifications_outlined;
   }
@@ -395,15 +380,13 @@ IconData _typeIcon(String t) {
 String _scopeLabel(String s) {
   switch (s) {
     case 'all':
-      return 'All Organizations';
-    case 'selected':
-      return 'Selected Orgs';
-
-    case 'trial':
-      return 'Trial Orgs';
-    case 'expired':
-      return 'Expired';
-
+      return 'All Employees';
+    case 'by_department':
+      return 'By Department';
+    case 'by_role':
+      return 'By Role';
+    case 'specific':
+      return 'Specific Employees';
     default:
       return s;
   }
@@ -416,17 +399,17 @@ String _fmt(int n) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION 4 — SHARED WIDGETS
+// SECTION 4 — SHARED WIDGETS (prefixed _O to avoid conflict with global file)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _LCard extends StatelessWidget {
+class _OCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets? padding;
   final VoidCallback? onTap;
   final Color? borderLeft;
   final Color? borderColor;
 
-  const _LCard({
+  const _OCard({
     required this.child,
     this.padding,
     this.onTap,
@@ -435,39 +418,37 @@ class _LCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: padding ?? const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: _white,
-          borderRadius: BorderRadius.circular(12),
-          border: borderLeft != null
-              ? Border(left: BorderSide(color: borderLeft!, width: 3))
-              : Border.all(color: borderColor ?? _borderCol),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x08000000),
-              blurRadius: 8,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: child,
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: padding ?? const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _white,
+        borderRadius: BorderRadius.circular(12),
+        border: borderLeft != null
+            ? Border(left: BorderSide(color: borderLeft!, width: 3))
+            : Border.all(color: borderColor ?? _borderCol),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
-    );
-  }
+      child: child,
+    ),
+  );
 }
 
-class _StatCard extends StatelessWidget {
+class _OStatCard extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
   final IconData icon;
   final String? sub;
 
-  const _StatCard({
+  const _OStatCard({
     super.key,
     required this.label,
     required this.value,
@@ -477,62 +458,60 @@ class _StatCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 120,
-      margin: const EdgeInsets.only(right: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border(left: BorderSide(color: color, width: 3)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 6,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: color),
-              const Spacer(),
-              if (sub != null)
-                Text(
-                  sub!,
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                  ),
+  Widget build(BuildContext context) => Container(
+    width: 120,
+    margin: const EdgeInsets.only(right: 10),
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: _white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border(left: BorderSide(color: color, width: 3)),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x08000000),
+          blurRadius: 6,
+          offset: Offset(0, 2),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 14, color: color),
+            const Spacer(),
+            if (sub != null)
+              Text(
+                sub!,
+                style: TextStyle(
+                  fontSize: 9,
+                  color: color,
+                  fontWeight: FontWeight.w600,
                 ),
-            ],
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: color,
           ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 11, color: _textSec)),
-        ],
-      ),
-    );
-  }
+        ),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(fontSize: 11, color: _textSec)),
+      ],
+    ),
+  );
 }
 
-class _StatusChip extends StatelessWidget {
+class _OStatusChip extends StatelessWidget {
   final String status;
-  const _StatusChip(this.status);
+  const _OStatusChip(this.status);
 
   @override
   Widget build(BuildContext context) {
@@ -571,9 +550,9 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-class _TypeChip extends StatelessWidget {
+class _OTypeChip extends StatelessWidget {
   final String type;
-  const _TypeChip(this.type);
+  const _OTypeChip(this.type);
 
   @override
   Widget build(BuildContext context) {
@@ -604,10 +583,10 @@ class _TypeChip extends StatelessWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
+class _OSectionHeader extends StatelessWidget {
   final String title;
   final IconData? icon;
-  const _SectionHeader(this.title, {this.icon});
+  const _OSectionHeader(this.title, {this.icon});
 
   @override
   Widget build(BuildContext context) => Row(
@@ -637,12 +616,11 @@ class _SectionHeader extends StatelessWidget {
   );
 }
 
-class _StatPill extends StatelessWidget {
+class _OStatPill extends StatelessWidget {
   final IconData icon;
   final String value;
   final Color color;
-
-  const _StatPill({
+  const _OStatPill({
     required this.icon,
     required this.value,
     required this.color,
@@ -666,13 +644,12 @@ class _StatPill extends StatelessWidget {
   );
 }
 
-class _ProgressRow extends StatelessWidget {
+class _OProgressRow extends StatelessWidget {
   final String label;
   final int value;
   final int total;
   final Color color;
-
-  const _ProgressRow({
+  const _OProgressRow({
     required this.label,
     required this.value,
     required this.total,
@@ -720,117 +697,12 @@ class _ProgressRow extends StatelessWidget {
   }
 }
 
-class _NotifTile extends StatelessWidget {
-  final GnNotification n;
-  final VoidCallback? onTap;
-  const _NotifTile(this.n, {this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final fmt = DateFormat('MMM d · h:mm a');
-    return _LCard(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  n.title,
-                  style: const TextStyle(
-                    color: _textPri,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              _StatusChip(n.status),
-            ],
-          ),
-          const SizedBox(height: 5),
-          Text(
-            n.message,
-            style: const TextStyle(color: _textSec, fontSize: 13),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _TypeChip(n.type),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    _scopeLabel(n.scope),
-                    style: const TextStyle(color: _textMut, fontSize: 10),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (n.status == 'sent') ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                _StatPill(
-                  icon: Icons.send_outlined,
-                  value: _fmt(n.sentCount),
-                  color: _success,
-                ),
-                const SizedBox(width: 10),
-                _StatPill(
-                  icon: Icons.error_outline,
-                  value: _fmt(n.failedCount),
-                  color: _error,
-                ),
-                const SizedBox(width: 10),
-                _StatPill(
-                  icon: Icons.visibility_outlined,
-                  value: '${n.openRate.toStringAsFixed(1)}%',
-                  color: _cyan,
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 8),
-          Text(
-            n.scheduledAt != null
-                ? 'Scheduled: ${fmt.format(n.scheduledAt!)}'
-                : n.sentAt != null
-                ? 'Sent: ${fmt.format(n.sentAt!)}'
-                : 'Created: ${fmt.format(n.createdAt)}',
-            style: const TextStyle(color: _textMut, fontSize: 11),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FIX: _FilterChip — now shows a checkmark when selected for clear feedback
-// ─────────────────────────────────────────────────────────────────────────────
-class _FilterChip extends StatelessWidget {
+class _OFilterChip extends StatelessWidget {
   final String label;
   final bool selected;
   final Color? color;
   final VoidCallback? onTap;
-
-  const _FilterChip({
+  const _OFilterChip({
     required this.label,
     required this.selected,
     this.color,
@@ -874,6 +746,107 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
+class _ONotifTile extends StatelessWidget {
+  final OrgNotification n;
+  final VoidCallback? onTap;
+  const _ONotifTile(this.n, {this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('MMM d · h:mm a');
+    return _OCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  n.title,
+                  style: const TextStyle(
+                    color: _textPri,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              _OStatusChip(n.status),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            n.message,
+            style: const TextStyle(color: _textSec, fontSize: 13),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _OTypeChip(n.type),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    _scopeLabel(n.scope),
+                    style: const TextStyle(color: _textMut, fontSize: 10),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (n.status == 'sent') ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _OStatPill(
+                  icon: Icons.send_outlined,
+                  value: _fmt(n.sentCount),
+                  color: _success,
+                ),
+                const SizedBox(width: 10),
+                _OStatPill(
+                  icon: Icons.error_outline,
+                  value: _fmt(n.failedCount),
+                  color: _error,
+                ),
+                const SizedBox(width: 10),
+                _OStatPill(
+                  icon: Icons.visibility_outlined,
+                  value: '${n.openRate.toStringAsFixed(1)}%',
+                  color: _cyan,
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            n.scheduledAt != null
+                ? 'Scheduled: ${fmt.format(n.scheduledAt!)}'
+                : n.sentAt != null
+                ? 'Sent: ${fmt.format(n.sentAt!)}'
+                : 'Created: ${fmt.format(n.createdAt)}',
+            style: const TextStyle(color: _textMut, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 extension _StrExt on String {
   String capitalize() => isEmpty ? this : this[0].toUpperCase() + substring(1);
 }
@@ -882,43 +855,42 @@ extension _StrExt on String {
 // SECTION 5 — MAIN CONSOLE
 // ─────────────────────────────────────────────────────────────────────────────
 
-class GlobalNotifyConsole extends StatefulWidget {
-  const GlobalNotifyConsole({super.key});
+class OrgNotifyConsole extends StatefulWidget {
+  const OrgNotifyConsole({super.key});
 
   @override
-  State<GlobalNotifyConsole> createState() => _GlobalNotifyConsoleState();
+  State<OrgNotifyConsole> createState() => _OrgNotifyConsoleState();
 }
 
-class _GlobalNotifyConsoleState extends State<GlobalNotifyConsole> {
-  late final GnService _svc;
+class _OrgNotifyConsoleState extends State<OrgNotifyConsole> {
+  late final OrgNotifyService _svc;
   int _tab = 0;
 
   static const _tabs = [
     (icon: Icons.dashboard_outlined, label: 'Overview'),
     (icon: Icons.send_outlined, label: 'Send'),
-    (icon: Icons.history_outlined, label: 'History'), 
     (icon: Icons.bar_chart_outlined, label: 'Analytics'),
   ];
+
+  final _overviewKey = GlobalKey<_OrgOverviewScreenState>();
+  final _analyticsKey = GlobalKey<_OrgAnalyticsScreenState>();
 
   @override
   void initState() {
     super.initState();
-    _svc = GnService(baseUrl: ApiConfig.baseUrl, token: ApiConfig.getToken());
+    _svc = OrgNotifyService(
+      baseUrl: ApiConfig.baseUrl,
+      token: ApiConfig.getToken(),
+    );
   }
-
-  final _overviewKey = GlobalKey<GnOverviewScreenState>();
-  final _historyKey = GlobalKey<_GnHistoryScreenState>(); 
-  final _analyticsKey = GlobalKey<_GnAnalyticsScreenState>();
 
   void _refreshCurrentTab(int i) {
     switch (i) {
       case 0:
         _overviewKey.currentState?._load();
         break;
+
       case 2:
-        _historyKey.currentState?._load();
-        break; 
-      case 3:
         _analyticsKey.currentState?._load();
         break;
     }
@@ -927,49 +899,40 @@ class _GlobalNotifyConsoleState extends State<GlobalNotifyConsole> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      GnOverviewScreen(key: _overviewKey, svc: _svc),
-      GnSendScreen(svc: _svc),
-      GnHistoryScreen(key: _historyKey, svc: _svc), 
-      GnAnalyticsScreen(key: _analyticsKey, svc: _svc),
+      _OrgOverviewScreen(key: _overviewKey, svc: _svc),
+      _OrgSendScreen(svc: _svc),
+      _OrgAnalyticsScreen(key: _analyticsKey, svc: _svc),
     ];
 
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _white,
+        backgroundColor: const Color(0xFF1A56DB),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
         centerTitle: false,
         title: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: _accent.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(Icons.bolt, color: _accent, size: 16),
-            ),
-            const SizedBox(width: 10),
             const Text(
-              'Global Notifications',
+              'Notifications',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
-                color: _textPri,
+                color: Colors.white,
               ),
             ),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
-                color: _purple.withOpacity(0.1),
+                color: Colors.white.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text(
-                'SUPER ADMIN',
+                'ORG ADMIN',
                 style: TextStyle(
-                  color: _purple,
+                  color: Colors.white,
                   fontSize: 9,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.5,
@@ -978,68 +941,65 @@ class _GlobalNotifyConsoleState extends State<GlobalNotifyConsole> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white, size: 22),
+            tooltip: 'Refresh',
+            onPressed: () => _refreshCurrentTab(_tab),
+          ),
+        ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(47),
-          child: Column(
-            children: [
-              Container(height: 1, color: const Color(0xFFE8EAED)),
-              Container(
-                color: _white,
-                padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: List.generate(_tabs.length, (i) {
-                      final t = _tabs[i];
-                      final sel = _tab == i;
-                      return GestureDetector(
+          preferredSize: const Size.fromHeight(46),
+          child: Container(
+            color: _white,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: List.generate(_tabs.length, (i) {
+                    final t = _tabs[i];
+                    final sel = _tab == i;
+                    return Expanded(
+                      child: GestureDetector(
                         onTap: () {
-                          if (_tab == i) {
-                            _refreshCurrentTab(i);
-                          }
+                          if (_tab == i) _refreshCurrentTab(i);
                           setState(() => _tab = i);
                         },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 160),
-                          margin: const EdgeInsets.only(right: 6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 7,
-                          ),
-                          decoration: BoxDecoration(
-                            color: sel ? _accent : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: sel ? _accent : _borderCol,
-                            ),
-                          ),
-                          child: Row(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                t.icon,
-                                size: 14,
-                                color: sel ? _white : _textSec,
-                              ),
-                              const SizedBox(width: 6),
                               Text(
                                 t.label,
                                 style: TextStyle(
-                                  color: sel ? _white : _textSec,
-                                  fontSize: 12,
+                                  color: sel ? _accent : _textSec,
+                                  fontSize: 14,
                                   fontWeight: sel
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 160),
+                                height: 3,
+                                width: sel ? 44 : 0,
+                                decoration: BoxDecoration(
+                                  color: _accent,
+                                  borderRadius: BorderRadius.circular(2),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      );
-                    }),
-                  ),
+                      ),
+                    );
+                  }),
                 ),
-              ),
-            ],
+                Container(height: 1, color: _borderCol),
+              ],
+            ),
           ),
         ),
       ),
@@ -1052,20 +1012,19 @@ class _GlobalNotifyConsoleState extends State<GlobalNotifyConsole> {
 // SECTION 6 — OVERVIEW SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
-class GnOverviewScreen extends StatefulWidget {
-  final GnService svc;
-  const GnOverviewScreen({super.key, required this.svc});
+class _OrgOverviewScreen extends StatefulWidget {
+  final OrgNotifyService svc;
+  const _OrgOverviewScreen({super.key, required this.svc});
 
   @override
-  State<GnOverviewScreen> createState() => GnOverviewScreenState();
+  State<_OrgOverviewScreen> createState() => _OrgOverviewScreenState();
 }
 
-class GnOverviewScreenState extends State<GnOverviewScreen> {
-  GnDashboardSummary? _summary;
-  List<GnNotification> _recent = [];
+class _OrgOverviewScreenState extends State<_OrgOverviewScreen> {
+  OrgDashboardSummary? _summary;
+  List<OrgNotification> _recent = [];
   bool _loading = true;
   String? _errMsg;
-  DateTime _lastUpdated = DateTime.now();
 
   @override
   void initState() {
@@ -1081,32 +1040,28 @@ class GnOverviewScreenState extends State<GnOverviewScreen> {
     try {
       final data = await widget.svc.dashboard();
       setState(() {
-        _summary = GnDashboardSummary.fromJson(data['summary']);
+        _summary = OrgDashboardSummary.fromJson(data['summary']);
         _recent = (data['recent'] as List)
-            .map((e) => GnNotification.fromJson(e))
+            .map((e) => OrgNotification.fromJson(e))
             .toList();
         _loading = false;
-        _lastUpdated = DateTime.now();
       });
     } catch (e) {
       setState(() {
         _errMsg = e.toString();
         _loading = false;
-        _lastUpdated = DateTime.now();
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
+    if (_loading)
       return const Center(
         child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
       );
-    }
-    if (_errMsg != null) {
-      return _ErrorView(message: _errMsg!, onRetry: _load);
-    }
+    if (_errMsg != null) return _OErrorView(message: _errMsg!, onRetry: _load);
+
     final s = _summary!;
     return RefreshIndicator(
       onRefresh: _load,
@@ -1124,38 +1079,32 @@ class GnOverviewScreenState extends State<GnOverviewScreen> {
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       children: [
-                        _StatCard(
+                        _OStatCard(
                           label: 'Total Sent',
                           value: _fmt(s.totalSent),
                           icon: Icons.send_outlined,
                           color: _accent,
                         ),
-                        _StatCard(
-                          label: 'Delivered',
-                          value: _fmt(s.totalDelivered),
-                          icon: Icons.mark_email_read_outlined,
-                          color: _success,
-                        ),
-                        _StatCard(
+                        _OStatCard(
                           label: 'Failed',
                           value: _fmt(s.totalFailed),
                           icon: Icons.error_outline,
                           color: _error,
                         ),
-                        _StatCard(
+                        _OStatCard(
                           label: 'Open Rate',
                           value: '${s.openRate.toStringAsFixed(1)}%',
                           icon: Icons.visibility_outlined,
                           color: _cyan,
                           sub: '${_fmt(s.totalOpened)} opens',
                         ),
-                        _StatCard(
+                        _OStatCard(
                           label: 'Scheduled',
                           value: _fmt(s.scheduledCount),
                           icon: Icons.schedule_outlined,
                           color: _warning,
                         ),
-                        _StatCard(
+                        _OStatCard(
                           label: 'Total',
                           value: _fmt(s.totalNotifications),
                           icon: Icons.all_inbox_outlined,
@@ -1165,7 +1114,7 @@ class GnOverviewScreenState extends State<GnOverviewScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  _SectionHeader(
+                  _OSectionHeader(
                     'Recent Notifications',
                     icon: Icons.notifications_outlined,
                   ),
@@ -1175,7 +1124,7 @@ class GnOverviewScreenState extends State<GnOverviewScreen> {
             ),
           ),
           if (_recent.isEmpty)
-            const SliverToBoxAdapter(child: _EmptyState())
+            const SliverToBoxAdapter(child: _OEmptyState())
           else
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
@@ -1183,7 +1132,7 @@ class GnOverviewScreenState extends State<GnOverviewScreen> {
                 delegate: SliverChildBuilderDelegate(
                   (ctx, i) => Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: _NotifTile(
+                    child: _ONotifTile(
                       _recent[i],
                       onTap: () => _openDetail(ctx, _recent[i].id),
                     ),
@@ -1200,7 +1149,7 @@ class GnOverviewScreenState extends State<GnOverviewScreen> {
   void _openDetail(BuildContext ctx, int id) => Navigator.push(
     ctx,
     MaterialPageRoute(
-      builder: (_) => _DetailScreen(svc: widget.svc, id: id),
+      builder: (_) => _OrgDetailScreen(svc: widget.svc, id: id),
     ),
   ).then((_) => _load());
 }
@@ -1209,82 +1158,74 @@ class GnOverviewScreenState extends State<GnOverviewScreen> {
 // SECTION 7 — SEND SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
-class GnSendScreen extends StatefulWidget {
-  final GnService svc;
-  const GnSendScreen({required this.svc});
+class _OrgSendScreen extends StatefulWidget {
+  final OrgNotifyService svc;
+  const _OrgSendScreen({required this.svc});
+
   @override
-  State<GnSendScreen> createState() => _GnSendScreenState();
+  State<_OrgSendScreen> createState() => _OrgSendScreenState();
 }
 
-class _GnSendScreenState extends State<GnSendScreen> {
+class _OrgSendScreenState extends State<_OrgSendScreen> {
   final _titleCtrl = TextEditingController();
   final _msgCtrl = TextEditingController();
   final _imgCtrl = TextEditingController();
-  final _planCtrl = TextEditingController();
-  final _versionCtrl = TextEditingController();
 
   String _type = 'general';
   String _scope = 'all';
-  String _recipients = 'all'; // NEW
   bool _schedule = false;
   DateTime? _scheduledAt;
   bool _sending = false;
-  GnTargetPreview? _preview;
   bool _previewing = false;
+  OrgTargetPreview? _preview;
 
-  // Org picker state
-  List<Map<String, dynamic>> _orgs = [];
-  List<Map<String, dynamic>> _selectedOrgs = [];
-  bool _orgsLoading = false;
+  // Pickers
+  List<Map<String, dynamic>> _departments = [];
+  List<Map<String, dynamic>> _roles = [];
+  List<Map<String, dynamic>> _employees = [];
 
-  final _types = [
-    'general',
-    'maintenance',
-    'app_update',
-    'billing_reminder',
-    'emergency_alert',
-  ];
-  final _scopes = ['all', 'selected', 'trial', 'expired'];
+  List<Map<String, dynamic>> _selectedDepts = [];
+  List<Map<String, dynamic>> _selectedRoles = [];
+  List<Map<String, dynamic>> _selectedEmps = [];
 
-  static const _recipientOptions = [
-    ('all', 'All Employees', Icons.people_outline),
-    ('admin_only', 'Admin only', Icons.manage_accounts_outlined),
-  ];
+  bool _depsLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadOrgs();
+    _loadMeta();
   }
 
-  String? _orgsError;
-
-  Future<void> _loadOrgs() async {
-    setState(() {
-      _orgsLoading = true;
-      _orgsError = null;
-    });
+  Future<void> _loadMeta() async {
+    setState(() => _depsLoading = true);
     try {
-      final list = await widget.svc.orgs();
-      setState(() => _orgs = list);
+      final results = await Future.wait([
+        widget.svc.departments(),
+        widget.svc.roles(),
+        widget.svc.employees(),
+      ]);
+      setState(() {
+        _departments = results[0];
+        _roles = results[1];
+        _employees = results[2];
+      });
     } catch (e) {
-      setState(() => _orgsError = e.toString());
-      debugPrint('[orgs] load failed: $e');
+      debugPrint('[org-notify] meta load failed: $e');
     }
-    setState(() => _orgsLoading = false);
+    setState(() => _depsLoading = false);
   }
 
   Map<String, dynamic>? get _scopeMeta {
     switch (_scope) {
-      case 'selected':
-        final ids = _selectedOrgs.map((o) => o['tenant_id'] as String).toList();
-        return ids.isEmpty ? null : {'tenant_ids': ids};
-      case 'by_plan':
-        final p = _planCtrl.text.trim();
-        return p.isEmpty ? null : {'plan_id': p};
-      case 'by_version':
-        final v = _versionCtrl.text.trim();
-        return v.isEmpty ? null : {'version_string': v};
+      case 'by_department':
+        final ids = _selectedDepts.map((d) => d['id']).toList();
+        return ids.isEmpty ? null : {'department_ids': ids};
+      case 'by_role':
+        final ids = _selectedRoles.map((r) => r['id']).toList();
+        return ids.isEmpty ? null : {'role_ids': ids};
+      case 'specific':
+        final ids = _selectedEmps.map((e) => e['emp_id']).toList();
+        return ids.isEmpty ? null : {'emp_ids': ids};
       default:
         return null;
     }
@@ -1296,7 +1237,6 @@ class _GnSendScreenState extends State<GnSendScreen> {
       final p = await widget.svc.previewTargets(
         scope: _scope,
         scopeMeta: _scopeMeta,
-        recipients: _recipients,
       );
       setState(() => _preview = p);
     } catch (e) {
@@ -1311,8 +1251,16 @@ class _GnSendScreenState extends State<GnSendScreen> {
       _snack('Title and message are required');
       return;
     }
-    if (_scope == 'selected' && _selectedOrgs.isEmpty) {
-      _snack('Please select at least one organisation');
+    if (_scope == 'by_department' && _selectedDepts.isEmpty) {
+      _snack('Please select at least one department');
+      return;
+    }
+    if (_scope == 'by_role' && _selectedRoles.isEmpty) {
+      _snack('Please select at least one role');
+      return;
+    }
+    if (_scope == 'specific' && _selectedEmps.isEmpty) {
+      _snack('Please select at least one employee');
       return;
     }
     setState(() => _sending = true);
@@ -1327,12 +1275,9 @@ class _GnSendScreenState extends State<GnSendScreen> {
         scheduledAt: _schedule && _scheduledAt != null
             ? _scheduledAt!.toIso8601String()
             : null,
-        recipients: _recipients, // NEW
       );
       _snack(
-        _schedule
-            ? 'Notification scheduled!'
-            : 'Notification queued for sending!',
+        _schedule ? 'Notification scheduled!' : 'Notification sent!',
         isSuccess: true,
       );
       _titleCtrl.clear();
@@ -1342,7 +1287,9 @@ class _GnSendScreenState extends State<GnSendScreen> {
         _preview = null;
         _schedule = false;
         _scheduledAt = null;
-        _selectedOrgs = [];
+        _selectedDepts = [];
+        _selectedRoles = [];
+        _selectedEmps = [];
       });
     } catch (e) {
       _snack('Failed: $e');
@@ -1400,12 +1347,18 @@ class _GnSendScreenState extends State<GnSendScreen> {
     );
   }
 
-  Future<void> _showOrgPicker() async {
+  // ── Generic multi-select bottom sheet ───────────────────────────────────────
+  Future<void> _showPicker<T>({
+    required String title,
+    required List<Map<String, dynamic>> items,
+    required String Function(Map<String, dynamic>) labelOf,
+    required String Function(Map<String, dynamic>) keyOf,
+    required List<Map<String, dynamic>> selected,
+    required void Function(List<Map<String, dynamic>>) onDone,
+  }) async {
     final searchCtrl = TextEditingController();
-    List<Map<String, dynamic>> filtered = List.from(_orgs);
-    final tempSelected = Set<String>.from(
-      _selectedOrgs.map((o) => o['tenant_id'] as String),
-    );
+    List<Map<String, dynamic>> filtered = List.from(items);
+    final tempSelected = Set<String>.from(selected.map((e) => keyOf(e)));
 
     await showModalBottomSheet(
       context: context,
@@ -1414,274 +1367,195 @@ class _GnSendScreenState extends State<GnSendScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setModal) {
-            void doFilter(String q) {
-              setModal(() {
-                filtered = q.isEmpty
-                    ? List.from(_orgs)
-                    : _orgs
-                          .where(
-                            (o) =>
-                                (o['company_name'] as String)
-                                    .toLowerCase()
-                                    .contains(q.toLowerCase()) ||
-                                (o['tenant_id'] as String)
-                                    .toLowerCase()
-                                    .contains(q.toLowerCase()),
-                          )
-                          .toList();
-              });
-            }
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) {
+          void doFilter(String q) {
+            setModal(() {
+              filtered = q.isEmpty
+                  ? List.from(items)
+                  : items
+                        .where(
+                          (o) => labelOf(
+                            o,
+                          ).toLowerCase().contains(q.toLowerCase()),
+                        )
+                        .toList();
+            });
+          }
 
-            return DraggableScrollableSheet(
-              initialChildSize: 0.75,
-              minChildSize: 0.5,
-              maxChildSize: 0.95,
-              expand: false,
-              builder: (_, scrollCtrl) => Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Text(
-                              'Select Organisations',
+          return DraggableScrollableSheet(
+            initialChildSize: 0.65,
+            minChildSize: 0.4,
+            maxChildSize: 0.9,
+            expand: false,
+            builder: (_, scrollCtrl) => Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              color: _textPri,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              onDone(
+                                items
+                                    .where(
+                                      (o) => tempSelected.contains(keyOf(o)),
+                                    )
+                                    .toList(),
+                              );
+                            },
+                            child: const Text(
+                              'Done',
                               style: TextStyle(
-                                color: _textPri,
-                                fontSize: 15,
+                                color: _accent,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            const Spacer(),
-                            TextButton(
-                              onPressed: () {
-                                final newSelection = _orgs
-                                    .where(
-                                      (o) =>
-                                          tempSelected.contains(o['tenant_id']),
-                                    )
-                                    .toList();
-                                Navigator.pop(ctx);
-                                if (mounted) {
-                                  setState(() {
-                                    _selectedOrgs = newSelection;
-                                    _preview = null;
-                                  });
-                                }
-                              },
-                              child: const Text(
-                                'Done',
-                                style: TextStyle(
-                                  color: _accent,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: _bg,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: _borderCol),
                           ),
-                          child: TextField(
-                            controller: searchCtrl,
-                            onChanged: doFilter,
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: _bg,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _borderCol),
+                        ),
+                        child: TextField(
+                          controller: searchCtrl,
+                          onChanged: doFilter,
+                          style: const TextStyle(color: _textPri, fontSize: 13),
+                          decoration: const InputDecoration(
+                            hintText: 'Search...',
+                            hintStyle: TextStyle(color: _textMut, fontSize: 13),
+                            prefixIcon: Icon(
+                              Icons.search,
+                              color: _textMut,
+                              size: 18,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Text(
+                            '${tempSelected.length} selected',
                             style: const TextStyle(
-                              color: _textPri,
-                              fontSize: 13,
-                            ),
-                            decoration: const InputDecoration(
-                              hintText: 'Search org name or ID...',
-                              hintStyle: TextStyle(
-                                color: _textMut,
-                                fontSize: 13,
-                              ),
-                              prefixIcon: Icon(
-                                Icons.search,
-                                color: _textMut,
-                                size: 18,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(
-                                vertical: 12,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Text(
-                              '${tempSelected.length} selected',
-                              style: const TextStyle(
-                                color: _accent,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const Spacer(),
-                            if (tempSelected.isNotEmpty)
-                              GestureDetector(
-                                onTap: () =>
-                                    setModal(() => tempSelected.clear()),
-                                child: const Text(
-                                  'Clear all',
-                                  style: TextStyle(color: _error, fontSize: 12),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(height: 1, color: _borderCol),
-                  Expanded(
-                    child: _orgsLoading
-                        ? const Center(
-                            child: CircularProgressIndicator(
                               color: _accent,
-                              strokeWidth: 2,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
                             ),
-                          )
-                        : filtered.isEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(20),
-                              child: Text(
-                                _orgsError != null
-                                    ? 'Failed to load: $_orgsError'
-                                    : 'No organisations found',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: _textMut),
+                          ),
+                          const Spacer(),
+                          if (tempSelected.isNotEmpty)
+                            GestureDetector(
+                              onTap: () => setModal(() => tempSelected.clear()),
+                              child: const Text(
+                                'Clear all',
+                                style: TextStyle(color: _error, fontSize: 12),
                               ),
                             ),
-                          )
-                        : ListView.builder(
-                            controller: scrollCtrl,
-                            itemCount: filtered.length,
-                            itemBuilder: (_, i) {
-                              final org = filtered[i];
-                              final tid = org['tenant_id'] as String;
-                              final isSelected = tempSelected.contains(tid);
-                              final status = org['status'] as String? ?? '';
-                              final statusColor = status == 'active'
-                                  ? _success
-                                  : status == 'trial'
-                                  ? _warning
-                                  : _textMut;
-                              return InkWell(
-                                onTap: () => setModal(() {
-                                  if (isSelected)
-                                    tempSelected.remove(tid);
-                                  else
-                                    tempSelected.add(tid);
-                                }),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? _accent.withOpacity(0.05)
-                                        : Colors.transparent,
-                                    border: Border(
-                                      bottom: BorderSide(color: _divider),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 20,
-                                        height: 20,
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? _accent
-                                              : Colors.transparent,
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          border: Border.all(
-                                            color: isSelected
-                                                ? _accent
-                                                : _borderCol,
-                                            width: 1.5,
-                                          ),
-                                        ),
-                                        child: isSelected
-                                            ? const Icon(
-                                                Icons.check,
-                                                color: _white,
-                                                size: 13,
-                                              )
-                                            : null,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              org['company_name'] as String? ??
-                                                  tid,
-                                              style: const TextStyle(
-                                                color: _textPri,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            Text(
-                                              tid,
-                                              style: const TextStyle(
-                                                color: _textMut,
-                                                fontSize: 11,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 7,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: statusColor.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          status,
-                                          style: TextStyle(
-                                            color: statusColor,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Container(height: 1, color: _borderCol),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No items found',
+                            style: TextStyle(color: _textMut),
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: scrollCtrl,
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final item = filtered[i];
+                            final key = keyOf(item);
+                            final isSel = tempSelected.contains(key);
+                            return InkWell(
+                              onTap: () => setModal(() {
+                                if (isSel)
+                                  tempSelected.remove(key);
+                                else
+                                  tempSelected.add(key);
+                              }),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSel
+                                      ? _accent.withOpacity(0.05)
+                                      : Colors.transparent,
+                                  border: Border(
+                                    bottom: BorderSide(color: _divider),
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 20,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        color: isSel
+                                            ? _accent
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: isSel ? _accent : _borderCol,
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: isSel
+                                          ? const Icon(
+                                              Icons.check,
+                                              color: _white,
+                                              size: 13,
+                                            )
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      labelOf(item),
+                                      style: const TextStyle(
+                                        color: _textPri,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
     searchCtrl.dispose();
   }
@@ -1709,6 +1583,51 @@ class _GnSendScreenState extends State<GnSendScreen> {
         ),
       );
 
+  // ── Tags row for selected items ─────────────────────────────────────────────
+  Widget _tagsRow(
+    List<Map<String, dynamic>> items,
+    String Function(Map<String, dynamic>) labelOf,
+    String Function(Map<String, dynamic>) keyOf,
+    VoidCallback onRemove(String key),
+  ) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: items.map((o) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _accent.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _accent.withOpacity(0.2)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  labelOf(o),
+                  style: const TextStyle(
+                    color: _accent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: onRemove(keyOf(o)),
+                  child: const Icon(Icons.close, size: 12, color: _accent),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -1716,17 +1635,17 @@ class _GnSendScreenState extends State<GnSendScreen> {
         ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // ── Type picker ──────────────────────────────────────────────
-            _SectionHeader('Notification Type', icon: Icons.category_outlined),
+            // ── Type picker ────────────────────────────────────────────────
+            _OSectionHeader('Notification Type', icon: Icons.category_outlined),
             const SizedBox(height: 10),
             SizedBox(
               height: 44,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                itemCount: _types.length,
+                itemCount: _orgTypes.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 8),
                 itemBuilder: (_, i) {
-                  final t = _types[i];
+                  final t = _orgTypes[i];
                   final sel = _type == t;
                   final c = _typeColor(t);
                   return GestureDetector(
@@ -1772,65 +1691,21 @@ class _GnSendScreenState extends State<GnSendScreen> {
             ),
             const SizedBox(height: 18),
 
-            // ── Recipients picker (NEW) ───────────────────────────────────
-            _SectionHeader('Send To', icon: Icons.group_outlined),
+            // ── Target scope ───────────────────────────────────────────────
+            _OSectionHeader('Send To', icon: Icons.people_outline),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: _recipientOptions.map((opt) {
-                final (value, label, icon) = opt;
-                final sel = _recipients == value;
-                return GestureDetector(
-                  onTap: () => setState(() {
-                    _recipients = value;
-                    _preview = null;
-                  }),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: sel ? _accent : _white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: sel ? _accent : _borderCol),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, color: sel ? _white : _textMut, size: 14),
-                        const SizedBox(width: 6),
-                        Text(
-                          label,
-                          style: TextStyle(
-                            color: sel ? _white : _textSec,
-                            fontSize: 12,
-                            fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 18),
-
-            // ── Target Audience ──────────────────────────────────────────
-            _SectionHeader('Target Audience', icon: Icons.business_outlined),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _scopes.map((s) {
+              children: _orgScopes.map((s) {
                 final sel = _scope == s;
                 return GestureDetector(
                   onTap: () => setState(() {
                     _scope = s;
                     _preview = null;
-                    if (s != 'selected') _selectedOrgs = [];
+                    if (s != 'by_department') _selectedDepts = [];
+                    if (s != 'by_role') _selectedRoles = [];
+                    if (s != 'specific') _selectedEmps = [];
                   }),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
@@ -1857,11 +1732,23 @@ class _GnSendScreenState extends State<GnSendScreen> {
             ),
             const SizedBox(height: 12),
 
-            // ── Org picker (replaces raw text field) ─────────────────────
-            if (_scope == 'selected') ...[
+            // ── Scope pickers ──────────────────────────────────────────────
+            if (_scope == 'by_department') ...[
               GestureDetector(
-                onTap: _showOrgPicker,
-                child: _LCard(
+                onTap: _depsLoading
+                    ? null
+                    : () => _showPicker(
+                        title: 'Select Departments',
+                        items: _departments,
+                        labelOf: (d) => d['department_name'] ?? '',
+                        keyOf: (d) => d['id'].toString(),
+                        selected: _selectedDepts,
+                        onDone: (v) => setState(() {
+                          _selectedDepts = v;
+                          _preview = null;
+                        }),
+                      ),
+                child: _OCard(
                   borderColor: _accent.withOpacity(0.3),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -1870,109 +1757,173 @@ class _GnSendScreenState extends State<GnSendScreen> {
                   child: Row(
                     children: [
                       const Icon(
-                        Icons.business_outlined,
+                        Icons.domain_outlined,
                         color: _accent,
                         size: 18,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _selectedOrgs.isEmpty
-                            ? const Text(
-                                'Tap to select organisations...',
-                                style: TextStyle(color: _textMut, fontSize: 13),
-                              )
-                            : Text(
-                                _selectedOrgs.length == 1
-                                    ? _selectedOrgs.first['company_name'] ??
-                                          _selectedOrgs.first['tenant_id']
-                                    : '${_selectedOrgs.length} organisations selected',
-                                style: const TextStyle(
-                                  color: _textPri,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
+                        child: Text(
+                          _selectedDepts.isEmpty
+                              ? 'Tap to select departments...'
+                              : '${_selectedDepts.length} department${_selectedDepts.length > 1 ? 's' : ''} selected',
+                          style: TextStyle(
+                            color: _selectedDepts.isEmpty ? _textMut : _textPri,
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
-                      Icon(Icons.arrow_forward_ios, color: _textMut, size: 13),
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        color: _textMut,
+                        size: 13,
+                      ),
                     ],
                   ),
                 ),
               ),
-              if (_selectedOrgs.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: _selectedOrgs.map((o) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _accent.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: _accent.withOpacity(0.2)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            o['company_name'] ?? o['tenant_id'],
-                            style: const TextStyle(
-                              color: _accent,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          GestureDetector(
-                            onTap: () => setState(() {
-                              _selectedOrgs.removeWhere(
-                                (x) => x['tenant_id'] == o['tenant_id'],
-                              );
-                              _preview = null;
-                            }),
-                            child: const Icon(
-                              Icons.close,
-                              size: 12,
-                              color: _accent,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-              const SizedBox(height: 10),
-            ],
-
-            if (_scope == 'by_plan') ...[
-              TextField(
-                controller: _planCtrl,
-                style: const TextStyle(color: _textPri, fontSize: 13),
-                decoration: _fieldDec(
-                  'Plan ID',
-                  hint: 'e.g. plan-pro-monthly',
-                  icon: Icons.card_membership_outlined,
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-            if (_scope == 'by_version') ...[
-              TextField(
-                controller: _versionCtrl,
-                style: const TextStyle(color: _textPri, fontSize: 13),
-                decoration: _fieldDec(
-                  'App Version',
-                  hint: 'e.g. 2.4.0',
-                  icon: Icons.phone_android_outlined,
-                ),
+              _tagsRow(
+                _selectedDepts,
+                (d) => d['department_name'] ?? '',
+                (d) => d['id'].toString(),
+                (key) =>
+                    () => setState(() {
+                      _selectedDepts.removeWhere(
+                        (d) => d['id'].toString() == key,
+                      );
+                      _preview = null;
+                    }),
               ),
               const SizedBox(height: 10),
             ],
 
+            if (_scope == 'by_role') ...[
+              GestureDetector(
+                onTap: () => _showPicker(
+                  title: 'Select Roles',
+                  items: _roles,
+                  labelOf: (r) => r['role_name'] ?? '',
+                  keyOf: (r) => r['id'].toString(),
+                  selected: _selectedRoles,
+                  onDone: (v) => setState(() {
+                    _selectedRoles = v;
+                    _preview = null;
+                  }),
+                ),
+                child: _OCard(
+                  borderColor: _accent.withOpacity(0.3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 13,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.badge_outlined,
+                        color: _accent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _selectedRoles.isEmpty
+                              ? 'Tap to select roles...'
+                              : '${_selectedRoles.length} role${_selectedRoles.length > 1 ? 's' : ''} selected',
+                          style: TextStyle(
+                            color: _selectedRoles.isEmpty ? _textMut : _textPri,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        color: _textMut,
+                        size: 13,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              _tagsRow(
+                _selectedRoles,
+                (r) => r['role_name'] ?? '',
+                (r) => r['id'].toString(),
+                (key) =>
+                    () => setState(() {
+                      _selectedRoles.removeWhere(
+                        (r) => r['id'].toString() == key,
+                      );
+                      _preview = null;
+                    }),
+              ),
+              const SizedBox(height: 10),
+            ],
+
+            if (_scope == 'specific') ...[
+              GestureDetector(
+                onTap: () => _showPicker(
+                  title: 'Select Employees',
+                  items: _employees,
+                  labelOf: (e) =>
+                      '${e['first_name'] ?? ''} ${e['last_name'] ?? ''}'.trim(),
+                  keyOf: (e) => e['emp_id'].toString(),
+                  selected: _selectedEmps,
+                  onDone: (v) => setState(() {
+                    _selectedEmps = v;
+                    _preview = null;
+                  }),
+                ),
+                child: _OCard(
+                  borderColor: _accent.withOpacity(0.3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 13,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.person_search_outlined,
+                        color: _accent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _selectedEmps.isEmpty
+                              ? 'Tap to select employees...'
+                              : '${_selectedEmps.length} employee${_selectedEmps.length > 1 ? 's' : ''} selected',
+                          style: TextStyle(
+                            color: _selectedEmps.isEmpty ? _textMut : _textPri,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        color: _textMut,
+                        size: 13,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              _tagsRow(
+                _selectedEmps,
+                (e) =>
+                    '${e['first_name'] ?? ''} ${e['last_name'] ?? ''}'.trim(),
+                (e) => e['emp_id'].toString(),
+                (key) =>
+                    () => setState(() {
+                      _selectedEmps.removeWhere(
+                        (e) => e['emp_id'].toString() == key,
+                      );
+                      _preview = null;
+                    }),
+              ),
+              const SizedBox(height: 10),
+            ],
+
+            // ── Preview audience ───────────────────────────────────────────
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
@@ -1998,7 +1949,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
               ),
             ),
             if (_preview != null) ...[
-              _LCard(
+              _OCard(
                 borderColor: _accent.withOpacity(0.25),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -2008,29 +1959,22 @@ class _GnSendScreenState extends State<GnSendScreen> {
                   children: [
                     const Icon(Icons.people_outline, color: _accent, size: 18),
                     const SizedBox(width: 10),
-                    Expanded(
-                      child: RichText(
-                        text: TextSpan(
-                          style: const TextStyle(color: _textSec, fontSize: 13),
-                          children: [
-                            TextSpan(
-                              text:
-                                  '${_fmt(_preview!.totalEmployees)} recipients',
-                              style: const TextStyle(
-                                color: _accent,
-                                fontWeight: FontWeight.w700,
-                              ),
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(color: _textSec, fontSize: 13),
+                        children: [
+                          TextSpan(
+                            text:
+                                '${_fmt(_preview!.totalEmployees)} employee${_preview!.totalEmployees == 1 ? '' : 's'}',
+                            style: const TextStyle(
+                              color: _accent,
+                              fontWeight: FontWeight.w700,
                             ),
-                            const TextSpan(text: ' across '),
-                            TextSpan(
-                              text: '${_preview!.totalOrgs} organisations',
-                              style: const TextStyle(
-                                color: _accent,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                          const TextSpan(
+                            text: ' will receive this notification',
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -2040,15 +1984,15 @@ class _GnSendScreenState extends State<GnSendScreen> {
             ],
 
             const SizedBox(height: 8),
-            // ── Content ──────────────────────────────────────────────────
-            _SectionHeader('Content', icon: Icons.edit_outlined),
+            // ── Content ────────────────────────────────────────────────────
+            _OSectionHeader('Content', icon: Icons.edit_outlined),
             const SizedBox(height: 10),
             TextField(
               controller: _titleCtrl,
               style: const TextStyle(color: _textPri, fontSize: 14),
               decoration: _fieldDec(
                 'Notification Title *',
-                hint: 'e.g. Scheduled Maintenance Tonight',
+                hint: 'e.g. Office Closed Tomorrow',
                 icon: Icons.title_outlined,
               ),
             ),
@@ -2076,8 +2020,8 @@ class _GnSendScreenState extends State<GnSendScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ── Schedule toggle ───────────────────────────────────────────
-            _LCard(
+            // ── Schedule toggle ────────────────────────────────────────────
+            _OCard(
               borderColor: _warning.withOpacity(0.35),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
@@ -2105,7 +2049,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
               const SizedBox(height: 8),
               GestureDetector(
                 onTap: _pickSchedule,
-                child: _LCard(
+                child: _OCard(
                   borderColor: _warning.withOpacity(0.4),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -2143,8 +2087,8 @@ class _GnSendScreenState extends State<GnSendScreen> {
             ],
             const SizedBox(height: 16),
 
-            if (_type == 'emergency_alert') ...[
-              _LCard(
+            if (_type == 'urgent') ...[
+              _OCard(
                 borderColor: _error.withOpacity(0.4),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -2152,11 +2096,11 @@ class _GnSendScreenState extends State<GnSendScreen> {
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded, color: _error, size: 18),
+                    Icon(Icons.priority_high_rounded, color: _error, size: 18),
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Emergency alerts are delivered with high priority and may override DND settings.',
+                        'Urgent notifications are delivered with high priority and may override DND settings.',
                         style: TextStyle(color: _error, fontSize: 12),
                       ),
                     ),
@@ -2172,9 +2116,7 @@ class _GnSendScreenState extends State<GnSendScreen> {
               child: ElevatedButton.icon(
                 onPressed: _sending ? null : _doSend,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _type == 'emergency_alert'
-                      ? _error
-                      : _accent,
+                  backgroundColor: _type == 'urgent' ? _error : _accent,
                   foregroundColor: _white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
@@ -2225,400 +2167,26 @@ class _GnSendScreenState extends State<GnSendScreen> {
 
   @override
   void dispose() {
-    for (final c in [_titleCtrl, _msgCtrl, _imgCtrl, _planCtrl, _versionCtrl]) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-}
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION 8 — HISTORY SCREEN  ← ALL FIXES HERE
-// ─────────────────────────────────────────────────────────────────────────────
-
-class GnHistoryScreen extends StatefulWidget {
-  final GnService svc;
-  const GnHistoryScreen({super.key, required this.svc});
-  @override
-  State<GnHistoryScreen> createState() => _GnHistoryScreenState();
-}
-
-class _GnHistoryScreenState extends State<GnHistoryScreen> {
-  List<GnNotification> _items = [];
-  bool _loading = true;
-  String? _errMsg;
-  int _page = 1;
-  int _total = 0;
-  static const _limit = 20;
-
-  String? _filterType;
-  String? _filterStatus;
-  final _searchCtrl = TextEditingController();
-
-  // FIX 1: debounce timer so search fires 400ms after the user stops typing
-  Timer? _debounce;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-    // FIX 2: listen to every keystroke; debounce the actual load call
-    _searchCtrl.addListener(_onSearchChanged);
-  }
-
-  // FIX 3: debounced handler — resets page and fetches when text changes
-  void _onSearchChanged() {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 400), () {
-      if (mounted) _load(reset: true);
-    });
-  }
-
-  Future<void> _load({bool reset = false}) async {
-    if (reset) _page = 1;
-    setState(() {
-      _loading = true;
-      _errMsg = null;
-    });
-    try {
-      final data = await widget.svc.history(
-        page: _page,
-        limit: _limit,
-        type: _filterType,
-        status: _filterStatus,
-        search: _searchCtrl.text.trim().isEmpty
-            ? null
-            : _searchCtrl.text.trim(),
-      );
-      setState(() {
-        _total = _parseInt(data['total']);
-        _items = (data['data'] as List)
-            .map((e) => GnNotification.fromJson(e))
-            .toList();
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _errMsg = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  // FIX 4: type chip toggle — updates state AND immediately fetches
-  void _toggleType(String t) {
-    setState(() => _filterType = _filterType == t ? null : t);
-    _load(reset: true);
-  }
-
-  // FIX 5: status chip toggle — updates state AND immediately fetches
-  void _toggleStatus(String s) {
-    setState(() => _filterStatus = _filterStatus == s ? null : s);
-    _load(reset: true);
-  }
-
-  // FIX 6: clear type filter
-  void _clearType() {
-    setState(() => _filterType = null);
-    _load(reset: true);
-  }
-
-  // FIX 7: clear status filter
-  void _clearStatus() {
-    setState(() => _filterStatus = null);
-    _load(reset: true);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final totalPages = (_total / _limit).ceil().clamp(1, 9999);
-
-    return Column(
-      children: [
-        // ── Filter bar ──────────────────────────────────────────────────────
-        Container(
-          color: _white,
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Search field ──
-              Container(
-                decoration: BoxDecoration(
-                  color: _white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _borderCol),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0x08000000), blurRadius: 4),
-                  ],
-                ),
-                child: TextField(
-                  controller: _searchCtrl,
-                  // FIX 8: onSubmitted still works for keyboard "search" button
-                  onSubmitted: (_) => _load(reset: true),
-                  style: const TextStyle(color: _textPri, fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: 'Search by title...',
-                    hintStyle: const TextStyle(color: _textMut, fontSize: 13),
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      color: _textMut,
-                      size: 18,
-                    ),
-                    // FIX 9: clear button wired to debounced listener
-                    // (clearing the controller fires _onSearchChanged)
-                    suffixIcon: _searchCtrl.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(
-                              Icons.close,
-                              color: _textMut,
-                              size: 16,
-                            ),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              // listener fires automatically; no manual call needed
-                            },
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 13),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // ── Type chips ──
-              const Text(
-                'TYPE',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: _textMut,
-                  letterSpacing: 0.6,
-                ),
-              ),
-              const SizedBox(height: 6),
-              SizedBox(
-                height: 32,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    _FilterChip(
-                      label: 'All',
-                      selected: _filterType == null,
-                      // FIX 10: directly calls _clearType instead of
-                      // setState-only
-                      onTap: _clearType,
-                    ),
-                    ...[
-                      'general',
-                      'maintenance',
-                      'app_update',
-                      'billing_reminder',
-                      'emergency_alert',
-                    ].map(
-                      (t) => _FilterChip(
-                        label: _typeLabel(t),
-                        selected: _filterType == t,
-                        color: _typeColor(t),
-                        onTap: () => _toggleType(t),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // ── Status chips ──
-              const Text(
-                'STATUS',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: _textMut,
-                  letterSpacing: 0.6,
-                ),
-              ),
-              const SizedBox(height: 6),
-              SizedBox(
-                height: 32,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    _FilterChip(
-                      label: 'All',
-                      selected: _filterStatus == null,
-                      onTap: _clearStatus,
-                    ),
-                    ...[
-                      'sent',
-                      'scheduled',
-                      'failed',
-                      'sending',
-                      'cancelled',
-                    ].map(
-                      (s) => _FilterChip(
-                        label: s.capitalize(),
-                        selected: _filterStatus == s,
-                        color: _statusColor(s),
-                        onTap: () => _toggleStatus(s),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ── Active filter summary + reset-all ──
-              if (_filterType != null || _filterStatus != null) ...[
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Icon(Icons.filter_list, size: 13, color: _accent),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        [
-                          if (_filterType != null)
-                            'Type: ${_typeLabel(_filterType!)}',
-                          if (_filterStatus != null)
-                            'Status: ${_filterStatus!.capitalize()}',
-                        ].join('  ·  '),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: _accent,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _filterType = null;
-                          _filterStatus = null;
-                        });
-                        _load(reset: true);
-                      },
-                      child: const Text(
-                        'Reset all',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: _error,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-        Container(height: 1, color: const Color(0xFFE8EAED)),
-
-        // ── List ────────────────────────────────────────────────────────────
-        Expanded(
-          child: _loading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: _accent,
-                    strokeWidth: 2,
-                  ),
-                )
-              : _errMsg != null
-              ? _ErrorView(message: _errMsg!, onRetry: _load)
-              : _items.isEmpty
-              ? RefreshIndicator(
-                  onRefresh: _load,
-                  color: _accent,
-                  child: ListView(children: const [_EmptyState()]),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  color: _accent,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(14),
-                    itemCount: _items.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (ctx, i) => _NotifTile(
-                      _items[i],
-                      onTap: () => Navigator.push(
-                        ctx,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              _DetailScreen(svc: widget.svc, id: _items[i].id),
-                        ),
-                      ).then((_) => _load(reset: true)),
-                    ),
-                  ),
-                ),
-        ),
-
-        // ── Pagination ──────────────────────────────────────────────────────
-        if (!_loading && _total > _limit)
-          Container(
-            color: _white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Row(
-              children: [
-                Text(
-                  '$_total result${_total == 1 ? '' : 's'}',
-                  style: const TextStyle(color: _textMut, fontSize: 12),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  color: _page > 1 ? _accent : _textMut,
-                  onPressed: _page > 1
-                      ? () {
-                          _page--;
-                          _load();
-                        }
-                      : null,
-                ),
-                Text(
-                  '$_page / $totalPages',
-                  style: const TextStyle(color: _textPri, fontSize: 13),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right),
-                  color: _page < totalPages ? _accent : _textMut,
-                  onPressed: _page < totalPages
-                      ? () {
-                          _page++;
-                          _load();
-                        }
-                      : null,
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    // FIX 11: remove listener before disposing controller
-    _searchCtrl.removeListener(_onSearchChanged);
-    _searchCtrl.dispose();
+    for (final c in [_titleCtrl, _msgCtrl, _imgCtrl]) c.dispose();
     super.dispose();
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION 09 — ANALYTICS SCREEN
+// SECTION 8 — ANALYTICS SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
-class GnAnalyticsScreen extends StatefulWidget {
-  final GnService svc;
-  const GnAnalyticsScreen({super.key, required this.svc});
+class _OrgAnalyticsScreen extends StatefulWidget {
+  final OrgNotifyService svc;
+  const _OrgAnalyticsScreen({super.key, required this.svc});
+
   @override
-  State<GnAnalyticsScreen> createState() => _GnAnalyticsScreenState();
+  State<_OrgAnalyticsScreen> createState() => _OrgAnalyticsScreenState();
 }
 
-class _GnAnalyticsScreenState extends State<GnAnalyticsScreen> {
-  List<GnAnalyticsTrend> _trend = [];
-  List<GnTypeBreakdown> _byType = [];
+class _OrgAnalyticsScreenState extends State<_OrgAnalyticsScreen> {
+  List<OrgAnalyticsTrend> _trend = [];
+  List<OrgTypeBreakdown> _byType = [];
   bool _loading = true;
   String? _errMsg;
 
@@ -2637,10 +2205,10 @@ class _GnAnalyticsScreenState extends State<GnAnalyticsScreen> {
       final data = await widget.svc.analytics();
       setState(() {
         _trend = (data['trend'] as List)
-            .map((e) => GnAnalyticsTrend.fromJson(e))
+            .map((e) => OrgAnalyticsTrend.fromJson(e))
             .toList();
         _byType = (data['by_type'] as List)
-            .map((e) => GnTypeBreakdown.fromJson(e))
+            .map((e) => OrgTypeBreakdown.fromJson(e))
             .toList();
         _loading = false;
       });
@@ -2654,23 +2222,20 @@ class _GnAnalyticsScreenState extends State<GnAnalyticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
+    if (_loading)
       return const Center(
         child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
       );
-    }
-    if (_errMsg != null) {
-      return _ErrorView(message: _errMsg!, onRetry: _load);
-    }
+    if (_errMsg != null) return _OErrorView(message: _errMsg!, onRetry: _load);
     return RefreshIndicator(
       onRefresh: _load,
       color: _accent,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _SectionHeader('30-Day Trend', icon: Icons.show_chart_outlined),
+          _OSectionHeader('30-Day Trend', icon: Icons.show_chart_outlined),
           const SizedBox(height: 12),
-          _LCard(
+          _OCard(
             child: _trend.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
@@ -2678,10 +2243,10 @@ class _GnAnalyticsScreenState extends State<GnAnalyticsScreen> {
                       child: Text('No data', style: TextStyle(color: _textMut)),
                     ),
                   )
-                : _BarChart(trend: _trend),
+                : _OBarChart(trend: _trend),
           ),
           const SizedBox(height: 20),
-          _SectionHeader('Performance by Type', icon: Icons.pie_chart_outline),
+          _OSectionHeader('Performance by Type', icon: Icons.pie_chart_outline),
           const SizedBox(height: 12),
           if (_byType.isEmpty)
             const Center(
@@ -2692,17 +2257,17 @@ class _GnAnalyticsScreenState extends State<GnAnalyticsScreen> {
               final c = _typeColor(t.type);
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: _LCard(
+                child: _OCard(
                   borderLeft: c,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          _TypeChip(t.type),
+                          _OTypeChip(t.type),
                           const Spacer(),
                           Text(
-                            '${_fmt(t.total)} campaigns',
+                            '${_fmt(t.total)} sent',
                             style: const TextStyle(
                               color: _textMut,
                               fontSize: 11,
@@ -2711,13 +2276,13 @@ class _GnAnalyticsScreenState extends State<GnAnalyticsScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      _ProgressRow(
+                      _OProgressRow(
                         label: 'Sent',
                         value: t.totalSent,
-                        total: t.total > 0 ? t.total * 1000 : 1,
+                        total: t.total > 0 ? t.total : 1,
                         color: _success,
                       ),
-                      _ProgressRow(
+                      _OProgressRow(
                         label: 'Failed',
                         value: t.totalFailed,
                         total: (t.totalSent + t.totalFailed) > 0
@@ -2764,9 +2329,9 @@ class _GnAnalyticsScreenState extends State<GnAnalyticsScreen> {
   }
 }
 
-class _BarChart extends StatelessWidget {
-  final List<GnAnalyticsTrend> trend;
-  const _BarChart({required this.trend});
+class _OBarChart extends StatelessWidget {
+  final List<OrgAnalyticsTrend> trend;
+  const _OBarChart({required this.trend});
 
   @override
   Widget build(BuildContext context) {
@@ -2826,28 +2391,28 @@ class _BarChart extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION 11 — DETAIL SCREEN
+// SECTION 10 — DETAIL SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _DetailScreen extends StatefulWidget {
-  final GnService svc;
+class _OrgDetailScreen extends StatefulWidget {
+  final OrgNotifyService svc;
   final int id;
-  const _DetailScreen({required this.svc, required this.id});
+  const _OrgDetailScreen({required this.svc, required this.id});
 
   @override
-  State<_DetailScreen> createState() => _DetailScreenState();
+  State<_OrgDetailScreen> createState() => _OrgDetailScreenState();
 }
 
-class _DetailScreenState extends State<_DetailScreen>
+class _OrgDetailScreenState extends State<_OrgDetailScreen>
     with WidgetsBindingObserver {
-  GnNotification? _n;
+  OrgNotification? _n;
   List<Map<String, dynamic>> _breakdown = [];
-  List<Map<String, dynamic>> _orgStats = [];
   bool _loading = true;
   String? _errMsg;
   bool _retrying = false;
   Timer? _autoRefresh;
   DateTime _lastUpdated = DateTime.now();
+
   @override
   void initState() {
     super.initState();
@@ -2878,10 +2443,10 @@ class _DetailScreenState extends State<_DetailScreen>
     try {
       final data = await widget.svc.detail(widget.id);
       setState(() {
-        _n = GnNotification.fromJson(data['notification']);
+        _n = OrgNotification.fromJson(data['notification']);
         _breakdown = List<Map<String, dynamic>>.from(data['breakdown'] ?? []);
-        _orgStats = List<Map<String, dynamic>>.from(data['org_stats'] ?? []);
         _loading = false;
+        _lastUpdated = DateTime.now();
       });
     } catch (e) {
       setState(() {
@@ -2951,7 +2516,6 @@ class _DetailScreenState extends State<_DetailScreen>
           IconButton(
             icon: const Icon(Icons.refresh, color: _accent, size: 20),
             onPressed: _loading ? null : _load,
-            tooltip: 'Refresh',
           ),
           if (_n?.status == 'sent' && (_n?.failedCount ?? 0) > 0)
             TextButton.icon(
@@ -2978,7 +2542,7 @@ class _DetailScreenState extends State<_DetailScreen>
               child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
             )
           : _errMsg != null
-          ? _ErrorView(message: _errMsg!, onRetry: _load)
+          ? _OErrorView(message: _errMsg!, onRetry: _load)
           : _buildBody(),
     );
   }
@@ -2989,16 +2553,16 @@ class _DetailScreenState extends State<_DetailScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _LCard(
+        _OCard(
           borderLeft: _typeColor(n.type),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  _TypeChip(n.type),
+                  _OTypeChip(n.type),
                   const SizedBox(width: 8),
-                  _StatusChip(n.status),
+                  _OStatusChip(n.status),
                   const Spacer(),
                   Text(
                     '#${n.id}',
@@ -3025,8 +2589,8 @@ class _DetailScreenState extends State<_DetailScreen>
                 ),
               ),
               const SizedBox(height: 12),
-              _infoRow(Icons.people_outline, 'Audience', _scopeLabel(n.scope)),
-              _infoRow(Icons.person_outline, 'Created by', n.createdBy),
+              _infoRow(Icons.people_outline, 'Target', _scopeLabel(n.scope)),
+              _infoRow(Icons.person_outline, 'Sent by', n.createdBy),
               _infoRow(
                 Icons.calendar_today_outlined,
                 'Created',
@@ -3044,24 +2608,20 @@ class _DetailScreenState extends State<_DetailScreen>
           ),
         ),
         const SizedBox(height: 14),
-        _SectionHeader('Delivery Summary', icon: Icons.analytics_outlined),
+        _OSectionHeader('Delivery Summary', icon: Icons.analytics_outlined),
         const SizedBox(height: 10),
         Row(
           children: [
-            Expanded(child: _MiniStat('Total', _fmt(n.totalTargets), _textPri)),
-            const SizedBox(width: 8),
-            Expanded(child: _MiniStat('Sent', _fmt(n.sentCount), _success)),
-            const SizedBox(width: 8),
             Expanded(
-              child: _MiniStat(
-                'Pending',
-                _fmt(n.totalTargets - n.sentCount - n.failedCount),
-                _warning,
-              ),
+              child: _OMiniStat('Total', _fmt(n.totalTargets), _textPri),
             ),
             const SizedBox(width: 8),
+            Expanded(child: _OMiniStat('Sent', _fmt(n.sentCount), _success)),
+            const SizedBox(width: 8),
+            Expanded(child: _OMiniStat('Failed', _fmt(n.failedCount), _error)),
+            const SizedBox(width: 8),
             Expanded(
-              child: _MiniStat(
+              child: _OMiniStat(
                 'Opened',
                 '${n.openRate.toStringAsFixed(1)}%',
                 _cyan,
@@ -3070,22 +2630,22 @@ class _DetailScreenState extends State<_DetailScreen>
           ],
         ),
         const SizedBox(height: 10),
-        _LCard(
+        _OCard(
           child: Column(
             children: [
-              _ProgressRow(
+              _OProgressRow(
                 label: 'Sent',
                 value: n.sentCount,
                 total: n.totalTargets > 0 ? n.totalTargets : 1,
                 color: _success,
               ),
-              _ProgressRow(
+              _OProgressRow(
                 label: 'Failed',
                 value: n.failedCount,
                 total: n.totalTargets > 0 ? n.totalTargets : 1,
                 color: _error,
               ),
-              _ProgressRow(
+              _OProgressRow(
                 label: 'Opened',
                 value: n.openedCount,
                 total: n.sentCount > 0 ? n.sentCount : 1,
@@ -3096,9 +2656,9 @@ class _DetailScreenState extends State<_DetailScreen>
         ),
         if (_breakdown.isNotEmpty) ...[
           const SizedBox(height: 16),
-          _SectionHeader('Status Breakdown', icon: Icons.donut_small_outlined),
+          _OSectionHeader('Status Breakdown', icon: Icons.donut_small_outlined),
           const SizedBox(height: 10),
-          _LCard(
+          _OCard(
             child: Column(
               children: _breakdown.map((b) {
                 final st = b['delivery_status'] as String? ?? '';
@@ -3142,69 +2702,6 @@ class _DetailScreenState extends State<_DetailScreen>
             ),
           ),
         ],
-        if (_orgStats.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          _SectionHeader(
-            'Per-Organization Stats',
-            icon: Icons.business_outlined,
-          ),
-          const SizedBox(height: 10),
-          ..._orgStats.map((o) {
-            final sent = o['sent'] ?? 0;
-            final failed = o['failed'] ?? 0;
-            final opened = o['opened'] ?? 0;
-            final total = o['total'] ?? 1;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _LCard(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      (o['company_name'] as String?)?.isNotEmpty == true
-                          ? o['company_name'] as String
-                          : o['tenant_id'] as String? ?? '',
-                      style: const TextStyle(
-                        color: _textPri,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        _StatPill(
-                          icon: Icons.send_outlined,
-                          value: '$sent/$total',
-                          color: _success,
-                        ),
-                        const SizedBox(width: 12),
-                        _StatPill(
-                          icon: Icons.hourglass_empty_outlined,
-                          value: '${o['pending'] ?? 0}',
-                          color: _warning,
-                        ),
-                        const SizedBox(width: 12),
-                        _StatPill(
-                          icon: Icons.error_outline,
-                          value: '$failed',
-                          color: _error,
-                        ),
-                        const SizedBox(width: 12),
-                        _StatPill(
-                          icon: Icons.visibility_outlined,
-                          value: '$opened',
-                          color: _cyan,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-        ],
         const SizedBox(height: 20),
       ],
     );
@@ -3232,18 +2729,17 @@ class _DetailScreenState extends State<_DetailScreen>
   );
 }
 
-class _MiniStat extends StatelessWidget {
+class _OMiniStat extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  const _MiniStat(this.label, this.value, this.color, {super.key});
+  const _OMiniStat(this.label, this.value, this.color);
 
   @override
-  Widget build(BuildContext context) => _LCard(
+  Widget build(BuildContext context) => _OCard(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
           value,
@@ -3260,11 +2756,11 @@ class _MiniStat extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION 12 — EMPTY & ERROR STATES
+// SECTION 11 — EMPTY & ERROR STATES
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({super.key});
+class _OEmptyState extends StatelessWidget {
+  const _OEmptyState();
 
   @override
   Widget build(BuildContext context) => const Padding(
@@ -3284,10 +2780,10 @@ class _EmptyState extends StatelessWidget {
   );
 }
 
-class _ErrorView extends StatelessWidget {
+class _OErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
-  const _ErrorView({super.key, required this.message, required this.onRetry});
+  const _OErrorView({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) => Center(

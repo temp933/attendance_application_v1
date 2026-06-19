@@ -25,7 +25,13 @@ async function q(sql, params = []) {
  * @param {object} scopeMeta     - extra parameters (tenant_ids[], plan_id, version_string)
  * @returns {Promise<Array>}
  */
-async function resolveTargets(scope, scopeMeta = {}, recipients = "all") {
+async function resolveTargets(
+  scope,
+  scopeMeta = {},
+  recipients = "all",
+  opts = {},
+) {
+  const requireToken = opts.requireToken !== false; // default true
   let tenantFilter = "";
   let params = [];
 
@@ -93,6 +99,9 @@ async function resolveTargets(scope, scopeMeta = {}, recipients = "all") {
   }
   // "all" → no join, no filter — returns every employee with a valid FCM token
 
+  const loginJoinType = requireToken ? "INNER" : "LEFT";
+  const tokenCondition = requireToken ? "AND lm.fcm_token IS NOT NULL" : "";
+
   const rows = await q(
     `SELECT
         em.tenant_id,
@@ -103,12 +112,12 @@ async function resolveTargets(scope, scopeMeta = {}, recipients = "all") {
             ON em.tenant_id COLLATE utf8mb4_unicode_ci
              = t.tenant_id  COLLATE utf8mb4_unicode_ci
             AND em.status = 'Active'
-     INNER  JOIN login_master lm
+     ${loginJoinType}  JOIN login_master lm
             ON  lm.emp_id    = em.emp_id
             AND lm.tenant_id COLLATE utf8mb4_unicode_ci
               = em.tenant_id COLLATE utf8mb4_unicode_ci
             AND lm.status             = 'Active'
-            AND lm.fcm_token         IS NOT NULL
+            ${tokenCondition}
             ${versionWhere}
      ${recipientJoin}
      WHERE  ${tenantFilter}
@@ -191,54 +200,71 @@ async function sendGlobalNotification(notificationId) {
     [notificationId],
   );
 
-  // 2. Resolve targets
-  const scopeMeta = notif.scope_meta ? JSON.parse(notif.scope_meta) : {};
-  const targets = await resolveTargets(
+  // 2. Resolve ALL eligible recipients regardless of online/token status —
+  //    this is what guarantees offline-only orgs aren't skipped.
+  const scopeMeta = notif.scope_meta
+    ? typeof notif.scope_meta === "string"
+      ? JSON.parse(notif.scope_meta)
+      : notif.scope_meta
+    : {};
+  const allRecipients = await resolveTargets(
     notif.scope,
     scopeMeta,
     notif.recipients || "all",
+    { requireToken: false },
   );
-  if (!targets.length) {
+
+  if (!allRecipients.length) {
     await db.query(
       `UPDATE global_notifications SET status = 'sent', total_targets = 0 WHERE id = ?`,
       [notificationId],
     );
-    console.log(`[global-notify] #${notificationId} — no targets found.`);
+    console.log(
+      `[global-notify] #${notificationId} — no eligible recipients found.`,
+    );
     return;
   }
 
-  // 3. Bulk-insert log rows for ALL employees in targeted tenants (not just token holders)
-  const tenantIds = [...new Set(targets.map((t) => t.tenant_id))];
-  const tenantPlaceholders = tenantIds.map(() => "?").join(",");
-  const [allEmployees] = await db.query(
-    `SELECT em.emp_id, em.tenant_id
-     FROM employee_master em
-     WHERE em.tenant_id IN (${tenantPlaceholders}) AND em.status = 'Active'`,
-    tenantIds,
-  );
-  if (allEmployees.length > 0) {
-    const allLogValues = allEmployees.map(({ tenant_id, emp_id }) => [
-      notificationId,
-      tenant_id,
-      emp_id,
-      null,
-      "pending",
-    ]);
-    await db.query(
-      `INSERT IGNORE INTO global_notification_logs
-         (notification_id, tenant_id, emp_id, fcm_token, delivery_status)
-       VALUES ?`,
-      [allLogValues],
-    );
-  }
+  // Subset that can actually be pushed right now (has a live fcm_token)
+  const targets = allRecipients.filter((r) => r.fcm_token);
 
-  // 4. Bulk-insert tenant target rows (distinct tenants)
-  const tenantSet = [...new Set(targets.map((t) => t.tenant_id))];
+  // 3. Bulk-insert log rows for EVERY eligible employee (online or not)
+  const allLogValues = allRecipients.map(({ tenant_id, emp_id }) => [
+    notificationId,
+    tenant_id,
+    emp_id,
+    null,
+    "pending",
+  ]);
+  await db.query(
+    `INSERT IGNORE INTO global_notification_logs
+       (notification_id, tenant_id, emp_id, fcm_token, delivery_status)
+     VALUES ?`,
+    [allLogValues],
+  );
+
+  // 4. Bulk-insert tenant target rows for EVERY eligible tenant (online or not)
+  const tenantSet = [...new Set(allRecipients.map((t) => t.tenant_id))];
   const targetValues = tenantSet.map((tid) => [notificationId, tid]);
   await db.query(
     `INSERT IGNORE INTO global_notification_targets (notification_id, tenant_id) VALUES ?`,
     [targetValues],
   );
+
+  if (!targets.length) {
+    // Nobody is online right now — everyone stays 'pending' and will be
+    // caught up via /missed-global the next time they log in.
+    await db.query(
+      `UPDATE global_notifications
+       SET status = 'sent', total_targets = ?, sent_count = 0, failed_count = 0
+       WHERE id = ?`,
+      [allRecipients.length, notificationId],
+    );
+    console.log(
+      `[global-notify] #${notificationId} — nobody online, ${allRecipients.length} queued as pending.`,
+    );
+    return;
+  }
 
   // 5. Send in batches
   const data = {
@@ -286,7 +312,8 @@ async function sendGlobalNotification(notificationId) {
     );
   }
 
-  // 6. Update summary counters
+  // 6. Update summary counters — total_targets is everyone eligible
+  //    (including offline/pending), not just who we could push to right now.
   await db.query(
     `UPDATE global_notifications
      SET status       = 'sent',
@@ -294,7 +321,7 @@ async function sendGlobalNotification(notificationId) {
          sent_count    = ?,
          failed_count  = ?
      WHERE id = ?`,
-    [targets.length, totalSent, totalFailed, notificationId],
+    [allRecipients.length, totalSent, totalFailed, notificationId],
   );
 
   console.log(
@@ -394,6 +421,43 @@ async function retryFailed(notificationId) {
   return { retried };
 }
 
+/**
+ * markDelivered(notificationIds, empId, tenantId)
+ *
+ * Called when the employee's app fetches the notification list — pulling
+ * it from the server is itself proof of delivery. Flips any 'pending'
+ * rows for this employee to 'sent', then recalculates the parent
+ * notification's counters.
+ */
+async function markDelivered(notificationIds, empId, tenantId) {
+  if (!notificationIds.length) return;
+  const placeholders = notificationIds.map(() => "?").join(",");
+
+  await db.query(
+    `UPDATE global_notification_logs
+     SET delivery_status = 'sent', sent_at = COALESCE(sent_at, NOW())
+     WHERE notification_id IN (${placeholders})
+       AND emp_id = ? AND tenant_id = ? AND delivery_status = 'pending'`,
+    [...notificationIds, empId, tenantId],
+  );
+
+  for (const id of notificationIds) {
+    await db.query(
+      `UPDATE global_notifications gn
+       SET sent_count = (
+             SELECT COUNT(*) FROM global_notification_logs
+             WHERE notification_id = ? AND delivery_status = 'sent'
+           ),
+           failed_count = (
+             SELECT COUNT(*) FROM global_notification_logs
+             WHERE notification_id = ? AND delivery_status = 'failed'
+           )
+       WHERE gn.id = ?`,
+      [id, id, id],
+    );
+  }
+}
+
 // ─── Mark Opened (called from Flutter app via API) ────────────────────────────
 
 /**
@@ -405,16 +469,28 @@ async function markOpened(notificationId, empId, tenantId) {
   const [result] = await db.query(
     `UPDATE global_notification_logs
      SET opened_at = NOW()
-     WHERE notification_id = ? AND emp_id = ? AND tenant_id = ? AND opened_at IS NULL`,
+     WHERE notification_id = ? AND emp_id = ? AND tenant_id = ?
+       AND delivery_status = 'sent' AND opened_at IS NULL`,
     [notificationId, empId, tenantId],
   );
 
   if (result.affectedRows > 0) {
     await db.query(
-      `UPDATE global_notifications
-       SET opened_count = opened_count + 1
-       WHERE id = ?`,
-      [notificationId],
+      `UPDATE global_notifications gn
+       SET opened_count = (
+         SELECT COUNT(*) FROM global_notification_logs
+         WHERE notification_id = ? AND delivery_status = 'sent' AND opened_at IS NOT NULL
+       ),
+       sent_count = (
+         SELECT COUNT(*) FROM global_notification_logs
+         WHERE notification_id = ? AND delivery_status = 'sent'
+       ),
+       failed_count = (
+         SELECT COUNT(*) FROM global_notification_logs
+         WHERE notification_id = ? AND delivery_status = 'failed'
+       )
+       WHERE gn.id = ?`,
+      [notificationId, notificationId, notificationId, notificationId],
     );
   }
 }
@@ -458,5 +534,6 @@ module.exports = {
   sendGlobalNotification,
   retryFailed,
   markOpened,
+  markDelivered,
   initGlobalCron,
 };

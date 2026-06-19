@@ -75,9 +75,10 @@ router.get("/global-history", async (req, res) => {
       `
       SELECT
         gn.id                           AS notification_id,
-        gn.title,
+        gn.title, 
         gn.message,
         gn.type,
+        l.delivery_status,
         l.opened_at,
         COALESCE(gn.sent_at, l.sent_at) AS created_at
       FROM   global_notification_logs l
@@ -89,6 +90,16 @@ router.get("/global-history", async (req, res) => {
       `,
       [tenantId, empId, limit, offset],
     );
+
+    // Pulling this list is itself proof of delivery — promote any
+    // still-pending rows to 'sent' for this employee.
+    const pendingIds = rows
+      .filter((r) => r.delivery_status === "pending")
+      .map((r) => r.notification_id);
+    if (pendingIds.length) {
+      const { markDelivered } = require("./global_notify");
+      await markDelivered(pendingIds, empId, tenantId);
+    }
 
     const data = rows.map((r) => ({
       notification_id: r.notification_id,
@@ -325,15 +336,17 @@ router.get("/missed-global", async (req, res) => {
         // Also update the parent notification's counters
         await db.query(
           `UPDATE global_notifications
-           SET sent_count     = (SELECT COUNT(*) FROM global_notification_logs
-                                 WHERE notification_id = ? AND delivery_status = 'sent'),
-               total_targets  = (SELECT COUNT(*) FROM global_notification_logs
-                                 WHERE notification_id = ?),
-               opened_count   = (SELECT COUNT(*) FROM global_notification_logs
-                                 WHERE notification_id = ? AND delivery_status = 'sent'
-                                   AND opened_at IS NOT NULL)
-           WHERE id = ?`,
-          [notif.id, notif.id, notif.id, notif.id],
+   SET sent_count     = (SELECT COUNT(*) FROM global_notification_logs
+                         WHERE notification_id = ? AND delivery_status = 'sent'),
+       failed_count   = (SELECT COUNT(*) FROM global_notification_logs
+                         WHERE notification_id = ? AND delivery_status = 'failed'),
+       total_targets  = (SELECT COUNT(*) FROM global_notification_logs
+                         WHERE notification_id = ?),
+       opened_count   = (SELECT COUNT(*) FROM global_notification_logs
+                         WHERE notification_id = ? AND delivery_status = 'sent'
+                           AND opened_at IS NOT NULL)
+   WHERE id = ?`,
+          [notif.id, notif.id, notif.id, notif.id, notif.id],
         );
         pushed++;
       } catch (err) {

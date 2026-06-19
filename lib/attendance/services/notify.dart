@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-
+import '../screens/org_notify.dart';
 import '../providers/api_config.dart';
 
 // ─── Background message handler (top-level, required by Firebase) ─────────────
@@ -78,6 +78,7 @@ class GlobalNotificationItem {
   final String type;
   final bool isOpened;
   final DateTime receivedAt;
+  final String source; // 'global' (app admin) or 'org' (org admin/HR)
 
   GlobalNotificationItem({
     required this.notificationId,
@@ -86,18 +87,22 @@ class GlobalNotificationItem {
     required this.type,
     required this.isOpened,
     required this.receivedAt,
+    this.source = 'global',
   });
 
-  factory GlobalNotificationItem.fromJson(Map<String, dynamic> j) =>
-      GlobalNotificationItem(
-        notificationId: j['notification_id'] as int,
-        title: j['title'] as String? ?? '',
-        message: j['message'] as String? ?? j['body'] as String? ?? '',
-        type: j['type'] as String? ?? 'general',
-        isOpened: (j['is_opened'] as int? ?? 0) == 1,
-        receivedAt:
-            DateTime.tryParse(j['created_at'] as String? ?? '') ?? DateTime.now(),
-      );
+  factory GlobalNotificationItem.fromJson(
+    Map<String, dynamic> j, {
+    String source = 'global',
+  }) => GlobalNotificationItem(
+    notificationId: j['notification_id'] as int,
+    title: j['title'] as String? ?? '',
+    message: j['message'] as String? ?? j['body'] as String? ?? '',
+    type: j['type'] as String? ?? 'general',
+    isOpened: (j['is_opened'] as int? ?? 0) == 1,
+    receivedAt:
+        DateTime.tryParse(j['created_at'] as String? ?? '') ?? DateTime.now(),
+    source: source,
+  );
 
   GlobalNotificationItem copyWith({bool? isOpened}) => GlobalNotificationItem(
     notificationId: notificationId,
@@ -106,7 +111,13 @@ class GlobalNotificationItem {
     type: type,
     isOpened: isOpened ?? this.isOpened,
     receivedAt: receivedAt,
+    source: source,
   );
+}
+
+bool _isAdmin() {
+  final type = ApiConfig.userType.toLowerCase().trim();
+  return type == 'org_admin';
 }
 
 // Unified inbox item — either attendance reminder or global broadcast
@@ -367,7 +378,15 @@ class NotifyService {
     if (type == 'global_notification') {
       final notifId = int.tryParse(data['notification_id']?.toString() ?? '');
       // Mark opened in background
-      if (notifId != null) _markGlobalOpened(notifId);
+      if (notifId != null) _markGlobalOpened(notifId, source: 'global');
+      navigatorKey?.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => NotificationInboxScreen(initialTab: 1),
+        ),
+      );
+    } else if (type == 'org_notification') {
+      final notifId = int.tryParse(data['notification_id']?.toString() ?? '');
+      if (notifId != null) _markGlobalOpened(notifId, source: 'org');
       navigatorKey?.currentState?.push(
         MaterialPageRoute(
           builder: (_) => NotificationInboxScreen(initialTab: 1),
@@ -382,10 +401,16 @@ class NotifyService {
     }
   }
 
-  Future<void> _markGlobalOpened(int notificationId) async {
+  Future<void> _markGlobalOpened(
+    int notificationId, {
+    String source = 'global',
+  }) async {
+    final path = source == 'org'
+        ? '/org-notifications/mark-opened'
+        : '/notifications/mark-global-opened';
     try {
       await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/notifications/mark-global-opened'),
+        Uri.parse('${ApiConfig.baseUrl}$path'),
         headers: {...ApiConfig.headers, 'Content-Type': 'application/json'},
         body: jsonEncode({'notification_id': notificationId}),
       );
@@ -420,8 +445,48 @@ class NotifyService {
     if (res.statusCode != 200) throw Exception('Failed: ${res.body}');
     final json = jsonDecode(res.body) as Map<String, dynamic>;
     return (json['data'] as List)
-        .map((e) => GlobalNotificationItem.fromJson(e as Map<String, dynamic>))
+        .map(
+          (e) => GlobalNotificationItem.fromJson(
+            e as Map<String, dynamic>,
+            source: 'global',
+          ),
+        )
         .toList();
+  }
+
+  Future<List<GlobalNotificationItem>> fetchOrgNotificationHistory({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/org-notifications/my-history?page=$page&limit=$limit',
+    );
+    final res = await http.get(uri, headers: ApiConfig.headers);
+    if (res.statusCode != 200) throw Exception('Failed: ${res.body}');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return (json['data'] as List)
+        .map(
+          (e) => GlobalNotificationItem.fromJson(
+            e as Map<String, dynamic>,
+            source: 'org',
+          ),
+        )
+        .toList();
+  }
+
+  /// Fetches and merges both global (app admin) and org (admin/HR) broadcasts,
+  /// sorted newest-first.
+  Future<List<GlobalNotificationItem>> fetchAllBroadcasts({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final results = await Future.wait([
+      fetchGlobalNotificationHistory(page: page, limit: limit),
+      fetchOrgNotificationHistory(page: page, limit: limit),
+    ]);
+    final merged = [...results[0], ...results[1]];
+    merged.sort((a, b) => b.receivedAt.compareTo(a.receivedAt));
+    return merged;
   }
 
   Future<void> markNotificationRead(int id) async {
@@ -489,27 +554,11 @@ class _NotificationInboxScreenState extends State<NotificationInboxScreen>
     // Listen for new notifications arriving while screen is open
     NotifyService.instance.onNotificationTap.listen((data) {
       if (data['type'] == 'attendance_reminder') _loadReminders();
-      if (data['type'] == 'global_notification') _loadGlobals();
+      if (data['type'] == 'global_notification' ||
+          data['type'] == 'org_notification') {
+        _loadGlobals();
+      }
     });
-  }
-
-  Future<void> _loadGlobals() async {
-    setState(() {
-      _globalsLoading = true;
-      _globalsError = null;
-    });
-    try {
-      final items = await NotifyService.instance.fetchGlobalNotificationHistory();
-      setState(() {
-        _globals = items;
-        _globalsLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _globalsError = e.toString();
-        _globalsLoading = false;
-      });
-    }
   }
 
   @override
@@ -534,6 +583,25 @@ class _NotificationInboxScreenState extends State<NotificationInboxScreen>
       setState(() {
         _remindersError = e.toString();
         _remindersLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadGlobals() async {
+    setState(() {
+      _globalsLoading = true;
+      _globalsError = null;
+    });
+    try {
+      final items = await NotifyService.instance.fetchAllBroadcasts();
+      setState(() {
+        _globals = items;
+        _globalsLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _globalsError = e.toString();
+        _globalsLoading = false;
       });
     }
   }
@@ -567,21 +635,20 @@ class _NotificationInboxScreenState extends State<NotificationInboxScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        // backgroundColor:Color(0xFF1A56DB),
+        backgroundColor: Color(0xFF1A56DB),
         elevation: 0,
-        surfaceTintColor: const Color.fromARGB(0, 254, 1, 1),
-        leading: const BackButton(color: Color(0xFF1A1A2E)),
+        surfaceTintColor: const Color.fromARGB(0, 230, 10, 10),
+        leading: const BackButton(color: Color.fromARGB(255, 255, 255, 255)),
         title: const Text(
           'Notifications',
-          
+
           style: TextStyle(
-            color: Color.fromARGB(255, 4, 4, 4),
+            color: Color.fromARGB(255, 255, 255, 255),
             fontSize: 17,
             fontWeight: FontWeight.w700,
           ),
         ),
-        actions: [
+       actions: [
           if (_tab.index == 0 && _reminderUnread > 0)
             TextButton(
               onPressed: _markAllRead,
@@ -590,54 +657,79 @@ class _NotificationInboxScreenState extends State<NotificationInboxScreen>
                 style: TextStyle(color: Color(0xFF4361EE), fontSize: 13),
               ),
             ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white, size: 22),
+            tooltip: 'Refresh',
+            onPressed: () =>
+                _tab.index == 0 ? _loadReminders() : _loadGlobals(),
+          ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Column(
             children: [
               Container(height: 1, color: const Color(0xFFE8EAED)),
-              TabBar(
-                controller: _tab,
-                onTap: (i) => setState(() {}),
-                labelColor: const Color(0xFF4361EE),
-                unselectedLabelColor: const Color(0xFF6B7280),
-                indicatorColor: const Color(0xFF4361EE),
-                indicatorWeight: 2,
-                labelStyle: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+              Container(
+                color: Colors.white,
+                child: TabBar(
+                  controller: _tab,
+                  onTap: (i) => setState(() {}),
+                  labelColor: const Color(0xFF4361EE),
+                  unselectedLabelColor: const Color(0xFF6B7280),
+                  indicatorColor: const Color(0xFF4361EE),
+                  indicatorWeight: 2,
+                  labelStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  tabs: [
+                    Tab(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Reminders'),
+                          if (_reminderUnread > 0) ...[
+                            const SizedBox(width: 6),
+                            _Badge(_reminderUnread),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Tab(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Broadcasts'),
+                          if (_globals.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            _Badge(_globals.where((g) => !g.isOpened).length),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                tabs: [
-                  Tab(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Reminders'),
-                        if (_reminderUnread > 0) ...[
-                          const SizedBox(width: 6),
-                          _Badge(_reminderUnread),
-                        ],
-                      ],
-                    ),
-                  ),
-                  Tab(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Broadcasts'),
-                        if (_globals.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          _Badge(_globals.where((g) => !g.isOpened).length),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              ), // closes Container(color: white)
             ],
           ),
         ),
       ),
+      floatingActionButton: _isAdmin()
+          ? FloatingActionButton.extended(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const OrgNotifyConsole()),
+              ),
+              backgroundColor: const Color(0xFF4361EE),
+              foregroundColor: Colors.white,
+              elevation: 2,
+              icon: const Icon(Icons.send_outlined, size: 18),
+              label: const Text(
+                'Send Notification',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            )
+          : null,
       body: TabBarView(
         controller: _tab,
         children: [_buildRemindersTab(), _buildGlobalsTab()],
@@ -744,7 +836,10 @@ class _NotificationInboxScreenState extends State<NotificationInboxScreen>
   }
 
   void _openGlobal(GlobalNotificationItem item) {
-    NotifyService.instance._markGlobalOpened(item.notificationId);
+    NotifyService.instance._markGlobalOpened(
+      item.notificationId,
+      source: item.source,
+    );
     // Mark as opened in local list
     final idx = _globals.indexOf(item);
     if (idx != -1) {

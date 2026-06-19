@@ -34,10 +34,10 @@ router.get("/dashboard", async (req, res) => {
          SUM(delivery_status = 'sent' AND opened_at IS NOT NULL)     AS total_opened
        FROM global_notification_logs`,
     );
-    totals.total_sent      = liveTotals.total_sent     || 0;
-    totals.total_delivered = liveTotals.total_sent     || 0;
-    totals.total_failed    = liveTotals.total_failed   || 0;
-    totals.total_opened    = liveTotals.total_opened   || 0;
+    totals.total_sent = liveTotals.total_sent || 0;
+    totals.total_delivered = liveTotals.total_sent || 0;
+    totals.total_failed = liveTotals.total_failed || 0;
+    totals.total_opened = liveTotals.total_opened || 0;
 
     const recent = await q(
       `SELECT id, title, type, scope, status,
@@ -53,8 +53,8 @@ router.get("/dashboard", async (req, res) => {
       totals.total_sent && totals.total_opened <= totals.total_sent
         ? ((totals.total_opened / totals.total_sent) * 100).toFixed(1)
         : totals.total_sent
-        ? "100.0"
-        : "0.0";
+          ? "100.0"
+          : "0.0";
 
     res.json({
       success: true,
@@ -263,6 +263,23 @@ router.get("/history", async (req, res) => {
   }
 });
 
+// ─── GET /orgs ────────────────────────────────────────────────────────────────
+// Returns tenant list for the org picker dropdown.
+router.get("/orgs", async (req, res) => {
+  try {
+    const rows = await q(
+      `SELECT tenant_id, company_name, status, plan_id
+       FROM   tenants
+       WHERE  status IN ('active', 'trial', 'expired')
+       ORDER  BY company_name ASC`,
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error("[global-notif-routes] GET /orgs:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch orgs." });
+  }
+});
+
 // ─── GET /:id ─────────────────────────────────────────────────────────────────
 // Notification detail + delivery breakdown.
 router.get("/:id", async (req, res) => {
@@ -288,10 +305,10 @@ router.get("/:id", async (req, res) => {
        WHERE notification_id = ?`,
       [id],
     );
-    notif.total_targets  = liveCounts.total_targets  || notif.total_targets;
-    notif.sent_count     = liveCounts.sent_count     || 0;
-    notif.failed_count   = liveCounts.failed_count   || 0;
-    notif.opened_count   = liveCounts.opened_count   || 0;
+    notif.total_targets = liveCounts.total_targets || notif.total_targets;
+    notif.sent_count = liveCounts.sent_count || 0;
+    notif.failed_count = liveCounts.failed_count || 0;
+    notif.opened_count = liveCounts.opened_count || 0;
 
     // Delivery status breakdown
     const breakdown = await q(
@@ -486,7 +503,9 @@ router.get("/analytics/summary", async (req, res) => {
 router.post("/preview-targets", async (req, res) => {
   try {
     const { scope, scope_meta, recipients = "all" } = req.body;
-    const targets = await resolveTargets(scope, scope_meta || {}, recipients);
+    const targets = await resolveTargets(scope, scope_meta || {}, recipients, {
+      requireToken: false,
+    });
 
     const tenantSet = [...new Set(targets.map((t) => t.tenant_id))];
 
@@ -525,23 +544,6 @@ router.post("/mark-opened", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to mark opened." });
-  }
-});
-
-// ─── GET /orgs ────────────────────────────────────────────────────────────────
-// Returns tenant list for the org picker dropdown.
-router.get("/orgs", async (req, res) => {
-  try {
-    const rows = await q(
-      `SELECT tenant_id, company_name, status, plan_id
-       FROM   tenants
-       WHERE  status IN ('active', 'trial', 'expired')
-       ORDER  BY company_name ASC`,
-    );
-    res.json({ success: true, data: rows });
-  } catch (err) {
-    console.error("[global-notif-routes] GET /orgs:", err);
-    res.status(500).json({ success: false, message: "Failed to fetch orgs." });
   }
 });
 
