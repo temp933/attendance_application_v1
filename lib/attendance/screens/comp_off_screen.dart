@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/comp_off_service.dart';
 
+// Comp-off (compensatory time off) tracker — earned when an employee
+// works a holiday/weekly-off, redeemable until it expires. Backed by
+// CompOffService, tab-filtered server-side rather than client-side.
 class CompOffScreen extends StatefulWidget {
   const CompOffScreen({super.key});
 
@@ -19,7 +22,8 @@ class _CompOffScreenState extends State<CompOffScreen>
   List<CompOffRecord> _records = [];
   CompOffSummary _summary = CompOffSummary.empty();
 
-  late TabController _tabCtrl;
+    late TabController _tabCtrl;
+  // null filter = "All" — index-aligned with _tabLabels and TabBar tabs below
   final List<String?> _tabFilters = [null, 'earned', 'used', 'expired'];
   final List<String> _tabLabels = ['All', 'Earned', 'Used', 'Expired'];
 
@@ -27,6 +31,8 @@ class _CompOffScreenState extends State<CompOffScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 4, vsync: this);
+    // Re-fetches from the server with the new status filter once the
+    // swipe/tap animation settles (not on every intermediate frame)
     _tabCtrl.addListener(() {
       if (!_tabCtrl.indexIsChanging) _load();
     });
@@ -39,6 +45,8 @@ class _CompOffScreenState extends State<CompOffScreen>
     super.dispose();
   }
 
+ // Fetches both the record list and summary counts together, filtered
+  // server-side by whichever tab is currently active
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -92,7 +100,9 @@ class _CompOffScreenState extends State<CompOffScreen>
     );
   }
   
-  // ── Summary cards ─────────────────────────────────────────────────────────
+ // ── Summary cards ─────────────────────────────────────────────────────────
+  // Always shows totals across ALL comp-offs regardless of which tab is
+  // selected — these counts come from _summary, not the filtered _records
   Widget _buildSummaryRow() => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
     child: Row(
@@ -204,7 +214,9 @@ class _CompOffScreenState extends State<CompOffScreen>
     ),
   );
 
-  // ── Body ──────────────────────────────────────────────────────────────────
+ // ── Body ──────────────────────────────────────────────────────────────────
+  // _records here is already pre-filtered by the active tab (server-side
+  // in _load), so this just renders whatever came back
   Widget _buildBody() {
     if (_loading)
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
@@ -275,6 +287,9 @@ class _CompOffScreenState extends State<CompOffScreen>
 // ─────────────────────────────────────────────────────────────────────────────
 // CompOffCard widget
 // ─────────────────────────────────────────────────────────────────────────────
+// Color/icon/label all derive from CompOffStatus — see the switch below.
+// Bottom-right badge shows countdown (earned + not yet expired), or a
+// simple Used/Expired pill otherwise.
 class _CompOffCard extends StatelessWidget {
   final CompOffRecord record;
   const _CompOffCard({required this.record});
@@ -288,6 +303,7 @@ class _CompOffCard extends StatelessWidget {
     final IconData statusIcon;
     final String statusLabel;
 
+    // Green=earned (available to use), blue=used, red=expired
     switch (status) {
       case CompOffStatus.earned:
         accentColor = const Color(0xFF2E7D32);
@@ -309,6 +325,8 @@ class _CompOffCard extends StatelessWidget {
         break;
     }
 
+      // Only meaningful for still-earned (unused, unexpired) records —
+    // drives both the countdown badge and the "expiring soon" warning strip
     final daysLeft = record.expiryDate != null && record.isEarned
         ? record.expiryDate!.difference(DateTime.now()).inDays
         : null;
@@ -434,7 +452,9 @@ class _CompOffCard extends StatelessWidget {
             ),
           ),
 
-          // Expiring soon warning strip
+           // Expiring soon warning strip — isExpiringSoon is a model-level
+          // flag (likely backed by the same ≤7-day threshold as the badge
+          // above), shown only on earned, still-valid records
           if (record.isExpiringSoon)
             Container(
               width: double.infinity,
@@ -504,6 +524,8 @@ class _CompOffCard extends StatelessWidget {
     ],
   );
 
+  // Red ≤3 days, amber ≤7 days, green otherwise — same thresholds used
+  // by the "expiring soon" warning strip below
   Widget _daysLeftBadge(int days) {
     final Color bg = days <= 3
         ? Colors.red.shade50

@@ -1,3 +1,28 @@
+/// ════════════════════════════════════════════════════════════════════════
+/// leave_balance_management_screen.dart
+/// ════════════════════════════════════════════════════════════════════════
+/// Admin/HR screen for setting and bulk-uploading employee leave balances
+/// (opening allocation per leave type, per employee).
+///
+/// Two ways to set balances:
+///  1. Manual — per-employee edit sheet (_EditBalanceSheet), one numeric
+///     field per active leave type, saved via POST /leave/balance/set.
+///  2. Bulk CSV — download a server-generated template (GET
+///     /leave/balance/template, an .xlsx saved + opened via OpenFilex),
+///     fill it externally, then paste the CSV text back into a dialog
+///     (NOT a file picker — admin copy-pastes raw CSV text) which is
+///     parsed client-side and posted to POST /leave/balance/bulk-upload.
+///
+/// Backend endpoints used:
+///  GET  /leave/balance/list?search=
+///  GET  /leave/balance/template          (returns .xlsx bytes)
+///  POST /leave/balance/bulk-upload       ({ rows: [{emp_id, balances}] })
+///  POST /leave/balance/set               ({ emp_id, balances: [{leave_type, allocated_days}] })
+///
+/// IMPORTANT: CSV parsing in `_processAndUploadCsv` is naive split(',') —
+/// does not handle commas embedded in quoted values. If leave_type names
+/// or emp_name ever contain commas, this will misparse. Keep template
+/// column names comma-free.
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +46,10 @@ const _border = Color(0xFFE2E8F0);
 // LeaveBalanceManagementScreen
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Lists all employees with their current leave balance chips (allocated
+/// vs. used, remaining computed client-side as alloc - used). Provides
+/// search-by-name/code, per-employee manual edit, and template
+/// download/bulk-CSV-upload actions in the header.
 class LeaveBalanceManagementScreen extends StatefulWidget {
   const LeaveBalanceManagementScreen({super.key});
 
@@ -54,6 +83,11 @@ class _LeaveBalanceManagementScreenState
 
   // ── API ────────────────────────────────────────────────────────────────────
 
+ /// Fetches the employee list + their balances (`data`) and the active
+  /// leave type definitions (`leave_types`) in one call. Clears any
+  /// previous `_uploadResult` banner on reload — the summary is meant to
+  /// be ephemeral, shown only right after an upload until the next
+  /// refresh/search.
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -82,6 +116,12 @@ class _LeaveBalanceManagementScreenState
     }
   }
 
+ /// Downloads the server-generated .xlsx template (column headers =
+  /// emp_id, emp_name, then one column per active leave type) to the
+  /// device temp dir and attempts to open it with the OS default app via
+  /// OpenFilex. Falls back to showing the saved file path in a snackbar
+  /// if no handler app is available (common on some Android/desktop
+  /// configs without Excel/Sheets installed).
   Future<void> _downloadTemplate() async {
     _snack('Preparing template…', success: true);
     try {
@@ -228,6 +268,26 @@ class _LeaveBalanceManagementScreenState
     );
   }
 
+ /// Parses pasted CSV text and posts it as structured rows to
+  /// POST /leave/balance/bulk-upload.
+  ///
+  /// Expected format: `emp_id,emp_name,<LeaveType1>,<LeaveType2>,...`
+  /// Column 0 = emp_id (required, header match is case-insensitive),
+  /// column 1 = emp_name (display only, not sent to server),
+  /// columns 2+ = one column per leave type, header text must exactly
+  /// match `leave_name` from /leave/balance/list's `leave_types` array
+  /// since the backend maps by name, not by leave_type_id.
+  ///
+  /// Per-row behavior:
+  ///  - Blank emp_id            -> row skipped entirely.
+  ///  - Blank cell for a leave type -> that leave type omitted from the
+  ///    row's `balances` map (server leaves existing balance untouched,
+  ///    does NOT zero it out).
+  ///  - No quote/escaping support — see file header note on commas.
+  ///
+  /// Server response (`_uploadResult`) is expected to contain `updated`,
+  /// `skipped_employees`, `errors`, and `error_details` (list of strings),
+  /// rendered as a summary banner above the list (`_buildUploadResult`).
   Future<void> _processAndUploadCsv(String csv) async {
     setState(() => _uploading = true);
     try {
@@ -291,6 +351,9 @@ class _LeaveBalanceManagementScreenState
     }
   }
 
+  /// Opens the manual single-employee balance editor. `emp` is the full
+  /// row object from `_employees` (includes nested `balances` list used
+  /// to pre-fill existing allocated_days per leave type).
   void _openEditSheet(Map<String, dynamic> emp) {
     showModalBottomSheet(
       context: context,
@@ -599,6 +662,11 @@ class _LeaveBalanceManagementScreenState
 // Employee Balance Card
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Read-only summary row for one employee: avatar initial, name/code,
+/// "Not set" badge if no leave type has an allocated_days value yet
+/// (i.e. balances never configured), and a horizontally-wrapped row of
+/// per-leave-type chips showing remaining/allocated (remaining computed
+/// client-side, not sent by the server).
 class _EmployeeBalanceCard extends StatelessWidget {
   final Map<String, dynamic> emp;
   final List<Map<String, dynamic>> leaveTypes;
@@ -826,6 +894,12 @@ class _EditBalanceSheet extends StatefulWidget {
   State<_EditBalanceSheet> createState() => _EditBalanceSheetState();
 }
 
+/// Per-employee manual balance editor. One numeric TextEditingController
+/// per active leave type, keyed by `leave_name` (matches the CSV-upload
+/// keying convention, NOT leave_type_id). Pre-fills from the employee's
+/// existing `balances` array if present; "Used: N days" shown alongside
+/// the field as read-only context (used_days is not editable here — only
+/// allocated_days/opening balance is).
 class _EditBalanceSheetState extends State<_EditBalanceSheet> {
   final Map<String, TextEditingController> _ctrls = {};
   bool _saving = false;
@@ -855,6 +929,12 @@ class _EditBalanceSheetState extends State<_EditBalanceSheet> {
     super.dispose();
   }
 
+  /// Posts ALL leave types' values in one call (full replace per
+  /// employee), not a partial patch — every controller's current text is
+  /// sent, with `double.tryParse(...) ?? 0` meaning an empty/invalid field
+  /// is saved as 0, not left untouched. This differs from the CSV bulk
+  /// upload, where a blank cell preserves the existing value — be careful
+  /// not to assume the same "blank = no-op" semantics here.
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
@@ -1094,7 +1174,9 @@ class _EditBalanceSheetState extends State<_EditBalanceSheet> {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Micro widgets
 // ═══════════════════════════════════════════════════════════════════════════════
-
+/// Header action button (Download Template / Upload CSV). `filled` swaps
+/// between the white-fill primary-text style and the translucent
+/// outline-on-primary-bg style.
 class _HeaderBtn extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1139,6 +1221,8 @@ class _HeaderBtn extends StatelessWidget {
   );
 }
 
+/// Small colored pill used in the post-upload summary banner (updated /
+/// skipped / errors counts).   
 class _ResultChip extends StatelessWidget {
   final String label;
   final Color color;

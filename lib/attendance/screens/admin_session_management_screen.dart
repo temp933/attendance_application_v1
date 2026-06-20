@@ -5,6 +5,9 @@ import '../providers/api_client.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // MODEL
 // ─────────────────────────────────────────────────────────────────────────────
+// Represents a user's current login/session state for the admin panel.
+// Note there are TWO independent lock mechanisms — see isAccountLocked
+// vs isLocked below — both must be checked separately in the UI.
 class SessionUser {
   final int loginId;
   final String? empId;
@@ -15,12 +18,14 @@ class SessionUser {
   final int roleId;
   final bool isLoggedIn;
   final String accountStatus; // 'Active' | 'Inactive'
-  final bool isAccountLocked; // admin-locked (status = Inactive)
+  final bool
+  isAccountLocked; // admin manually locked this account (permanent until admin unlocks)
   final String? sessionDevice;
   final DateTime? lastLoginAt;
   final DateTime? sessionExpiresAt;
   final int failedAttempts;
-  final bool isLocked; // brute-force lock (locked_until)
+  final bool
+  isLocked; // auto-locked from too many failed login attempts (temporary, expires at lockedUntil)
   final DateTime? lockedUntil;
 
   const SessionUser({
@@ -83,6 +88,9 @@ class SessionUser {
 // ─────────────────────────────────────────────────────────────────────────────
 // SERVICE
 // ─────────────────────────────────────────────────────────────────────────────
+// Thin wrapper over the /admin/sessions endpoints. Each action method
+// just posts and throws on failure — calling code handles confirm
+// dialogs and UI feedback (see _run / _confirm in the screen below).
 class _SessionService {
   static Future<List<SessionUser>> fetchAll() async {
     final res = await ApiClient.get('/admin/sessions');
@@ -108,6 +116,7 @@ class _SessionService {
     }
   }
 
+  // Clears the auto (brute-force) lock — NOT the same as unlockAccount below
   static Future<void> unlock(int loginId) async {
     final res = await ApiClient.post('/admin/sessions/$loginId/unlock', {});
     final body = jsonDecode(res.body) as Map<String, dynamic>;
@@ -116,6 +125,7 @@ class _SessionService {
     }
   }
 
+  // Admin-initiated permanent lock — distinct from the brute-force lock above
   static Future<void> lockAccount(int loginId) async {
     final res = await ApiClient.post(
       '/admin/sessions/$loginId/lock-account',
@@ -211,6 +221,8 @@ class _AdminSessionManagementScreenState
     }
   }
 
+  // Search across name/username/role/device, combined with the active
+  // status filter chip (all/active/inactive/locked)
   List<SessionUser> get _filtered => _all.where((s) {
     final q = _search.toLowerCase();
     final matchSearch =
@@ -234,6 +246,8 @@ class _AdminSessionManagementScreenState
       _all.where((s) => !s.isLoggedIn && !s.anyLocked).length;
 
   // ── Actions ────────────────────────────────────────────────────────────────
+  // Ends the user's session immediately — also closes any open
+  // attendance session server-side (see confirm dialog body)
   Future<void> _doForceLogout(SessionUser u) async {
     final ok = await _confirm(
       title: 'Force Logout',
@@ -278,6 +292,8 @@ class _AdminSessionManagementScreenState
     _snack('${u.fullName}\'s account has been unlocked.', _success);
   }
 
+  // Shared wrapper for all lock/unlock/logout actions: shows the busy
+  // overlay, runs the action, then reloads the list to reflect new state
   Future<void> _run(Future<void> Function() fn) async {
     setState(() => _busy = true);
     try {
@@ -347,6 +363,8 @@ class _AdminSessionManagementScreenState
     return '${diff.inHours}h ${diff.inMinutes % 60}m remaining';
   }
 
+  // Maps role_id to its badge color/icon: 1=Super Admin, 2=Admin/Manager,
+  // 3=TL/HR, anything else falls back to a neutral "Employee" style
   ({Color bg, Color fg, IconData icon}) _roleStyle(int roleId) =>
       switch (roleId) {
         1 => (
@@ -366,7 +384,7 @@ class _AdminSessionManagementScreenState
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: _bg, 
+    backgroundColor: _bg,
     body: Stack(
       children: [
         _buildBody(),
@@ -381,7 +399,6 @@ class _AdminSessionManagementScreenState
     ),
   );
 
-   
   Widget _buildBody() {
     if (_loading) return _buildSkeleton();
     if (_error != null) return _buildError();
@@ -615,6 +632,7 @@ class _AdminSessionManagementScreenState
     final isActive = u.isLoggedIn;
 
     // Border color priority: account-locked > brute-force locked > active > default
+    // (most severe/important state wins when multiple could apply)
     final borderColor = u.isAccountLocked
         ? _danger.withValues(alpha: 0.4)
         : u.isLocked
@@ -767,6 +785,9 @@ class _AdminSessionManagementScreenState
           ),
 
           // ── Actions ────────────────────────────────────────────────────────
+          // Action buttons shown depend on current lock/session state:
+          // admin-lock toggle always shown; brute-force clear and force
+          // logout only appear when relevant (mutually exclusive states)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
             child: Row(
@@ -943,6 +964,8 @@ class _AdminSessionManagementScreenState
   );
 
   // ── Skeleton ───────────────────────────────────────────────────────────────
+  // Animated shimmer placeholder shown during initial load — shape
+  // roughly mirrors the real layout (stats row, search, filters, cards)
   Widget _buildSkeleton() => SingleChildScrollView(
     // ← add this
     physics: const NeverScrollableScrollPhysics(), // skeleton shouldn't scroll
@@ -1051,6 +1074,9 @@ class _AdminSessionManagementScreenState
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIRM DIALOG
 // ─────────────────────────────────────────────────────────────────────────────
+// Generic yes/no confirmation used by all destructive actions in this
+// file (force logout, lock/unlock account) — title/body/color are
+// parameterized per call site rather than having a dialog per action
 class _ConfirmDialog extends StatelessWidget {
   final String title;
   final String body;

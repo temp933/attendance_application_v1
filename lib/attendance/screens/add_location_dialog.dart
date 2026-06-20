@@ -142,8 +142,32 @@ class _AddLocationDialogState extends State<AddLocationDialog>
   }
 
   // ── Live location ─────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // LIVE LOCATION (Google Maps-style blue dot)
+  // ─────────────────────────────────────────────────────────────────────────
+  // Streams the device's GPS position while this dialog is open and renders
+  // it on the map as an animated blue dot (_MyLocationDot) with an accuracy
+  // ring (_accuracyToPixels). Flow:
+  //   1. On dialog open (initState) -> _startLiveLocation() runs automatically.
+  //   2. Requests location permission if not already granted.
+  //   3. Gets one quick fix via getCurrentPosition() (6s timeout) so the map
+  //      can center immediately without waiting for the stream.
+  //   4. Starts getPositionStream() with a 5m distanceFilter so updates only
+  //      fire when the user actually moves (battery-friendly, avoids jitter).
+  //   5. _updateLocation() is the single callback for both the initial fix
+  //      and every stream update — keeps _myLocation/_myAccuracy in sync.
+  //   6. _locationSub MUST be cancelled in dispose() to avoid leaking the
+  //      stream subscription after the dialog closes.
+  //   7. "Centre on me" controls (search bar icon + map FAB) call
+  //      _goToCurrent(), which re-triggers _startLiveLocation() if no fix
+  //      exists yet (e.g. first attempt failed/timed out).
+  //
+  // NOTE: _myAccuracy is in metres (from Position.accuracy) and is converted
+  // to an approximate on-screen pixel diameter via _accuracyToPixels() —
+  // this conversion is a rough approximation calibrated for zoom level 17
+  // and will be visually off at other zoom levels.
+  // ─────────────────────────────────────────────────────────────────────────
 
-  /// Start streaming live GPS — called on init and when user taps the button
   Future<void> _startLiveLocation() async {
     setState(() => _locationLoading = true);
     try {

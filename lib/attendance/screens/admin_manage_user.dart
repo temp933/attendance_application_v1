@@ -25,6 +25,7 @@ const Color _textMid = Color(0xFF64748B);
 const Color _textLight = Color(0xFF94A3B8);
 const Color _border = Color(0xFFE2E8F0);
 
+// Enforces 18–80 age range based on DOB, used for both new-hire and edit forms
 String? validateDob(String? val) {
   if (val == null || val.trim().isEmpty) {
     return 'Date of Birth is required';
@@ -80,6 +81,8 @@ String? validateDojOptional(String? val) {
   return null;
 }
 
+// Relieving date: required only if status is "Relieved", otherwise optional.
+// When provided, must be after DOJ and not in the future.
 String? validateDor(String? val, String status, String dojText) {
   if (status == 'Relieved') {
     if (val == null || val.trim().isEmpty) {
@@ -128,6 +131,9 @@ String? validateRole(int? val) =>
     val == null ? 'Please select a role/designation' : null;
 
 // Responsive helper
+// Single source of truth for breakpoints (mobile <600, tablet <1024,
+// desktop >=1024) and the spacing/font scale derived from them — used
+// throughout this file instead of hardcoding MediaQuery checks per widget.
 class _Screen {
   final double width;
   const _Screen(this.width);
@@ -146,6 +152,7 @@ class _Screen {
   double get captionFontSize => isMobile ? 11 : 12;
 }
 
+// Stacks two fields vertically on mobile, side-by-side otherwise
 Widget _row2(BuildContext ctx, Widget a, Widget b, {double sp = 12}) {
   if (_Screen(MediaQuery.of(ctx).size.width).isMobile) {
     return Column(
@@ -165,6 +172,7 @@ Widget _row2(BuildContext ctx, Widget a, Widget b, {double sp = 12}) {
   );
 }
 
+// Three-field row: stacked on mobile, 2+1 on tablet, all-in-one-row on desktop
 Widget _row3(BuildContext ctx, Widget a, Widget b, Widget c, {double sp = 12}) {
   final s = _Screen(MediaQuery.of(ctx).size.width);
   if (s.isMobile) {
@@ -204,6 +212,8 @@ Widget _row3(BuildContext ctx, Widget a, Widget b, Widget c, {double sp = 12}) {
   );
 }
 
+// Shared gradient app bar used across every screen in this file
+// (Add/Edit/Resubmit/Detail) for visual consistency
 PreferredSizeWidget _buildAppBar(
   String title, {
   String? subtitle,
@@ -294,6 +304,8 @@ InputDecoration _inputDec(String label) => InputDecoration(
   ),
 );
 
+// Form section wrapper (icon + title header, divider, content) — used
+// to group related fields in the Add/Edit/Resubmit forms
 class _SectionCard extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -366,6 +378,8 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
+// Read-only detail card — auto-hides itself if every tile's value is
+// empty (see "visible" filter in build())
 class _DetailCard extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -597,6 +611,7 @@ class ManageUserScreenState extends State<ManageUserScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     // ── Hide FAB when on Requests tab ─────────────────────────────────────
+    // Only the Employees tab gets the "Add Employee" FAB
     _tabController.addListener(() {
       if (!mounted) return;
       // Only act when animation is complete and index actually changed
@@ -604,6 +619,8 @@ class ManageUserScreenState extends State<ManageUserScreen>
       setState(() => _showFab = _tabController.index == 0);
     });
     // Refresh data when tab animation settles
+    // Re-fetches whichever tab the user landed on, so switching tabs
+    // always shows current data without a manual pull-to-refresh
     _tabController.animation?.addStatusListener((status) {
       if (!mounted) return;
       if (status == AnimationStatus.completed) {
@@ -630,6 +647,8 @@ class ManageUserScreenState extends State<ManageUserScreen>
   }
 
   // ── Fetch only APPROVED / ACTIVE employees from master ───────────────────
+  // Pulls employee list + department list together since the department
+  // dropdown filter depends on both being loaded
   Future<void> _fetchMaster() async {
     setState(() {
       _masterLoading = true;
@@ -659,6 +678,8 @@ class ManageUserScreenState extends State<ManageUserScreen>
   }
 
   // ── Fetch PENDING + REJECTED from pending_request table only ─────────────
+  // Two separate calls merged into one list — Requests tab shows both
+  // statuses together so users can act on rejected ones via Resubmit
   Future<void> _fetchRequests() async {
     setState(() {
       _reqLoading = true;
@@ -692,6 +713,8 @@ class ManageUserScreenState extends State<ManageUserScreen>
   }
 
   // ── Filtered lists ────────────────────────────────────────────────────────
+  // Shared by both tabs — search matches name/email/phone, then narrows
+  // further by selected department
   List<Employee> _filterList(List<Employee> source) {
     var list = source.where((e) {
       final name = '${e.firstName ?? ''} ${e.lastName ?? ''}'.toLowerCase();
@@ -1279,10 +1302,13 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   List<String> _approverRoles = [];
   String? _selectedReportingRole;
 
+  // Loads the full approver pool + distinct approver roles once at init
+  // (not per department) — _buildReportingToDropdowns then splits them
+  // into "same department" vs "others" client-side
   Future<void> _loadReportingManagers() async {
     final results = await Future.wait([
       EmployeeService.fetchLeaveApprovers(),
-      EmployeeService.fetchLeaveApproverRoles(), // ← ADD
+      EmployeeService.fetchLeaveApproverRoles(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -1300,6 +1326,8 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         .toList();
   }
 
+  // Two-step "Reporting To" picker: filter by role, then pick the
+  // employee — grouped into Same Department / Others for easier scanning
   Widget _buildReportingToDropdowns(double sp) {
     if (_approverRoles.isEmpty) return const SizedBox.shrink();
 
@@ -1413,6 +1441,8 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     );
   }
 
+  // Department change resets designation + reporting manager selection
+  // (since designations are dept-scoped), then reloads designations
   void _onDeptChanged(int? deptId) async {
     setState(() {
       selectedDeptId = deptId;
@@ -1796,6 +1826,18 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                           'Username',
                           required: true,
                           padding: EdgeInsets.zero,
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty)
+                              return 'Required';
+                            if (v.trim().length < 4)
+                              return 'Minimum 4 characters';
+                            if (!RegExp(
+                              r'^[a-zA-Z0-9_\.]+$',
+                            ).hasMatch(v.trim())) {
+                              return 'Only letters, numbers, _ and . allowed';
+                            }
+                            return null;
+                          },
                         ),
                         FormTextField(
                           passwordCtrl,
@@ -1912,6 +1954,10 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
 
       if (data['success'] == true) {
         // ── Upload photo if one was selected ─────────────────────────────────
+        // Submitted as a second request after the employee/request record
+        // is created, since the upload endpoint needs the new emp_id or
+        // request_id. Failure here is treated as non-fatal — the employee
+        // record itself was already saved successfully.
         if (_selectedPhotoBytes != null) {
           try {
             final empId = data['emp_id'];
@@ -2029,6 +2075,9 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
   static const Color _changedBg = Color(0xFFFFFBEB);
   static const Color _changedBorder = Color(0xFFFDE68A);
 
+  // Drives whether before/after comparison UI is shown anywhere on this
+  // page — true only for pending-request rows that are edits to an
+  // existing master record (not brand-new hires)
   bool get _isUpdateRequest =>
       widget.source == 'REQUEST' &&
       employeeData?['request_type']?.toString().toUpperCase() == 'UPDATE';
@@ -2078,6 +2127,8 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
         }
 
         // For REQUEST that is an UPDATE → also fetch master "before" data
+        // This second fetch is what populates masterData, which every
+        // _comparisonRow / _comparisonLegend call depends on
         final reqType = emp['request_type']?.toString().toUpperCase();
         final empId = emp['emp_id'];
         if (reqType == 'UPDATE' && empId != null) {
@@ -3230,6 +3281,9 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
   }
 
   // ── Comparison row (UPDATE request — shows before & after) ───────────────
+  // A field only renders the "After" block + amber highlight if its
+  // value actually differs from master; otherwise it looks identical
+  // to a _simpleRow
   Widget _comparisonRow(_CompField f) {
     String beforeVal = masterData![f.key]?.toString() ?? '';
     String afterVal = employeeData![f.key]?.toString() ?? '';
@@ -3536,7 +3590,10 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
                     ),
                   )
           else
-            // Comparison view: per-row before/after based on action_type
+            // Comparison view: per-row before/after based on action_type.
+            // Each education row carries its own action_type (ADD/UPDATE/
+            // DELETE) and is_changed flag set by the backend diff, rather
+            // than this page computing the diff itself.
             Padding(
               padding: const EdgeInsets.all(14),
               child: Column(
@@ -3669,6 +3726,8 @@ class _EmployeeDetailPageState extends State<EmployeeDetailPage> {
 // ─────────────────────────────────────────────────────────────────────────────
 // Education comparison card (ADD / UPDATE / DELETE)
 // ─────────────────────────────────────────────────────────────────────────────
+// Renders one education row's change as a colored card: green=added,
+// red=deleted (dimmed), amber=field-level update via _EduFieldDiff
 class _EduComparisonCard extends StatelessWidget {
   final String actionType; // 'ADD', 'UPDATE', 'DELETE'
   final Map<String, dynamic>? beforeEntry;
@@ -4075,6 +4134,8 @@ class EmployeeResubmitPage extends StatefulWidget {
   State<EmployeeResubmitPage> createState() => _EmployeeResubmitPageState();
 }
 
+// Pre-fills the form from the rejected pending_request row so the user
+// only has to fix what was wrong, then resubmits via PUT .../resubmit
 class _EmployeeResubmitPageState extends State<EmployeeResubmitPage> {
   final _formKey = GlobalKey<FormState>();
   final _eduKey = GlobalKey<EducationFormSectionState>();
@@ -5977,6 +6038,9 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
       'pf_number': pfCtrl.text,
       'esic_number': esicCtrl.text,
       'years_experience': int.tryParse(yearsExpCtrl.text),
+      // NOTE: unlike Add/Resubmit (getEntries — sends all rows), Edit
+      // sends only getChangedEntries() — the backend diffs against the
+      // master record using just the rows that actually changed
       'education': _eduKey.currentState?.getChangedEntries() ?? [],
       'aadhar_number': aadharCtrl.text,
       'pan_number': panCtrl.text,
@@ -6046,8 +6110,11 @@ class _EmployeeEditPageState extends State<EmployeeEditPage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // TAB 1 — Master Employees  (no status badge at all)
 // ─────────────────────────────────────────────────────────────────────────────
+// Plain employee list — every employee here is already approved/active,
+// so there's nothing to badge (contrast with _RequestsTab below)
 class _MasterTab extends StatelessWidget {
   final bool loading;
   final String? error;
@@ -6134,6 +6201,8 @@ class _MasterTab extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB 2 — Pending / Rejected Requests
 // ─────────────────────────────────────────────────────────────────────────────
+// Mixed PENDING + REJECTED list with status-colored cards (_RequestCard)
+// and a NEW/UPDATE request-type chip
 class _RequestsTab extends StatelessWidget {
   final bool loading;
   final String? error;

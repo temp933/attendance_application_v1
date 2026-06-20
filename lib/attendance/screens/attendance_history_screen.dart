@@ -8,6 +8,8 @@ import '../providers/api_client.dart';
 //  Uses GET /attendance/month-report/:empId?year=&month=
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Single-call month view: calendar grid + summary stats, backed entirely
+// by GET /attendance/month-report/:empId — no separate calls per day.
 class AttendanceHistoryScreen extends StatefulWidget {
   final int employeeId;
   const AttendanceHistoryScreen({super.key, required this.employeeId});
@@ -64,6 +66,8 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
+// Fetches the whole month's calendar + summary in one request, then
+  // replays the fade-in animation so switching months feels responsive
   Future<void> _loadMonth(DateTime month) async {
     if (!mounted) return;
     setState(() {
@@ -112,6 +116,8 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
     }
   }
 
+  // Linear lookup into the month's day list by date string — fine at
+  // ~30 entries/month, no need for a Map index
   Map<String, dynamic>? _dayData(String dateStr) {
     for (final d in _days) {
       if (d['date'] == dateStr) return d;
@@ -178,6 +184,8 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
     return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
   }
 
+ // Convenience getters over the raw _summary map from the API —
+  // keeps the build methods below free of null-casting boilerplate
   int get _presentDays => (_summary['present_days'] as num? ?? 0).toInt();
   int get _absentDays => (_summary['absent_days'] as num? ?? 0).toInt();
   int get _lateDays => (_summary['late_days'] as num? ?? 0).toInt();
@@ -222,6 +230,8 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
 
   // ── Maps ──────────────────────────────────────────────────────────────────
 
+  // Resolves the site's lat/lng if a siteId is given for a precise pin;
+  // otherwise falls back to a text search on the site name
   Future<void> _openSiteInMaps(int? siteId, String siteName) async {
     double? lat, lng;
     if (siteId != null) {
@@ -254,6 +264,9 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
 
   // ── Day tap ───────────────────────────────────────────────────────────────
 
+ // Routes a tapped calendar day to the right dialog based on status:
+  // absent/weekend → simple info dialog, holiday/leave → special-day
+  // dialog, present/late → full session detail dialog
   void _onDayTap(Map<String, dynamic> dayData) {
     final status = dayData['status'] as String? ?? 'absent';
     final day = DateTime.parse(dayData['date'] as String);
@@ -812,6 +825,8 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
 
   // ── Calendar grid ─────────────────────────────────────────────────────────
 
+  // Builds a 7-col grid with leading blank cells for days before the
+  // 1st (Mon-start week), skipping any date not present in _days
   Widget _buildCalendarGrid() {
     if (_days.isEmpty) return const SizedBox();
 
@@ -861,6 +876,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
     final leave = data['leave'] as Map<String, dynamic>?;
     final hasCompoff = data['compoff'] != null;
 
+    // Base color per status, overridden below if this cell is "today"
     Color bgColor = Colors.white, borderColor = _border;
     switch (status) {
       case 'present':
@@ -1125,6 +1141,10 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
 
   // ── Days list (detailed report below calendar) ────────────────────────────
 
+   // NOTE: this currently filters workedDays but never renders them —
+  // _buildDayRow below is fully built but unused. If a detailed
+  // day-by-day list is wanted under the calendar, this needs:
+  // workedDays.map((d) => _buildDayRow(d)).toList() added to the Column.
   Widget _buildDaysList() {
     // Only show worked days with sessions
     final workedDays = _days.where((d) {
@@ -1380,6 +1400,9 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
 
+ // Shown for both real absences and weekends — title/icon/color
+  // adapt based on which it is (status param isn't actually used,
+  // the weekday check below does the real branching)
   Widget _buildAbsentDialog(DateTime day, String status) {
     final isSunday = day.weekday == DateTime.sunday;
     final isSat = day.weekday == DateTime.saturday;
@@ -1565,6 +1588,9 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
     );
   }
 
+  // Full breakdown for a present/late day: one card per check-in/out
+  // session, each session expandable into its individual site visits
+  // (tap a visit to open it in Maps via _openSiteInMaps)
   Widget _buildDetailDialog(
     DateTime day,
     List<Map<String, dynamic>> sessions,

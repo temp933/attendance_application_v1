@@ -21,6 +21,10 @@ const _warningLight = Color(0xFFFEF3C7);
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROOT SCREEN — TabBar wrapper
 // ═══════════════════════════════════════════════════════════════════════════════
+// Hosts 3 master-data tabs (Departments/Designations/Roles) plus a 4th
+// Permissions tab shown only when canEdit is true. Departments,
+// Designations, and Roles tabs all follow the same fetch/search/CRUD
+// pattern — see _DepartmentsTab below for the template all three share.
 class DeptRoleDesgScreen extends StatefulWidget {
   final bool canEdit;
   const DeptRoleDesgScreen({super.key, this.canEdit = true});
@@ -32,6 +36,9 @@ class DeptRoleDesgScreen extends StatefulWidget {
 class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab;
+  // Bumping this changes each tab's ValueKey, forcing a fresh State —
+  // currently unused (never incremented) but left in place as a hook
+  // for a future "refresh all tabs" action
   int _refreshKey = 0;
 
   @override
@@ -72,9 +79,7 @@ class _DeptRoleDesgScreenState extends State<DeptRoleDesgScreen>
                     controller: _tab,
                     labelColor: _primary,
                     unselectedLabelColor: _textMid,
-                    labelStyle: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                    ),
+                    labelStyle: const TextStyle(fontWeight: FontWeight.w600),
                     unselectedLabelStyle: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -150,12 +155,14 @@ class _DepartmentsTabState extends State<_DepartmentsTab>
     _future = _svc.fetchAll();
   }
 
-  // ✅ Assign future first, THEN call setState synchronously
+  /// Reassigns _future inside setState so FutureBuilder picks up the new
+  // Future and re-shows its loading state — this same _load/_future
+  // pattern repeats identically in _DesignationsTab and _RolesTab below
   void _load() {
     if (!mounted) return;
     setState(() {
       _future = _svc.fetchAll();
-    }); // block body, explicitly returns void
+    });
   }
 
   // ── UI ─────────────────────────────────────────────────────────────────────
@@ -216,7 +223,10 @@ class _DepartmentsTabState extends State<_DepartmentsTab>
   }
 
   // ── Dialogs ────────────────────────────────────────────────────────────────
-  // FIND (the whole _showFormDialog method), REPLACE WITH:
+  // Reload happens in .then() after the dialog closes (not inside
+  // onConfirm) — this avoids reloading the list while the dialog is
+  // still animating closed, and guarantees a reload even if the user
+  // just cancels (harmless extra fetch, simpler than tracking save vs cancel)
   void _showFormDialog({DepartmentModel? existing}) {
     final nameCtrl = TextEditingController(
       text: existing?.departmentName ?? '',
@@ -265,6 +275,7 @@ class _DepartmentsTabState extends State<_DepartmentsTab>
     }); // ✅ reload after dialog fully closes
   }
 
+  // Same close-then-reload pattern as _showFormDialog above
   void _confirmDelete(DepartmentModel item) {
     showDialog<bool>(
       context: context,
@@ -760,6 +771,10 @@ class _RoleCard extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Master Card (used by all 3 tabs) ──────────────────────────────────────────
+// Shared row layout for Department/Designation/Role list items.
+// `code` is passed but always empty string from all 3 callers — the
+// chip still renders, just blank — and `subtitle`/`subtitleIcon` are
+// only populated by _DesgCard to show the parent department name.
 class _MasterCard extends StatelessWidget {
   final IconData icon;
   final String code;
@@ -1061,6 +1076,9 @@ class _ActionButton extends StatelessWidget {
 }
 
 // ── App Dialog ─────────────────────────────────────────────────────────────────
+// Generic Add/Edit form shell — caller supplies the title/icon/fields
+// and an onConfirm callback; this widget owns the loading state,
+// validation trigger, and error snackbar on failure
 class _AppDialog extends StatefulWidget {
   final String title;
   final IconData icon;
@@ -1237,6 +1255,9 @@ class _AppDialogState extends State<_AppDialog> {
 }
 
 // ── Delete Confirmation Dialog ─────────────────────────────────────────────────
+// Note: unlike _AppDialog (stays open and shows a snackbar on error),
+// this one pops itself before showing the error snackbar — so the
+// snackbar appears over the underlying list screen, not the dialog
 class _DeleteDialog extends StatefulWidget {
   final String name;
   final Future<void> Function() onConfirm;
@@ -1612,6 +1633,9 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
+// Role → module permission matrix. Each role gets per-module
+// can_view/can_edit toggles, filtered down to only the modules the
+// tenant itself has enabled (see _tenantModuleKeys below).
 class _PermissionsTab extends StatefulWidget {
   final bool canEdit;
   const _PermissionsTab({super.key, this.canEdit = true});
@@ -1646,6 +1670,9 @@ class _PermissionsTabState extends State<_PermissionsTab>
     });
   }
 
+  // Loads two things together: the tenant's enabled module set (so we
+  // never show toggles for modules the tenant hasn't purchased/enabled)
+  // and the role list to populate the selector dropdown
   Future<void> _loadTenantModulesAndRoles() async {
     if (!mounted) return;
     setState(() => _rolesLoading = true);
@@ -1673,6 +1700,9 @@ class _PermissionsTabState extends State<_PermissionsTab>
     }
   }
 
+  // Fetches the selected role's full permission set, then narrows it
+  // down to tenant-enabled modules only (skipped if _tenantModuleKeys
+  // is empty — e.g. if the my-permissions call above failed)
   Future<void> _loadModules(RoleModel role) async {
     setState(() {
       _modulesLoading = true;
@@ -1971,7 +2001,9 @@ class _PermissionsTabState extends State<_PermissionsTab>
                                 ),
                                 const SizedBox(width: 8),
                               ],
-                              // Can View toggle
+                              // Can View toggle — turning View off also
+                              // forces Edit off, since edit access without
+                              // view access doesn't make sense
                               const Text(
                                 'View',
                                 style: TextStyle(fontSize: 11, color: _textMid),
@@ -2050,6 +2082,8 @@ class _PermissionsTabState extends State<_PermissionsTab>
     );
   }
 
+  // Maps module_key strings (from role_permissions config) to an icon
+  // for display — grouped employee-facing vs admin/HR-facing for readability
   IconData _moduleIcon(String key) {
     switch (key) {
       // Employee-facing

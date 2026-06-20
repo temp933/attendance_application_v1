@@ -12,6 +12,8 @@ import 'package:file_saver/file_saver.dart';
 import '../providers/api_client.dart';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
+// Same palette family as the approval screen, kept local to this file
+// since it's used to color-code both the UI and the exported Excel cells.
 const Color _primary = Color(0xFF1A56DB);
 const Color _accent = Color(0xFF0E9F6E);
 const Color _red = Color(0xFFEF4444);
@@ -24,6 +26,9 @@ const Color _textMid = Color(0xFF64748B);
 const Color _border = Color(0xFFE2E8F0);
 
 // MODELS
+// Flattened leave record used for both the on-screen table and the
+// Excel export — parsed once from /leaves/all-history and reused
+// across all three report sheets.
 class _LeaveRecord {
   final int leaveId;
   final int empId;
@@ -60,6 +65,8 @@ class _LeaveRecord {
   });
 
   factory _LeaveRecord.fromJson(Map<String, dynamic> j) {
+    // Defensive date parsing — falls back to year 2000 instead of
+    // throwing, so one bad record doesn't break the whole report
     DateTime parseDate(dynamic v) {
       if (v == null) return DateTime(2000);
       try {
@@ -103,6 +110,7 @@ class _LeaveRecord {
     );
   }
 
+  // Human-readable status text, e.g. "Pending_TL" -> "Pending TL"
   String get statusLabel {
     switch (status) {
       case 'Approved':
@@ -122,6 +130,8 @@ class _LeaveRecord {
     }
   }
 
+  // UI color for the status badge — kept separate from statusLabel
+  // since the Excel export needs hex strings, not Color objects
   Color get statusColor {
     switch (status) {
       case 'Approved':
@@ -142,6 +152,8 @@ class _LeaveRecord {
 }
 
 // SERVICE
+// Pure data layer — fetches and filters leave records. No UI/Excel
+// logic here, so it can be reused by both report tabs.
 class _LeaveReportService {
   static Future<List<_LeaveRecord>> fetchAllHistory() async {
     final res = await ApiClient.get('/leaves/all-history');
@@ -158,6 +170,9 @@ class _LeaveReportService {
         .toList();
   }
 
+  // Includes any leave that overlaps the [from, to] range at all
+  // (not just leaves fully contained within it) — so a leave that
+  // started before "from" but ends inside the range still counts.
   static List<_LeaveRecord> filterByRange(
     List<_LeaveRecord> all,
     DateTime from,
@@ -185,6 +200,9 @@ class _LeaveReportService {
 }
 
 // EXCEL BUILDER
+// Builds a 3-sheet workbook: Leave Master (raw rows), Summary Dashboard
+// (key metrics + breakdowns), Employee Summary (per-employee totals).
+// All styling helpers below are shared across the three _build* methods.
 class _LeaveExcelBuilder {
   static xl.CellStyle _hdrStyle({String hex = 'FF1A56DB'}) => xl.CellStyle(
     backgroundColorHex: xl.ExcelColor.fromHexString(hex),
@@ -329,6 +347,8 @@ class _LeaveExcelBuilder {
   }
 
   // ── SHEET 1: Leave Master ───────────────────────────────────────────────────
+  // One row per leave record, alternating row shading for readability,
+  // status column color-coded via _statusStyle. Totals row at the bottom.
   static void _buildLeaveMaster(xl.Excel excel, List<_LeaveRecord> records) {
     const name = 'Leave Master';
     excel.rename('Sheet1', name);
@@ -439,6 +459,10 @@ class _LeaveExcelBuilder {
   }
 
   // ── SHEET 2: Summary Dashboard ──────────────────────────────────────────────
+  // Key metrics + status/leave-type/department breakdowns, built as
+  // stacked key-value sections rather than a flat table.
+  // NOTE: deptGroups is currently never populated (no department field
+  // mapped from records) — section header renders but the table stays empty.
   static void _buildSummary(xl.Excel excel, List<_LeaveRecord> records) {
     final s = excel['Summary Dashboard'];
 
@@ -622,6 +646,8 @@ class _LeaveExcelBuilder {
   }
 
   // ── SHEET 3: Employee Summary ───────────────────────────────────────────────
+  // Aggregates records per employee (approved/rejected/pending counts +
+  // total days), sorted alphabetically by name.
   static void _buildEmployeeSummary(
     xl.Excel excel,
     List<_LeaveRecord> records,
@@ -766,6 +792,8 @@ class _LeaveExcelBuilder {
   }
 
   // ── Build full workbook ──────────────────────────────────────────────────────
+  // Single entry point called from both "Fetch All Data" and date-range
+  // exports — same workbook structure regardless of which dataset is passed in.
   static xl.Excel build(List<_LeaveRecord> records) {
     final excel = xl.Excel.createExcel();
     _buildLeaveMaster(excel, records);
@@ -799,7 +827,8 @@ class _EmpSummary {
 }
 
 // SCROLL BEHAVIOR
-
+// Enables mouse/trackpad drag-to-scroll on desktop/web, in addition to
+// the default touch scrolling.
 class _DragScrollBehavior extends MaterialScrollBehavior {
   @override
   Set<PointerDeviceKind> get dragDevices => {
@@ -893,6 +922,7 @@ class _LeaveReportScreenState extends State<LeaveReportScreen>
     return ['All', ...types];
   }
 
+  // Fetches the full leave history for the "All Records" tab
   Future<void> _fetchAll() async {
     setState(() {
       _loadingAll = true;
@@ -913,6 +943,8 @@ class _LeaveReportScreenState extends State<LeaveReportScreen>
     }
   }
 
+  // Fetches full history then filters client-side to the selected date
+  // range (no dedicated range endpoint on the backend)
   Future<void> _fetchRange() async {
     setState(() {
       _loadingRange = true;
@@ -971,6 +1003,8 @@ class _LeaveReportScreenState extends State<LeaveReportScreen>
     }
   }
 
+  // Web: triggers a browser download via FileSaver.
+  // Mobile/desktop: writes to app documents dir and opens it directly.
   Future<void> _saveAndOpen(xl.Excel excel, String fileName) async {
     final bytes = excel.save();
     if (bytes == null) throw Exception('Failed to generate Excel file');
@@ -1516,7 +1550,8 @@ class _LeaveReportScreenState extends State<LeaveReportScreen>
 }
 
 // LEAVE TABLE
-
+// Renders the filtered/sorted record list as a column of expandable
+// _LeaveCard widgets (despite the name, this isn't a literal Excel-style table)
 class _LeaveTable extends StatelessWidget {
   final List<_LeaveRecord> records;
   final String Function(DateTime) fmt;
@@ -1558,6 +1593,9 @@ class _LeaveTable extends StatelessWidget {
   }
 }
 
+// Expandable card for one leave record on-screen — same expand/collapse
+// pattern as the approval screen's _LeaveCard, but with extra Excel-mapped
+// fields (recommendedBy, approvedBy, rejection/cancel reasons).
 class _LeaveCard extends StatefulWidget {
   final _LeaveRecord record;
   final String Function(DateTime) fmt;

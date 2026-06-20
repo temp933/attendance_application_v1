@@ -185,7 +185,7 @@ async function applyEducationChanges(conn, request_id, empId, tenantId) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: enroll face embedding after commit (non-fatal)
-// ✅ Unified helper — used by both NEW and UPDATE flows
+// Unified helper — used by both NEW and UPDATE flows
 // ─────────────────────────────────────────────────────────────────────────────
 async function enrollFaceEmbedding(empId, profilePhoto, mimeType) {
   if (!profilePhoto) {
@@ -601,14 +601,15 @@ router.post(
 
         await conn.query(
           `INSERT INTO login_master
-              (tenant_id, emp_id, username, password, role_id, is_first_login, status, created_at)
-             VALUES (?, ?, ?, ?, ?, 1, 'Active', NOW())`,
+              (tenant_id, emp_id, username, password, role_id, contact_number, is_first_login, status, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, 1, 'Active', NOW())`,
           [
             tenantId,
             newEmpId,
             pending.username,
             pending.password,
             pending.role_id,
+            pending.phone_number || null,
           ],
         );
 
@@ -749,10 +750,22 @@ router.post(
           [...values, empId, tenantId],
         );
 
-        if (pending.role_id) {
+        if (pending.role_id || pending.phone_number) {
+          const loginUpdates = [];
+          const loginValues = [];
+
+          if (pending.role_id) {
+            loginUpdates.push("role_id = ?");
+            loginValues.push(pending.role_id);
+          }
+          if (pending.phone_number) {
+            loginUpdates.push("contact_number = ?");
+            loginValues.push(pending.phone_number);
+          }
+
           await conn.query(
-            "UPDATE login_master SET role_id = ? WHERE emp_id = ? AND tenant_id = ?",
-            [pending.role_id, empId, tenantId],
+            `UPDATE login_master SET ${loginUpdates.join(", ")} WHERE emp_id = ? AND tenant_id = ?`,
+            [...loginValues, empId, tenantId],
           );
         }
       }

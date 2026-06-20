@@ -22,7 +22,19 @@ const Color _highlightOld = Color(0xFFB45309);
 const Color _highlightNew = Color(0xFF92400E);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LIST PAGE
+// FACE-ENROLMENT APPROVAL FLOW
+// ─────────────────────────────────────────────────────────────────────────────
+// This is the face-enrolment counterpart to admin_approval.dart (the regular
+// employee-update approval screen) — same old-vs-new diff UI, same
+// _infoTile/_eduDiffRow pattern, ported across almost verbatim. Endpoints are
+// the /admin/face/* equivalents (pending-requests, photo, approve-request,
+// reject-request) instead of the plain /admin/* ones.
+//
+// KEY DIFFERENCE from admin_approval.dart: the Employment Information section
+// here has an extra "Reporting To ID" field (reporting_to_employee_id) that
+// does NOT exist in the regular approval screen — it's a raw ID diff
+// alongside the resolved "Reporting To" name diff. If you're syncing changes
+// between the two files, remember this field is FaceApprovalDetailPage-only.
 // ─────────────────────────────────────────────────────────────────────────────
 class AdminFaceApprovalPage extends StatefulWidget {
   const AdminFaceApprovalPage({super.key});
@@ -498,7 +510,14 @@ class FaceApprovalDetailPage extends StatefulWidget {
 class _FaceApprovalDetailPageState extends State<FaceApprovalDetailPage> {
   late final Future<http.Response> _photoFuture;
 
-  // ── current_data from master (only for UPDATE requests) ──
+  // ─────────────────────────────────────────────────────────────────────────
+  // OLD-VS-NEW DIFF SYSTEM (UPDATE requests only) — same pattern as
+  // ApprovalDetailPage in admin_approval.dart. `current_data` holds the
+  // live master-table values; `widget.request` holds the pending values.
+  // `_changed`/`_changedByName`/`_old` below compare the two for highlighting.
+  // A pending value that's empty is treated as "not submitted", not
+  // "cleared" — it won't trigger a highlight even if master has a value.
+  // ─────────────────────────────────────────────────────────────────────────
   Map? get _current => widget.request['current_data'] as Map?;
   bool get _isUpdate => widget.request['request_type'] == 'UPDATE';
 
@@ -2063,6 +2082,11 @@ class _FaceApprovalDetailPageState extends State<FaceApprovalDetailPage> {
                             _current?['reporting_to_name']?.toString() ?? '',
                       ),
                       _dividerRow(),
+                      // NOTE: This field is unique to the face-approval flow —
+                      // admin_approval.dart does not show this. Shown alongside
+                      // "Reporting To" (the resolved name) so admins can verify
+                      // the raw employee ID matches, since face-enrolment
+                      // re-linking is more error-prone than a normal profile edit.
                       _infoTile(
                         icon: Icons.tag_rounded,
                         label: 'Reporting To ID',

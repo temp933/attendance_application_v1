@@ -546,7 +546,18 @@ class _AdminForceCloseScreenState extends State<AdminForceCloseScreen>
   }) async {
     setState(() => _closingIds.add(empId));
     try {
-      // Build datetime string from selected date + time
+      // ── Build a timezone-aware ISO string for the backend ────────────────
+      // DateTime.toIso8601String() on a *local* DateTime omits the offset
+      // (e.g. "2026-06-20T14:30:00"), which the backend would otherwise
+      // interpret as UTC and shift incorrectly. We manually append the
+      // local UTC offset (e.g. "+05:30" for IST) to make it unambiguous.
+      //
+      // NOTE: this is hand-built and intentionally does NOT match the
+      // approach in `_forceCloseAll()` below, which sends a bare
+      // `toIso8601String()` with no offset at all. That inconsistency is
+      // pre-existing — if "Force Close" (single) and "Close All" ever
+      // produce different actual checkout times for the same input, this
+      // offset handling difference is the first thing to check.
       final closeDateTime = DateTime(
         closeDate.year,
         closeDate.month,
@@ -954,6 +965,19 @@ class _AdminForceCloseScreenState extends State<AdminForceCloseScreen>
         closeTime.minute,
       );
 
+      // ⚠️ POTENTIAL BUG: `work_date` uses `_selectedDate` (the screen's
+      // currently-viewed date) rather than the `closeDate` argument passed
+      // into this function (which comes from the date picker inside the
+      // "Close All" dialog). In `_forceClose()` (single-employee version
+      // above), `work_date` correctly uses the dialog-picked `closeDate`.
+      // If a user opens "Close All", picks a *different* date in the
+      // dialog, and confirms, the backend will still receive the screen's
+      // original `_selectedDate` here — the picked date is silently
+      // ignored for `work_date` (though it's still used for `close_time`
+      // via closeDateTime above). Also note `close_time` is sent as a bare
+      // ISO string with no UTC offset, unlike the offset-aware `closeIso`
+      // built in `_forceClose()` — see the comment there for why that
+      // inconsistency matters.
       final res = await ApiClient.post('/attendance/admin-force-close-all', {
         'work_date': _fmtApi(_selectedDate),
         'close_time': closeDateTime.toIso8601String(),
@@ -1493,13 +1517,17 @@ class _OpenSessionCard extends StatelessWidget {
     final lateText = session['late_hours_text'] as String?;
     final initial = empName.isNotEmpty ? empName[0].toUpperCase() : '?';
 
-    // Urgency: >8h open = critical, >4h = warning, else normal
+    // Urgency thresholds (open_minutes, i.e. time since session start with
+    // no checkout): >8h (480min) = red/critical, >4h (240min) = orange/
+    // warning, else blue/normal. Drives both the card border/accent-bar
+    // color and the avatar gradient. Adjust both numbers together if the
+    // policy changes — there's no shared constant, just these two literals.
     final Color urgencyColor = openMinutes > 480
         ? _red
         : openMinutes > 240
         ? _orange
         : _primary;
-
+  
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(

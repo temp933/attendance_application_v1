@@ -1,3 +1,27 @@
+/// ════════════════════════════════════════════════════════════════════════
+/// leave_screen.dart
+/// ════════════════════════════════════════════════════════════════════════
+/// Employee-facing leave module. Covers:
+///  - LeaveScreen        : list of own leave applications + balances + apply sheet
+///  - _ApplyLeaveSheet   : apply-for-leave form, incl. comp-off redemption flow
+///  - LeaveDetailsScreen : single leave record + multi-level approval timeline
+///  - HolidaysScreen     : FY (Apr–Mar) public holiday calendar
+///
+/// Backend endpoints used:
+///  GET  /leave/my-leaves
+///  GET  /leave/policy/list
+///  GET  /leave/balance/my
+///  GET  /attendance/policy            (is_saturday_weekoff, is_sunday_weekoff, comp_off_enabled)
+///  GET  /leave/available-compoffs
+///  GET  /holidays?year=YYYY
+///  POST /leave/apply
+///  POST /leave/cancel/:leaveId
+///  GET  /leave/details/:leaveId
+///
+/// Working-day counting (`_days` getter in _ApplyLeaveSheetState) excludes
+/// weekoff days per attendance_policy flags AND holiday dates fetched for the
+/// current + next calendar year (to cover ranges spanning Dec→Jan).
+/// If this logic changes, mirror it server-side in leave.js apply route.
 import 'package:collection/collection.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -39,6 +63,10 @@ String _fmtFull(String? s) {
 // ══════════════════════════════════════════════════════════════════════════════
 // LeaveScreen
 // ══════════════════════════════════════════════════════════════════════════════
+/// Main leave landing screen for a logged-in employee.
+/// Loads (in parallel): own leave history, active leave types, own leave
+/// balances, and attendance policy (only needed for comp_off_enabled flag,
+/// which gates the Comp-Off mini-FAB and apply-sheet redemption toggle).
 class LeaveScreen extends StatefulWidget {
   const LeaveScreen({super.key});
 
@@ -111,7 +139,7 @@ class _LeaveScreenState extends State<LeaveScreen>
           );
         }
       }
-     if (balRes.statusCode == 200) {
+      if (balRes.statusCode == 200) {
         final body = jsonDecode(balRes.body) as Map<String, dynamic>;
         if (body['ok'] == true) {
           setState(
@@ -125,9 +153,7 @@ class _LeaveScreenState extends State<LeaveScreen>
         final body = jsonDecode(attPolicyRes.body) as Map<String, dynamic>;
         if (body['success'] == true) {
           final policy = body['policy'] as Map<String, dynamic>?;
-          setState(
-            () => _compOffEnabled = policy?['comp_off_enabled'] == 1,
-          );
+          setState(() => _compOffEnabled = policy?['comp_off_enabled'] == 1);
         }
       }
     } catch (e) {
@@ -148,6 +174,12 @@ class _LeaveScreenState extends State<LeaveScreen>
   int get _rejected =>
       _leaves.where((l) => l['final_status'] == 'Rejected').length;
 
+  /// Cancellation rule (must match backend `/leave/cancel/:id` guard):
+  ///  - Cancelled/Rejected -> never cancellable.
+  ///  - Approved           -> cancellable only if leave_start_date is in the
+  ///                          future (no retroactive cancellation once leave
+  ///                          has started).
+  ///  - Pending            -> always cancellable.
   bool _canCancel(Map<String, dynamic> leave) {
     final status = leave['final_status'] as String? ?? '';
     if (status == 'Cancelled' || status == 'Rejected') return false;
@@ -552,7 +584,12 @@ class _LeaveScreenState extends State<LeaveScreen>
   //     ],
   //   );
   // }
-Widget _buildFAB() {
+  /// Current FAB layout: two small round shortcuts (Holidays, Comp-Off if
+  /// enabled) stacked above the primary "Apply Leave" extended FAB.
+  /// NOTE: an older single-FAB-stack version (extended buttons for Holidays/
+  /// Comp-Off/Apply) is left commented out above for reference — safe to
+  /// delete once this layout is confirmed final in production.
+  Widget _buildFAB() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -609,6 +646,7 @@ Widget _buildFAB() {
       ],
     );
   }
+
   // ── Dialogs / Sheets ──────────────────────────────────────────────────────
   void _confirmCancel(Map<String, dynamic> leave) {
     final ctrl = TextEditingController();
@@ -732,6 +770,14 @@ Widget _buildFAB() {
 // ══════════════════════════════════════════════════════════════════════════════
 // _LeaveCard
 // ══════════════════════════════════════════════════════════════════════════════
+
+/// Expandable card for one leave application row.
+/// Collapsed: name, date range, days badge, status chip.
+/// Expanded (on tap): reason, current approver + level (if Pending),
+/// approver remarks, cancel reason (if Cancelled), applied/updated
+/// timestamps, and action buttons (View Details / Cancel).
+/// `onCancel` is null when `_canCancel()` (in LeaveScreen) returns false —
+/// the Cancel button is hidden in that case rather than disabled.
 class _LeaveCard extends StatefulWidget {
   final Map<String, dynamic> leave;
   final VoidCallback? onCancel;
@@ -1078,6 +1124,21 @@ class _LeaveCardState extends State<_LeaveCard> {
 // ══════════════════════════════════════════════════════════════════════════════
 // Apply Leave Bottom Sheet
 // ══════════════════════════════════════════════════════════════════════════════
+/// Bottom sheet (modal, full-height on mobile / centered dialog on desktop
+/// via isWide check) for submitting a new leave application.
+///
+/// Two modes, mutually exclusive via `_useCompOff` toggle:
+///  1. Normal leave  — pick a leave type (excludes COMP_OFF code), optional
+///     half-day (AM/PM), from/to dates, reason. Working days computed by
+///     `_days` getter, excluding weekoffs + holidays.
+///  2. Comp-off redemption — only shown if `compOffEnabled` AND the employee
+///     has >=1 available comp-off (`_fetchCompOffs`). Leave type is forced
+///     to the COMP_OFF leave_type_id. Date range is capped to
+///     `_compOffMaxDays` (= count of available comp-offs) via the To-Date
+///     picker's `lastDate`.
+///
+/// `onSuccess(message)` is called after a successful POST /leave/apply,
+/// letting the parent screen refresh the list and show a snackbar.
 class _ApplyLeaveSheet extends StatefulWidget {
   final List<Map<String, dynamic>> leaveTypes;
   final bool compOffEnabled;
@@ -1222,6 +1283,15 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
   // Max days allowed when using comp-off = number of earned comp-offs
   int get _compOffMaxDays => _compOffs.length;
 
+  /// Working-day count for the selected [from, to] range.
+  /// Returns 0 for half-day requests (handled separately as 0.5 day in UI/
+  /// backend) or when dates aren't both set.
+  /// Excludes: Saturdays/Sundays per attendance_policy weekoff flags, and
+  /// any date present in `_holidayDates` (current + next year, fetched in
+  /// `_fetchAttendancePolicy`). KEEP THIS IN SYNC with the server-side day
+  /// count used in leave.js's apply endpoint and balance deduction logic —
+  /// a mismatch here causes the UI day-count to disagree with what gets
+  /// deducted from the employee's balance.
   int get _days {
     if (_isHalfDay || _fromDate == null || _toDate == null) return 0;
     final policy = _attendancePolicy;
@@ -1270,6 +1340,11 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
     });
   }
 
+  /// Client-side validation (mirrors but does NOT replace server validation
+  /// in /leave/apply — backend re-checks balance/comp-off availability
+  /// before insert). Order matters for the inline error message shown:
+  ///   type -> from date -> to date -> reason -> half-day period ->
+  ///   zero-working-days -> comp-off-days-exceeded.
   Future<void> _submit() async {
     if (_selectedType == null) return _snack('Please select a leave type');
     if (_fromDate == null) return _snack('Please select a start date');
@@ -1963,6 +2038,11 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
   );
 }
 
+/// Read-only detail view for a single leave application, navigated to from
+/// _LeaveCard's "View Details" button. Fetches GET /leave/details/:leaveId
+/// which returns the leave record plus `approval_timeline` (one entry per
+/// approval level, used to render _TimelineStep rows). If the leave has a
+/// single-level approval chain, approval_timeline will have length 1.
 class LeaveDetailsScreen extends StatefulWidget {
   final int leaveId;
   const LeaveDetailsScreen({super.key, required this.leaveId});
@@ -2102,8 +2182,14 @@ class _LeaveDetailsScreenState extends State<LeaveDetailsScreen> {
 // HolidaysScreen  –  shows all holidays for the current financial year
 // Financial year: 1 Apr → 31 Mar  (India standard)
 // ══════════════════════════════════════════════════════════════════════════════
+/// Displays public holidays for the current Indian financial year
+/// (1 Apr → 31 Mar), grouped by month. Fetches two calendar years
+/// (`_fyStartYear()` and +1) since an FY always spans a Dec/Jan boundary,
+/// then filters results to the exact FY window client-side.
+/// `_fyStartYear()`: if current month >= April, FY started this calendar
+/// year; otherwise (Jan–Mar) FY started last calendar year.
 class HolidaysScreen extends StatefulWidget {
-  const HolidaysScreen({super.key});
+  const HolidaysScreen({super.key});  
 
   @override
   State<HolidaysScreen> createState() => _HolidaysScreenState();

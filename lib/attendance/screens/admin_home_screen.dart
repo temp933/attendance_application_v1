@@ -3,6 +3,8 @@ import '../../common/utils/greeting_util.dart';
 import '../services/employee_service.dart';
 
 // ── Design tokens ───────────────────────────────────────────────────────────
+// Centralized color palette for the admin home screen — keeps theming
+// consistent and avoids scattering raw hex values across the widget tree.
 const _primary = Color(0xFF1A56DB);
 const _primaryLight = Color(0xFFEEF2FF);
 const _surface = Color(0xFFF8FAFF);
@@ -23,8 +25,12 @@ const _purple = Color(0xFF9333EA);
 const _purpleLight = Color(0xFFF3E8FF);
 
 // ─────────────────────────────────────────────────────────────────────────────
+/// Admin dashboard home screen.
+/// Shows today's attendance overview, a 7-day trend chart, pending
+/// approvals, and an optional department-wise breakdown.
 class AdminHomeScreen extends StatefulWidget {
   final String employeeId;
+  // Used to jump to other tabs (e.g. approvals screen, profile requests screen)
   final void Function(int index)? onNavigate;
 
   /// Role gates — pass these from wherever you already resolve permissions
@@ -47,9 +53,9 @@ class AdminHomeScreen extends StatefulWidget {
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   // ── State ──────────────────────────────────────────────────────────────────
   String _adminName = '';
-  bool _isLoading = true;
-  bool _isRefreshing = false;
-
+  bool _isLoading = true; // full-screen spinner on first load
+  bool _isRefreshing = false; // small inline spinner during pull-to-refresh
+  // Today's attendance summary numbers, populated from /api/dashboard
   int totalEmployees = 0;
   int presentCount = 0;
   int absentCount = 0;
@@ -59,8 +65,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int pendingLeaveCount = 0;
   int pendingProfileCount = 0;
 
-  List<Map<String, dynamic>> _trend = [];
-  List<Map<String, dynamic>> _deptBreakdown = [];
+  List<Map<String, dynamic>> _trend = []; // last 7 days of present-count data
+  List<Map<String, dynamic>> _deptBreakdown = []; // per-department attendance %
 
   DateTime? _lastFetched;
 
@@ -72,10 +78,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   // ── Data ───────────────────────────────────────────────────────────────────
 
+  /// Fetches admin name, dashboard summary, and 7-day trend in parallel.
+  /// Department breakdown is only fetched if canViewDepartmentBreakdown
+  /// is true, to avoid an unnecessary/unauthorized API call.
   Future<void> _fetchAll({bool isRefresh = false}) async {
     if (isRefresh) setState(() => _isRefreshing = true);
 
     try {
+      // Fire all required requests concurrently instead of sequentially
       final futures = <Future>[
         EmployeeService.fetchEmployeeName(int.parse(widget.employeeId)),
         EmployeeService.fetchDashboardData(),
@@ -113,6 +123,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         _lastFetched = DateTime.now();
       });
     } catch (e) {
+      // Fall back to a safe "Admin" label so the UI doesn't get stuck
+      // on the loading spinner indefinitely
       debugPrint('AdminHome _fetchAll error: $e');
       if (!mounted) return;
       setState(() {
@@ -123,6 +135,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     }
   }
 
+  // Human-readable "updated Xm ago" label shown next to the section header
   String get _lastFetchedLabel {
     if (_lastFetched == null) return '';
     final diff = DateTime.now().difference(_lastFetched!);
@@ -185,6 +198,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                             : null,
                       ),
                     ),
+                    // Stat cards grid — 2 columns portrait, 3 on wide screens,
+                    // taller aspect ratio in landscape to avoid cramped cards
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
                       sliver: SliverGrid(
@@ -231,6 +246,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                             label: 'Late entry',
                             valueColor: _warning,
                           ),
+                          // Show on-site count if the org has the site module
+                          // enabled, otherwise fall back to attendance rate
                           if (hasSiteModule)
                             _StatCard(
                               icon: Icons.location_on_outlined,
@@ -276,6 +293,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     ),
 
                     // ── Pending approvals ───────────────────────────────────
+                    // Hidden entirely if the role can't view it, rather than
+                    // shown disabled/greyed out
                     if (widget.canViewApprovals) ...[
                       SliverToBoxAdapter(
                         child: _SectionHeader(
@@ -318,6 +337,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     ],
 
                     // ── Department breakdown ────────────────────────────────
+                    // Only rendered when permitted AND there's actual data
                     if (widget.canViewDepartmentBreakdown &&
                         _deptBreakdown.isNotEmpty) ...[
                       SliverToBoxAdapter(
@@ -342,6 +362,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   // ── Top bar widget ─────────────────────────────────────────────────────────
+  // Greeting + admin name. Trailing empty SizedBox reserves space for a
+  // future notification/menu icon — currently unused.
   Widget _buildTopBar() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -570,6 +592,8 @@ class _ApprovalRow extends StatelessWidget {
 }
 
 // ── Attendance trend mini bar chart (no extra package needed) ──────────────
+// Lightweight bar chart built with plain Containers — avoids pulling in
+// a charting package for a simple 7-bar trend view
 class _TrendCard extends StatelessWidget {
   final List<Map<String, dynamic>> trend;
   const _TrendCard({required this.trend});
@@ -676,6 +700,7 @@ class _DeptBreakdownCard extends StatelessWidget {
   final List<Map<String, dynamic>> rows;
   const _DeptBreakdownCard({required this.rows});
 
+  // Color-codes department attendance %: green ≥90, blue ≥75, amber below
   Color _colorFor(int pct) {
     if (pct >= 90) return _success;
     if (pct >= 75) return _primary;

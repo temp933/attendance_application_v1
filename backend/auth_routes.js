@@ -88,8 +88,6 @@ router.post("/login", loginLimiter, async (req, res) => {
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
     });
 
-    console.log("[APP ADMIN SESSION TOKEN]:", sessionToken);
-
     return res.json({
       success: true,
       loginId: 0,
@@ -101,6 +99,9 @@ router.post("/login", loginLimiter, async (req, res) => {
     });
   }
   // FIX #1: Removed duplicate `if (!username || !password)` block that was here
+
+  const loginIdentifier = username.trim();
+  const loginIdentifierLower = loginIdentifier.toLowerCase();
 
   try {
     const [rows] = await db.query(
@@ -115,19 +116,43 @@ t.status AS tenant_status
  FROM login_master lm
 INNER JOIN tenants t ON t.tenant_id = lm.tenant_id
 LEFT JOIN role_master rm ON rm.role_id = lm.role_id AND rm.tenant_id = lm.tenant_id
+LEFT JOIN employee_master e ON e.emp_id = lm.emp_id
 WHERE lm.status = 'Active'
   AND lm.tenant_id IS NOT NULL
   AND t.is_active = 1
   AND t.status IN ('trial', 'active')
-  AND (lm.username = ? OR lm.username = ?)
-LIMIT 1`,
-      [username.trim(), username.trim().toLowerCase()],
+  AND (
+    lm.username = ?
+    OR lm.username = ?
+    OR lm.contact_number = ?
+    OR LOWER(e.email_id) = ?
+  )`,
+      [
+        loginIdentifier,
+        loginIdentifierLower,
+        loginIdentifier,
+        loginIdentifierLower,
+      ],
     );
 
     if (rows.length === 0) {
       return res
         .status(401)
         .json({ success: false, message: "Invalid credentials." });
+    }
+
+    // ── Ambiguity guard ────────────────────────────────────────────────────
+    // username is UNIQUE on login_master, so that always resolves to one
+    // row. email/contact_number are not guaranteed unique across
+    // employee_master — picking the wrong row here would load the wrong
+    // tenant_id/role_id and silently grant the wrong role_permissions.
+    // Never guess: force the user back to username if it's ambiguous.
+    if (rows.length > 1) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Multiple accounts match this email/contact number. Please sign in with your username instead.",
+      });
     }
 
     const user = rows[0];
@@ -242,12 +267,6 @@ LIMIT 1`,
     // FIX #10: Generate raw token, store hashed token in DB, return raw to client
     const rawToken = generateToken();
     const hashedToken = hashToken(rawToken);
-
-    console.log("====================================");
-    console.log("[LOGIN] Session Token Generated");
-    console.log("User:", user.username);
-    console.log("Login ID:", user.login_id);
-    console.log("====================================");
 
     const deviceInfoStr = JSON.stringify(device_info || {});
 
@@ -604,6 +623,9 @@ router.post("/send-login-otp", otpLimiter, async (req, res) => {
 
   try {
     // FIX #8: Changed LEFT JOIN to INNER JOIN for tenants (tenant is mandatory)
+    const loginIdentifier = username.trim();
+    const loginIdentifierLower = loginIdentifier.toLowerCase();
+
     const [rows] = await db.query(
       `SELECT lm.login_id, lm.username, lm.status,
               COALESCE(e.email_id, t.admin_email) AS contact_email
@@ -614,15 +636,33 @@ router.post("/send-login-otp", otpLimiter, async (req, res) => {
   AND lm.tenant_id IS NOT NULL
   AND t.is_active = 1
   AND t.status IN ('trial', 'active')
-          AND (lm.username = ? OR lm.username = ?)
-        LIMIT 1`,
-      [username.trim(), username.trim().toLowerCase()],
+          AND (
+            lm.username = ?
+            OR lm.username = ?
+            OR lm.contact_number = ?
+            OR LOWER(e.email_id) = ?
+          )`,
+      [
+        loginIdentifier,
+        loginIdentifierLower,
+        loginIdentifier,
+        loginIdentifierLower,
+      ],
     );
 
     if (rows.length === 0) {
       return res.json({
         success: true,
         message: "If the account exists, an OTP has been sent.",
+      });
+    }
+
+    // ── Ambiguity guard (see /auth/login) ───────────────────────────────────
+    if (rows.length > 1) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Multiple accounts match this email/contact number. Please use your username instead.",
       });
     }
 
@@ -674,6 +714,9 @@ router.post("/verify-login-otp", otpLimiter, async (req, res) => {
   }
 
   try {
+    const loginIdentifier = username.trim();
+    const loginIdentifierLower = loginIdentifier.toLowerCase();
+
     const [rows] = await db.query(
       `SELECT
 lm.*,
@@ -686,19 +729,38 @@ t.status AS tenant_status
  FROM login_master lm
 INNER JOIN tenants t ON t.tenant_id = lm.tenant_id
 LEFT JOIN role_master rm ON rm.role_id = lm.role_id AND rm.tenant_id = lm.tenant_id
+LEFT JOIN employee_master e ON e.emp_id = lm.emp_id
 WHERE lm.status = 'Active'
   AND lm.tenant_id IS NOT NULL
   AND t.is_active = 1
   AND t.status IN ('trial', 'active')
-  AND (lm.username = ? OR lm.username = ?)
-LIMIT 1`,
-      [username.trim(), username.trim().toLowerCase()],
+  AND (
+    lm.username = ?
+    OR lm.username = ?
+    OR lm.contact_number = ?
+    OR LOWER(e.email_id) = ?
+  )`,
+      [
+        loginIdentifier,
+        loginIdentifierLower,
+        loginIdentifier,
+        loginIdentifierLower,
+      ],
     );
 
     if (rows.length === 0)
       return res
         .status(401)
         .json({ success: false, message: "Invalid credentials." });
+
+    // ── Ambiguity guard (see /auth/login) ───────────────────────────────────
+    if (rows.length > 1) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Multiple accounts match this email/contact number. Please use your username instead.",
+      });
+    }
 
     const user = rows[0];
 

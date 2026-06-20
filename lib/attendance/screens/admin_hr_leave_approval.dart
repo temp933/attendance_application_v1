@@ -5,6 +5,8 @@ import '../providers/api_config.dart';
 import 'leave_report.dart';
 
 // ─── Design Tokens ───────────────────────────────────────────────────────────
+// Blue (_p) = primary/brand, green (_g) = approved, red (_r) = rejected,
+// amber (_a) = cancelled/half-day, violet (_v) = pending. Slate = neutrals.
 const _p900 = Color(0xFF1E3A8A);
 const _p700 = Color(0xFF1D4ED8);
 const _p500 = Color(0xFF3B82F6);
@@ -30,6 +32,9 @@ const _slate50 = Color(0xFFF8FAFC);
 const _white = Color(0xFFFFFFFF);
 
 // ─── Model ───────────────────────────────────────────────────────────────────
+// Local view-model for a leave record, parsed from the all-history /
+// pending-approvals API response. Kept private to this file since it's
+// only used for rendering, not shared with other screens.
 class _Leave {
   final int leaveId, empId;
   final String employeeName, leaveType, finalStatus;
@@ -105,9 +110,12 @@ const _months = [
   'Dec',
 ];
 
+// Formats a DateTime as "DD Mon YYYY" (e.g. "05 Jun 2026") for display
 String _fmt(DateTime d) =>
     '${d.day.toString().padLeft(2, '0')} ${_months[d.month]} ${d.year}';
 
+// Maps a leave's final_status string to its display color + icon.
+// Anything not explicitly matched (e.g. "Pending") falls through to violet.
 _StatusStyle _style(String s) => switch (s) {
   'Approved' => const _StatusStyle(_g600, _g100, Icons.check_circle_rounded),
   'Rejected' => const _StatusStyle(_r600, _r100, Icons.cancel_rounded),
@@ -121,6 +129,7 @@ class _StatusStyle {
   const _StatusStyle(this.fg, this.bg, this.icon);
 }
 
+// Builds avatar initials from a name: "John Doe" -> "JD", single word -> first letter
 String _initials(String name) {
   final parts = name.trim().split(' ');
   if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
@@ -130,6 +139,8 @@ String _initials(String name) {
 // ═════════════════════════════════════════════════════════════════════════════
 // Screen
 // ═════════════════════════════════════════════════════════════════════════════
+/// Leave approvals screen with two tabs: live Pending approvals and
+/// full History (search + status/department filters + sort).
 class LeaveApprovalScreen extends StatefulWidget {
   const LeaveApprovalScreen({super.key});
   @override
@@ -144,7 +155,8 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen>
   String? _error;
   final _searchCtrl = TextEditingController();
   String _filter = 'All';
-  String _deptFilter = 'All'; // ← NEW
+  String _deptFilter =
+      'All'; // selected department in the History tab filter row
   bool _sortAsc = false;
 
   static const _filters = [
@@ -177,6 +189,7 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen>
     super.dispose();
   }
 
+  // Loads the full leave history (all statuses) for the History tab
   Future<void> _fetchHistory() async {
     if (!mounted) return;
     setState(() {
@@ -209,6 +222,9 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen>
   }
 
   // ─── Filtered + sorted list ───────────────────────────────────────────────
+  // Applies search text, status filter, and department filter together,
+  // then sorts by fromDate per _sortAsc. Recomputed on every build —
+  // fine at current data volumes, but worth memoizing if history grows large.
   List<_Leave> get _filtered {
     final q = _searchCtrl.text.toLowerCase();
     return _history.where((l) {
@@ -231,6 +247,7 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen>
     );
   }
 
+  // Returns how many history records match a given status filter (for chip badges)
   int _count(String f) => f == 'All'
       ? _history.length
       : _history.where((l) => l.finalStatus == f).length;
@@ -472,6 +489,9 @@ class _Header extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════════════════════
 // Stats Row  (fixed — was missing Row children)
 // ═════════════════════════════════════════════════════════════════════════════
+// Disabled/unused for now — kept here as reference in case a summary
+// stats strip is added back to the History tab. _StatTile below is still
+// used elsewhere, so don't delete that.
 // class _StatsRow extends StatelessWidget {
 //   final List<_Leave> history;
 //   const _StatsRow({required this.history});
@@ -571,6 +591,8 @@ class _StatTile extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════════════════════
 // Search + Filter  (NEW: department row added)
 // ═════════════════════════════════════════════════════════════════════════════
+// Search box + status filter chips + (conditional) department filter row,
+// shown at the top of the History tab.
 class _SearchFilter extends StatelessWidget {
   final TextEditingController ctrl;
   final String filter;
@@ -809,6 +831,8 @@ class _SearchFilter extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════════════════════
 // Leave Card
 // ═════════════════════════════════════════════════════════════════════════════
+// Expandable card for a single history record — tap to reveal full
+// details (reason, approver, rejection/cancel notes, etc.) via _ExpandedDetails.
 class _LeaveCard extends StatefulWidget {
   final _Leave leave;
   const _LeaveCard({required this.leave});
@@ -1068,6 +1092,9 @@ class _LeaveCardState extends State<_LeaveCard>
 }
 
 // ─── Expanded Details ────────────────────────────────────────────────────────
+// Renders different detail tiles depending on final_status: reason is
+// always shown if present; rejection/cancel/pending-with tiles are
+// status-specific.
 class _ExpandedDetails extends StatelessWidget {
   final _Leave leave;
   final _StatusStyle st;
@@ -1205,6 +1232,8 @@ class _ExpandedDetails extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════════════════════
 // Pending Approvals Tab
 // ═════════════════════════════════════════════════════════════════════════════
+// Live pending-approvals tab — fetches its own data independently of
+// the History tab and refetches after every approve/reject action.
 class _PendingTab extends StatefulWidget {
   const _PendingTab();
   @override
@@ -1253,6 +1282,7 @@ class _PendingTabState extends State<_PendingTab> {
     }
   }
 
+  // Approves a leave with empty remarks, then refreshes the pending list on success
   Future<void> _approve(int leaveId) async {
     try {
       final res = await http.post(
@@ -1268,6 +1298,8 @@ class _PendingTabState extends State<_PendingTab> {
     }
   }
 
+  // Prompts for a mandatory rejection reason via dialog, then posts the
+  // rejection and refreshes the pending list on success
   Future<void> _reject(int leaveId) async {
     final ctrl = TextEditingController();
     final confirmed = await showDialog<bool>(
@@ -1452,6 +1484,8 @@ class _PendingTabState extends State<_PendingTab> {
   }
 }
 
+// Card for a single pending leave with inline Approve/Reject actions
+// (as opposed to _LeaveCard, which is read-only/expandable for history)
 class _PendingCard extends StatelessWidget {
   final _Leave leave;
   final VoidCallback onApprove, onReject;

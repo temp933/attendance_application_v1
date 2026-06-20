@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'login_screen.dart'; 
+import 'login_screen.dart';
 
+// Forces a password set/reset before the user can proceed — used for
+// first-login users and after an admin-triggered password reset.
+// On success, logs the user out and sends them to LoginScreen so they
+// sign in fresh with the new password.
 class ChangePasswordScreen extends StatefulWidget {
   final int loginId;
   final int empId;
@@ -71,12 +75,15 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
   }
 
   // ── Password strength ─────────────────────────────────────────────────────
+  // Drives both the live requirements checklist and the strength meter
+  // below — recalculated on every keystroke via Form's onChanged
   bool get _hasMinLength => _newPwCtrl.text.length >= 8;
   bool get _hasLetter => RegExp(r'[a-zA-Z]').hasMatch(_newPwCtrl.text);
   bool get _hasNumber => RegExp(r'[0-9]').hasMatch(_newPwCtrl.text);
   bool get _hasSpecial =>
       RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-]').hasMatch(_newPwCtrl.text);
 
+  // 0–4 score = how many of the four checks above currently pass
   int get _strengthScore {
     int s = 0;
     if (_hasMinLength) s++;
@@ -117,7 +124,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
-Future<void> _submit() async {
+  // On success, immediately logs out via _goToLogin rather than letting
+  // the user stay logged in with the new password — forces a clean
+  // re-login so the rest of the app re-fetches session/permissions fresh
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
@@ -129,14 +139,16 @@ Future<void> _submit() async {
       );
 
       if (!mounted) return;
-      await _goToLogin(message: 'Password updated successfully. Please log in.');
+      await _goToLogin(
+        message: 'Password updated successfully. Please log in.',
+      );
     } catch (e) {
       if (mounted) _snack(e.toString(), _red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-  
+
   /// Explicit server logout → clear local session → navigate to LoginScreen.
   Future<void> _goToLogin({required String message}) async {
     // Use loginId from widget since first-login users have no saved session
@@ -215,6 +227,8 @@ Future<void> _submit() async {
   }
 
   // ── Hero banner ───────────────────────────────────────────────────────────
+  // Greets the user by username and shows the two basic password rules
+  // up front — the full live checklist is further down in the form card
   Widget _buildHeroCard() {
     return Container(
       width: double.infinity,
@@ -323,6 +337,8 @@ Future<void> _submit() async {
       ),
       child: Form(
         key: _formKey,
+        // Rebuilds on every field change so the strength meter and
+        // requirements checklist update live as the user types
         onChanged: () => setState(() {}),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -486,6 +502,8 @@ Future<void> _submit() async {
     );
   }
 
+  // Four-segment bar, filled left-to-right based on _strengthScore —
+  // only shown once the user starts typing (see _buildFormCard)
   Widget _buildStrengthMeter() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -520,6 +538,8 @@ Future<void> _submit() async {
     );
   }
 
+  // Live checklist — special character is flagged "(recommended)" since
+  // the actual validator only enforces length + letter + number
   Widget _buildRequirements() {
     final checks = [
       (_hasMinLength, 'At least 8 characters'),

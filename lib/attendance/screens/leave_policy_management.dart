@@ -1,3 +1,22 @@
+/// ════════════════════════════════════════════════════════════════════════
+/// leave_policy_management_screen.dart
+/// ════════════════════════════════════════════════════════════════════════
+/// Admin screen for defining leave types/policies: max days, paid/unpaid,
+/// duration-based approval rule tiers, carry-forward, time-based accrual,
+/// and attendance-streak accrual. Also surfaces shortcuts to Holiday and
+/// Leave Balance management via FABs.
+///
+/// One leave type (COMP_OFF) is system-managed: it is auto-created by the
+/// backend whenever `comp_off_enabled` is toggled on in Attendance Policy,
+/// and cannot be deleted — only its visibility (`is_active`) is controlled
+/// from that other screen. See `LeavePolicy.isCompOff` / `is_system`.
+///
+/// Backend endpoints used:
+///  GET    /leave/policy/list
+///  GET    /leave/policy/:id
+///  POST   /leave/policy/create
+///  PUT    /leave/policy/update/:id
+///  DELETE /leave/policy/delete/:id
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +26,13 @@ import '../providers/api_client.dart';
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
+/// One tier of a leave policy's duration-based approval chain, e.g.
+/// "0.5–2 days -> 1 approval level", "2.5+ days -> 2 levels".
+/// `maxDays == null` means "no upper bound" (this tier covers everything
+/// from `minDays` upward) — the UI renders this as an "unlimited" checkbox
+/// in `_buildRuleRow`. A policy's `approvalRules` list should have no gaps
+/// or overlaps; the backend does not currently validate this, so check
+/// manually when adding/editing tiers.
 class ApprovalRule {
   double minDays;
   double? maxDays;
@@ -37,6 +63,19 @@ class ApprovalRule {
   }
 }
 
+/// Client-side model for a leave type row from GET /leave/policy/list (and
+/// /leave/policy/:id for the detail/edit fetch). Mirrors the
+/// `leave_policy` table plus its accrual/carry-forward columns.
+///
+/// `totalApprovalLevels` here is read from `total_approval_rules` — NOT the
+/// same field name as the per-rule `approval_levels` used in ApprovalRule;
+/// the list view shows this aggregate count, while the edit sheet works
+/// with the full `approval_rules` array (fetched separately via the
+/// /leave/policy/:id detail call, not present on the list payload).
+///
+/// `isSystem` + `isActive` together drive visibility: a system policy
+/// (COMP_OFF) is hidden from this screen entirely when inactive — see the
+/// filter in `_fetchPolicies`.
 class LeavePolicy {
   final int leaveTypeId;
   final String leaveName;
@@ -50,11 +89,11 @@ class LeavePolicy {
   final bool carryForwardEnabled;
   final String? carryForwardType;
   final double? maxCarryForwardDays;
-  // time accrual
+  // time accrual: days credited automatically per month/year (time_accrual_type)
   final bool timeAccrualEnabled;
   final String? timeAccrualType;
   final double? timeAccrualDays;
-  // attendance accrual
+  // attendance accrual: reward days credited after N consecutive present days
   final bool attendanceAccrualEnabled;
   final int? attendanceAccrualStreak;
   final double? attendanceAccrualReward;
@@ -80,6 +119,9 @@ class LeavePolicy {
     this.attendanceAccrualReward,
   });
 
+  /// True for the auto-managed Comp-Off leave type. Identified by
+  /// `leave_code`, not `is_system`, since other system types could
+  /// theoretically exist in future without being COMP_OFF specifically.
   bool get isCompOff => (leaveCode ?? '').toUpperCase() == 'COMP_OFF';
 
   factory LeavePolicy.fromJson(Map<String, dynamic> j) => LeavePolicy(
@@ -119,6 +161,15 @@ class LeavePolicy {
 }
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+/// Lists all leave policies as expandable cards, with a summary bar
+/// (total/paid/unpaid/needs-approval counts) and FAB shortcuts to
+/// Holidays and Leave Balance screens.
+///
+/// `hideAppBar`: when embedded inside another screen (e.g. a tabbed admin
+/// settings page) that already provides its own app bar/back button, pass
+/// true to suppress this screen's own AppBar and swap the colored summary
+/// bar for a lighter card-style variant (`_buildSummaryBarLight`) that
+/// looks correct without the primary-colored header behind it.
 class LeavePolicyManagementScreen extends StatefulWidget {
   final bool hideAppBar;
   const LeavePolicyManagementScreen({super.key, this.hideAppBar = false});
@@ -154,6 +205,11 @@ class _LeavePolicyManagementScreenState
 
   // ── API ────────────────────────────────────────────────────────────
 
+  /// Fetches all leave policies, then filters out inactive system policies
+  /// (currently just COMP_OFF when comp_off_enabled=0 in attendance
+  /// policy). Non-system policies are always shown regardless of
+  /// is_active — there is currently no UI to deactivate a normal
+  /// (non-system) policy without deleting it.
   Future<void> _fetchPolicies() async {
     if (!mounted) return;
     setState(() => _listLoading = true);
@@ -179,6 +235,12 @@ class _LeavePolicyManagementScreenState
     }
   }
 
+  /// Hard-deletes a leave policy after confirmation. Backend should reject
+  /// this (or the UI should never offer it — COMP_OFF cards only render
+  /// the Edit action, see `_buildSystemDetails`) for system policies. If
+  /// employees already have balances/applications under this leave type,
+  /// confirm server-side cascade/restrict behavior before relying on this
+  /// in production — this screen does not warn about existing usage.
   Future<void> _deletePolicy(int id, String name) async {
     final confirmed = await _showConfirmDialog(name);
     if (!confirmed || !mounted) return;
@@ -666,6 +728,12 @@ class _LeavePolicyManagementScreenState
 // Policy Card  — mirrors _LeaveCard layout
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Expandable card for one leave policy, mirroring `_LeaveCard`'s
+/// collapse/expand interaction pattern from leave_screen.dart for visual
+/// consistency. Renders one of two detail bodies on expand:
+///  - `_buildDetails`       : normal policy — full settings grid + Edit/Delete.
+///  - `_buildSystemDetails` : COMP_OFF — status banner + redirect note,
+///                            Edit only (no Delete).
 class _PolicyCard extends StatefulWidget {
   final LeavePolicy policy;
   final VoidCallback onEdit;
@@ -1200,6 +1268,18 @@ class _PolicySheet extends StatefulWidget {
   State<_PolicySheet> createState() => _PolicySheetState();
 }
 
+/// Create/Edit bottom sheet for a leave policy. `widget.policyId == null`
+/// means create mode; otherwise edit mode triggers `_loadPolicy()` to
+/// hydrate all fields including the full `approval_rules` array (only
+/// available from the single-policy detail endpoint, not the list one).
+///
+/// Three independent optional behaviors, each with its own enable toggle
+/// and sub-fields that only render/validate when enabled:
+///  1. Carry Forward    — yearly/monthly + optional max cap.
+///  2. Time Accrual     — auto-credit N days per month or year.
+///  3. Attendance Accrual — credit reward days after a present-day streak;
+///     streak resets on any absence/leave (enforced server-side, not here).
+/// Plus the always-present duration-based `_approvalRules` tier list.
 class _PolicySheetState extends State<_PolicySheet> {
   static const _primary = Color(0xFF1A56DB);
   static const _accent = Color(0xFF0E9F6E);
@@ -1262,6 +1342,13 @@ class _PolicySheetState extends State<_PolicySheet> {
     super.dispose();
   }
 
+  /// Hydrates the form for edit mode from GET /leave/policy/:id.
+  /// NOTE: silently swallows errors (`catch (_) {}`) — if this fetch
+  /// fails, the sheet just stays on its default/empty values rather than
+  /// showing an error to the admin. Worth adding an explicit error snack
+  /// here before relying on this in production, since a silent failure
+  /// could lead to an admin unknowingly overwriting policy data with
+  /// blank defaults on save.
   Future<void> _loadPolicy() async {
     setState(() => _loading = true);
     try {
@@ -1320,6 +1407,14 @@ class _PolicySheetState extends State<_PolicySheet> {
     if (mounted) setState(() => _loading = false);
   }
 
+  /// Builds and submits the full policy payload (POST for create, PUT for
+  /// edit). All three optional-feature blocks follow the same pattern:
+  /// the `*_enabled` flag is always sent, but the associated detail fields
+  /// (`*_type`, `*_days`, `*_streak`, `*_reward`) are sent as `null` when
+  /// disabled — the backend should treat null as "clear/ignore this
+  /// setting" rather than "no change", since this is a full payload, not
+  /// a partial patch. Double-check the PUT /leave/policy/update/:id
+  /// handler does a full overwrite of these columns to match.
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -1383,6 +1478,9 @@ class _PolicySheetState extends State<_PolicySheet> {
     );
   }
 
+  /// Appends a new (unconfigured) approval tier — admin must fill in
+  /// min/max days and levels before saving; the form does not currently
+  /// validate that ranges don't overlap with existing tiers.
   void _addRule() {
     setState(() {
       _approvalRules.add(
@@ -1391,6 +1489,10 @@ class _PolicySheetState extends State<_PolicySheet> {
     });
   }
 
+  /// Every policy must keep at least one approval tier (the backend
+  /// expects a non-empty `approval_rules` array even when
+  /// `requires_approval` is false, since the array's `approval_levels`
+  /// values are still referenced for non-approval-flow display).
   void _removeRule(int index) {
     if (_approvalRules.length == 1) {
       _snack('At least one rule required');

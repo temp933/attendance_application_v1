@@ -497,7 +497,36 @@ class ApprovalDetailPage extends StatefulWidget {
 class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
   late final Future<http.Response> _photoFuture;
 
-  // ── current_data from master (only for UPDATE requests) ──
+  // ─────────────────────────────────────────────────────────────────────────
+  // OLD-VS-NEW DIFF SYSTEM (UPDATE requests only)
+  // ─────────────────────────────────────────────────────────────────────────
+  // For NEW employee requests, every field is just displayed plain — there's
+  // nothing to diff against.
+  //
+  // For UPDATE requests, `widget.request` holds the PENDING (new) values, and
+  // `current_data` (a nested map sent by the backend) holds the CURRENT
+  // values still live in the employee master table. The whole highlight/
+  // strike-through UI in this file works by comparing the two:
+  //
+  //   - `_changed(field)`         -> diff by exact field key (e.g. 'email_id')
+  //   - `_changedByName(field)`   -> diff by a *_name field (department_name,
+  //                                  designation_name, role_name,
+  //                                  reporting_to_name) since these are
+  //                                  resolved display names, not raw IDs
+  //   - `_old(field)`             -> formatted current/master value, shown
+  //                                  struck-through above the new value
+  //
+  // A field only counts as "changed" if the pending value is non-empty AND
+  // differs from the current value — an empty pending value is treated as
+  // "not submitted" rather than "cleared", so it falls back to showing the
+  // current value un-highlighted.
+  //
+  // Education records use a parallel but separate diff (`_educationSection`
+  // / `_eduDiffRow`) keyed by `education_level` (10/12/Diploma/UG/PG/PhD)
+  // instead of a single field name, since each pending education entry has
+  // to be matched against the corresponding entry in `current_data
+  // ['education_list']`.
+  // ─────────────────────────────────────────────────────────────────────────
   Map? get _current => widget.request['current_data'] as Map?;
   bool get _isUpdate => widget.request['request_type'] == 'UPDATE';
 

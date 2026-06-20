@@ -1,3 +1,27 @@
+/// ════════════════════════════════════════════════════════════════════════
+/// login_screen.dart
+/// ════════════════════════════════════════════════════════════════════════
+/// Combined Sign In / Register Organisation screen (two tabs).
+///
+/// SIGN IN (_SignInTab) has three distinct auth paths:
+///  1. Normal password login         -> AuthService.login()
+///  2. Normal OTP login              -> AuthService.sendLoginOtp/verifyLoginOtp()
+///  3. Privileged username (App_Admin/Super_Admin) -> intercepted BEFORE
+///     hitting normal login, routed through a separate two-step email-OTP
+///     flow against /auth/app-admin/* endpoints, with single-device
+///     enforcement (409 + already_active -> force-login confirmation).
+///
+/// SIGN UP (_SignUpTab) is a 3-step org registration wizard:
+///  Step 0: org details + attendance mode + optional logo -> POST /auth/send-otp
+///  Step 1: admin+HR email OTP verification               -> POST /auth/verify-otp
+///  Step 2: admin & HR login credentials + full profile    -> POST /auth/complete
+///
+/// Backend endpoints used:
+///  POST /auth/app-admin/login    POST /auth/app-admin/verify
+///  POST /auth/app-admin/resend   POST /auth/app-admin/force-login
+///  POST /auth/send-otp           POST /auth/verify-otp
+///  POST /auth/resend-otp         POST /auth/complete
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -30,6 +54,12 @@ const _amber = Color(0xFFF59E0B);
 const _green = Color(0xFF10B981);
 
 // ─── Privileged admin usernames ───────────────────────────────────────────────
+/// Hardcoded usernames that bypass the normal employee password/OTP login
+/// and instead go through the app-admin email-OTP flow + single-device
+/// session enforcement. Matching is case-insensitive (see
+/// `_isPrivilegedUsername`). If a new privileged role is added on the
+/// backend, add its username here too — there is currently no server-driven
+/// list of which usernames should take this path.
 const _appAdminUsername = 'App_Admin';
 const _superAdminUsername = 'Super_Admin';
 
@@ -75,6 +105,12 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _activeTab = index);
   }
 
+  /// Final navigation step after a successful normal (non-privileged-flow)
+  /// login. Routes by `userType` string, not `roleId` — roleId is only
+  /// carried through for the dashboard's own permission lookups, not used
+  /// here as a routing key, to avoid ambiguity if role IDs are ever reused
+  /// across tenants. (App-admin/super-admin privileged logins navigate via
+  /// `_resolveAdminScreen` instead, bypassing this method entirely.)
   void _navigateToDashboard({
     required int loginId,
     required int empId,
@@ -287,14 +323,27 @@ class _SignInTabState extends State<_SignInTab> {
   }
 
   // ── Detect privileged username (App Admin, Super Admin, etc.) ────────────
+  /// Checked at the top of `_loginWithPassword`, BEFORE calling
+  /// AuthService.login — privileged usernames never hit the normal
+  /// employee login endpoint at all, even if a matching row happened to
+  /// exist there.
   bool get _isPrivilegedUsername => _privilegedUsernames.any(
     (u) => u.toLowerCase() == _usernameCtrl.text.trim().toLowerCase(),
   );
 
-  // Returns the OTP endpoint prefix for the current privileged user
+  /// Single shared endpoint prefix for both App_Admin and Super_Admin —
+  /// the backend currently does not differentiate by username at the URL
+  /// level, only in the response body (`userType`/`username`).
   String get _adminAuthBase => '/auth/app-admin';
 
   // ── Regular password login ────────────────────────────────────────────────
+  /// Entry point for the "Password" login mode submit button. Note this
+  /// is the ONLY login path that checks `_isPrivilegedUsername` — the OTP
+  /// login mode (`_sendOtp`/`_verifyOtp` below) has no equivalent
+  /// interception, so a privileged username attempting OTP login will hit
+  /// the normal employee OTP endpoints. Confirm with backend whether that
+  /// path should also be blocked/redirected, or is intentionally
+  /// unsupported for privileged accounts.
   Future<void> _loginWithPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -326,6 +375,19 @@ class _SignInTabState extends State<_SignInTab> {
   }
 
   // ── App Admin: Step 1 — validate credentials & request OTP ───────────────
+  /// Validates username/password against POST /auth/app-admin/login.
+  /// On success, switches the form into OTP-verification mode
+  /// (`_isAppAdminFlow = true`) rather than navigating anywhere — the
+  /// session is not yet established until OTP is verified.
+  ///
+  /// Response handling:
+  ///  - 200            -> stash session_id + email_hint, show OTP screen.
+  ///  - 409 + already_active -> single-device lockout: show a warning
+  ///    banner (not a hard error — `_errorIsWarning = true`) with the
+  ///    other device's last_login_ip. The admin must sign out elsewhere,
+  ///    or proceed to OTP verify where a force-login option is offered
+  ///    (see `_verifyAppAdminOtp`).
+  ///  - other          -> generic invalid-credentials message.
   Future<void> _initiateAppAdminLogin() async {
     setState(() {
       _loading = true;
@@ -375,6 +437,28 @@ class _SignInTabState extends State<_SignInTab> {
   }
 
   // ── App Admin: Step 2 — verify OTP ───────────────────────────────────────
+  /// Submits the 6-digit OTP to POST /auth/app-admin/verify.
+  ///
+  /// Three possible outcomes:
+  ///  1. 200                          -> normal success: store token via
+  ///     ApiConfig.setToken (memory) + AuthService.saveSession (persisted),
+  ///     then navigate via `_resolveAdminScreen`.
+  ///  2. 409 + already_active         -> another device is still logged in
+  ///     even after OTP verify (lockout wasn't resolved at step 1). Shows
+  ///     a confirmation dialog; if the admin confirms, calls
+  ///     POST /auth/app-admin/force-login with the SAME session_id to
+  ///     invalidate the other device's session and complete login here.
+  ///     If the admin cancels, resets the flow back to the credentials
+  ///     screen — a fresh OTP will be required on next attempt (the
+  ///     session_id from this attempt is treated as expired).
+  ///  3. 400 (other failure, e.g. wrong/expired OTP) -> shows the error,
+  ///     then after a 2s delay resets back to step 1 so the admin gets a
+  ///     clean session_id rather than retrying a stale one.
+  ///
+  /// IMPORTANT: role/empId are hardcoded ('6' / '0') for app-admin sessions
+  /// in both the normal-success and force-login branches — this account
+  /// type has no employee_master row, so these are placeholder values the
+  /// rest of the app should never actually read for an app_admin userType.
   Future<void> _verifyAppAdminOtp() async {
     final otp = _appAdminOtpCtrl.text.trim();
     if (otp.length != 6) {
@@ -526,6 +610,11 @@ class _SignInTabState extends State<_SignInTab> {
   }
 
   // ── App Admin: Resend OTP ─────────────────────────────────────────────────
+  /// IMPORTANT: a successful resend REPLACES `_appAdminSessionId` with a
+  /// new value returned by the server (`body['session_id']`) — the old
+  /// session_id from `_initiateAppAdminLogin` becomes invalid. Any retry
+  /// logic must always use the latest `_appAdminSessionId`, never a cached
+  /// copy from before the resend.
   Future<void> _resendAppAdminOtp() async {
     setState(() {
       _loading = true;
@@ -565,13 +654,18 @@ class _SignInTabState extends State<_SignInTab> {
   }
 
   // ── Resolve which screen to navigate to based on userType ────────────────
+  /// PRODUCTION TODO: super_admin currently falls through to the SAME
+  /// screen as app_admin (AppAdminMaintenanceScreen). If super_admin is
+  /// meant to have a distinct screen/permission set, this placeholder
+  /// must be replaced before relying on role separation in production —
+  /// right now there is no UI difference between the two privileged roles
+  /// once logged in.
   Widget _resolveAdminScreen(String userType) {
     switch (userType) {
       case 'app_admin':
         return const AppAdminMaintenanceScreen();
       case 'super_admin':
-        // TODO: return const SuperAdminScreen();
-        return const AppAdminMaintenanceScreen(); // placeholder
+        return const AppAdminMaintenanceScreen();
       default:
         return const AppAdminMaintenanceScreen();
     }
@@ -639,6 +733,28 @@ class _SignInTabState extends State<_SignInTab> {
     }
   }
 
+  /// Shared post-login handler for BOTH password and OTP login modes
+  /// (normal, non-privileged employees only — app-admin flow has its own
+  /// separate handling in `_verifyAppAdminOtp`).
+  ///
+  /// Sequence:
+  ///  1. Parse + persist session (token, tenantId, empId) into ApiConfig
+  ///     and AuthService.
+  ///  2. Mobile-only (Android/iOS, not web, not app_admin userType): sync
+  ///     FCM token BEFORE starting background tracking, so push
+  ///     notifications work immediately post-login. FCM/tracking failures
+  ///     are caught and logged but treated as non-fatal — login proceeds
+  ///     even if notification setup fails.
+  ///  3. If `firstLogin == true`, redirect to ChangePasswordScreen instead
+  ///     of the dashboard — this short-circuits the normal flow and does
+  ///     NOT call widget.onNavigate.
+  ///  4. Otherwise fetch role/module permissions via
+  ///     PermissionsService.getMyPermissions() and hand off to
+  ///     widget.onNavigate (-> LoginScreen._navigateToDashboard).
+  ///
+  /// `sessionId` for background tracking is read defensively from either
+  /// `sessionId` or `session_id` key — keep this dual-check if the backend
+  /// response casing for this field is still inconsistent across endpoints.
   Future<void> _handleLoginResponse(Map<String, dynamic> data) async {
     final int loginId = int.parse(data['loginId'].toString());
     final int empId = int.parse((data['empId'] ?? 0).toString());
@@ -1063,6 +1179,16 @@ class _SignUpTab extends StatefulWidget {
   State<_SignUpTab> createState() => _SignUpTabState();
 }
 
+/// Three-step organisation registration wizard. `_step` drives which view
+/// `build()` shows via AnimatedSwitcher: 0 = org details, 1 = OTP
+/// verification, 2 = admin/HR profile + credentials setup (itself split
+/// into an Admin sub-section and HR sub-section toggled by
+/// `_profileSection`).
+///
+/// State is NOT reset between steps if the admin navigates back — going
+/// from step 1 back to step 0 keeps all typed values, and going from step
+/// 2 back to step 1 does too. Only `_error` and `_step`/`_profileSection`
+/// themselves are cleared on back-navigation.
 class _SignUpTabState extends State<_SignUpTab> {
   int _step = 0;
 
@@ -1205,6 +1331,20 @@ class _SignUpTabState extends State<_SignUpTab> {
     super.dispose();
   }
 
+  // ── Field validators ──────────────────────────────────────────────────
+  /// All validators below are client-side only convenience checks — the
+  /// backend /auth/complete endpoint should independently validate email
+  /// format, GST/PAN/Aadhar patterns, password strength, and username
+  /// rules, since this form's validation can be bypassed (e.g. via direct
+  /// API calls). Keep these regexes in sync with server-side validation
+  /// if either changes:
+  ///   _gst    : standard 15-char GSTIN pattern
+  ///   _domain : loose domain pattern, does not enforce TLD allow-list
+  ///   _aadhar : exactly 12 digits, no checksum validation
+  ///   _pan    : standard 10-char PAN pattern (5 letters, 4 digits, 1 letter)
+  ///   _username: min 4 chars, letters/digits/underscore/dot only
+  ///   _password: min 8 chars, requires 1 uppercase + 1 digit (no special
+  ///              character requirement currently enforced)
   String? _req(String? v) =>
       (v == null || v.trim().isEmpty) ? 'Required' : null;
 
@@ -1303,6 +1443,14 @@ class _SignUpTabState extends State<_SignUpTab> {
     }
   }
 
+  /// Step 0 submit: validates the org form, requires an attendance mode
+  /// selection (handled separately from the Form validator since
+  /// `_AttendanceModeSelector` isn't a FormField), then POSTs org +
+  /// contact info to /auth/send-otp to trigger admin+HR email OTPs.
+  /// Does NOT send the full registration payload yet — username/password/
+  /// profile fields are collected later in step 2 and sent together in
+  /// `_complete`. The `session_id` returned here must be carried through
+  /// to both `_verifyOtp` and `_complete`.
   Future<void> _sendOtp() async {
     if (!_orgFormKey.currentState!.validate()) return;
 
@@ -1369,6 +1517,11 @@ class _SignUpTabState extends State<_SignUpTab> {
       );
       final body = jsonDecode(res.body);
       if (res.statusCode == 200) {
+        // Convenience prefill: split the step-0 "Contact Person Name" into
+        // admin first/last name fields, and copy the contact number into
+        // the admin phone field — purely a UX shortcut for step 2, both
+        // remain fully editable and are NOT re-validated against the
+        // step-0 values before submission in `_complete`.
         if (_adminFirstCtrl.text.isEmpty) {
           final parts = _contactPersonCtrl.text.trim().split(' ');
           if (parts.isNotEmpty) _adminFirstCtrl.text = parts.first;
@@ -1389,6 +1542,23 @@ class _SignUpTabState extends State<_SignUpTab> {
     }
   }
 
+  /// Final step-2 submission to POST /auth/complete. Validates FOUR
+  /// separate Form keys (admin credentials, HR credentials, admin
+  /// profile, HR profile) independently — note this means switching
+  /// `_profileSection` between Admin/HR tabs does NOT lose validation
+  /// state for the inactive tab, since both Forms exist simultaneously
+  /// inside the IndexedStack in `_buildProfileStep`.
+  ///
+  /// Additional manual checks beyond form validators (gender selection,
+  /// password-confirmation match for both admin and HR) run AFTER all
+  /// four forms pass, so a gender-only error will only surface once every
+  /// text field is already valid — consider this ordering if debugging
+  /// "stuck on submit" reports.
+  ///
+  /// `company_logo` is sent as base64 + `company_logo_type` (mime) only
+  /// if a logo was picked (`_logoBytes != null`) — omitted entirely
+  /// otherwise, so the backend should treat a missing key as "no logo
+  /// change," not "remove existing logo."
   Future<void> _complete() async {
     final adminCredValid = _adminCredFormKey.currentState?.validate() ?? false;
     final hrCredValid = _hrCredFormKey.currentState?.validate() ?? false;
@@ -1541,6 +1711,13 @@ class _SignUpTabState extends State<_SignUpTab> {
     });
   }
 
+  /// Picks from gallery only (no camera option), resizes to max 512×512
+  /// and 85% JPEG-equivalent quality client-side via ImagePicker's own
+  /// params — note this resize happens before mime-type detection, so the
+  /// `mime` derived from the file extension may not match re-encoded
+  /// output. PNG/WEBP files extension-detected as such are passed through
+  /// at picker-applied quality; only true JPEGs are guaranteed to match
+  /// the `imageQuality: 85` setting.
   Future<void> _pickLogo() async {
     final picker = ImagePicker();
     final file = await picker.pickImage(
